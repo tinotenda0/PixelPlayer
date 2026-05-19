@@ -18,6 +18,13 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+val localProperties = Properties().apply {
+    val propFile = rootProject.file("local.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+
 val enableAbiSplits = providers.gradleProperty("pixelplay.enableAbiSplits")
     .getOrElse("true")
     .toBoolean()
@@ -66,6 +73,11 @@ android {
         versionName = (project.findProperty("APP_VERSION_NAME") as? String) ?: "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val telegramApiId = localProperties.getProperty("TELEGRAM_API_ID") ?: ""
+        val telegramApiHash = localProperties.getProperty("TELEGRAM_API_HASH") ?: ""
+        buildConfigField("int", "TELEGRAM_API_ID", telegramApiId.ifEmpty { "0" })
+        buildConfigField("String", "TELEGRAM_API_HASH", "\"$telegramApiHash\"")
     }
 
     signingConfigs {
