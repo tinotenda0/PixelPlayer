@@ -577,8 +577,7 @@ class PlaybackStateHolder @Inject constructor(
                     }
                 } else {
                      val controller = mediaController
-                     // Media3: Check isPlaying or playbackState == READY/BUFFERING
-                     if (controller != null && controller.isPlaying && !isSeeking) {
+                     if (controller != null && shouldSampleLocalProgress(controller)) {
                          val visibleSong = _stablePlayerState.value.currentSong
                          val currentMediaId = controller.currentMediaItem?.mediaId
                          val hasMediaMismatch = visibleSong?.id != null &&
@@ -620,6 +619,16 @@ class PlaybackStateHolder @Inject constructor(
                 delay(tickMs)
             }
         }
+    }
+
+    private fun shouldSampleLocalProgress(controller: Player): Boolean {
+        if (isSeeking) return false
+        if (controller.mediaItemCount <= 0) return false
+        if (controller.isPlaying) return true
+
+        return controller.playWhenReady &&
+            controller.playbackState != Player.STATE_IDLE &&
+            controller.playbackState != Player.STATE_ENDED
     }
 
     private fun currentProgressTickMs(): Long {

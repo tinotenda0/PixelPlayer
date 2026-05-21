@@ -1647,6 +1647,7 @@ private fun PlayerProgressBarSection(
         }
     }
     val shouldRunRealtimeUpdates = allowRealtimeUpdates && isVisible
+    val shouldSampleProgress = isVisible
 
     val reportedDuration = totalDurationValue.coerceAtLeast(0L)
     val hintDuration = songDurationHintMs.coerceAtLeast(0L)
@@ -1686,9 +1687,9 @@ private fun PlayerProgressBarSection(
         isPlayingProvider = isPlayingProvider,
         currentPositionProvider = currentPositionProvider,
         totalDuration = displayDurationValue,
-        sampleWhilePlayingMs = if (isExpanded) 180L else 320L,
+        sampleWhilePlayingMs = if (shouldRunRealtimeUpdates && isExpanded) 180L else 500L,
         sampleWhilePausedMs = 800L,
-        isVisible = shouldRunRealtimeUpdates
+        isVisible = shouldSampleProgress
     )
 
     var sliderDragValue by remember { mutableStateOf<Float?>(null) }

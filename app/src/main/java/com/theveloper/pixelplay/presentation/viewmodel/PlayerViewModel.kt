@@ -179,9 +179,10 @@ private data class AiUiSnapshot(
     val isGeneratingAiMetadata: Boolean,
 )
 
-private data class PreparedPlaybackQueue(
-    val mediaItems: List<MediaItem>,
-    val startIndex: Int
+private data class PreparedPlaybackQueueSegments(
+    val beforeCurrent: List<MediaItem>,
+    val afterCurrent: List<MediaItem>,
+    val currentIndex: Int
 )
 
 private data class PendingMetadataEdit(
@@ -2810,9 +2811,14 @@ class PlayerViewModel @Inject constructor(
                         playWhenReady = playerCtrl.playWhenReady
                     )
                 }
-                if (isPlaying) {
+                val shouldKeepSampling = playerCtrl.playWhenReady &&
+                    playerCtrl.playbackState != Player.STATE_IDLE &&
+                    playerCtrl.playbackState != Player.STATE_ENDED
+                if (isPlaying || shouldKeepSampling) {
                     _isSheetVisible.value = true
-                    clearPreparingSongIfMatching(playerCtrl.currentMediaItem?.mediaId)
+                    if (isPlaying) {
+                        clearPreparingSongIfMatching(playerCtrl.currentMediaItem?.mediaId)
+                    }
                     startProgressUpdates()
                 } else {
                     stopProgressUpdates()
@@ -2824,6 +2830,13 @@ class PlayerViewModel @Inject constructor(
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 if (isRemoteSessionControllingPlayback()) return
                 playbackStateHolder.updateStablePlayerState { it.copy(playWhenReady = playWhenReady) }
+                if (
+                    playWhenReady &&
+                    playerCtrl.playbackState != Player.STATE_IDLE &&
+                    playerCtrl.playbackState != Player.STATE_ENDED
+                ) {
+                    startProgressUpdates()
+                }
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -3203,28 +3216,54 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private suspend fun preparePlaybackQueue(
+    private suspend fun preparePlaybackQueueSegments(
         songsToPlay: List<Song>,
         startSongId: String,
         playlistId: String?
-    ): PreparedPlaybackQueue = withContext(Dispatchers.Default) {
-        val mediaItems = ArrayList<MediaItem>(songsToPlay.size)
-        var startIndex = 0
-        var foundStartIndex = false
+    ): PreparedPlaybackQueueSegments = withContext(Dispatchers.Default) {
+        val currentIndex = songsToPlay
+            .indexOfFirst { it.id == startSongId }
+            .takeIf { it >= 0 }
+            ?: 0
 
-        songsToPlay.forEachIndexed { index, song ->
-            if (!foundStartIndex && song.id == startSongId) {
-                startIndex = index
-                foundStartIndex = true
-            }
-
-            mediaItems += buildPlaybackMediaItem(song, playlistId)
+        val beforeCurrent = List(currentIndex) { index ->
+            buildPlaybackMediaItem(songsToPlay[index], playlistId)
+        }
+        val afterStartIndex = currentIndex + 1
+        val afterCurrent = List((songsToPlay.size - afterStartIndex).coerceAtLeast(0)) { offset ->
+            buildPlaybackMediaItem(songsToPlay[afterStartIndex + offset], playlistId)
         }
 
-        PreparedPlaybackQueue(
-            mediaItems = mediaItems,
-            startIndex = startIndex
+        PreparedPlaybackQueueSegments(
+            beforeCurrent = beforeCurrent,
+            afterCurrent = afterCurrent,
+            currentIndex = currentIndex
         )
+    }
+
+    private fun attachPreparedQueueSegmentsIfCurrent(
+        player: Player,
+        startSongId: String,
+        preparedSegments: PreparedPlaybackQueueSegments
+    ) {
+        if (player.currentMediaItem?.mediaId != startSongId) return
+        if (player.mediaItemCount != 1) return
+        if (player.getMediaItemAt(0).mediaId != startSongId) return
+
+        if (preparedSegments.beforeCurrent.isNotEmpty()) {
+            player.addMediaItems(0, preparedSegments.beforeCurrent)
+        }
+
+        if (preparedSegments.afterCurrent.isNotEmpty()) {
+            player.addMediaItems(
+                preparedSegments.beforeCurrent.size + 1,
+                preparedSegments.afterCurrent
+            )
+        }
+
+        playbackStateHolder.updateStablePlayerState {
+            it.copy(currentMediaItemIndex = preparedSegments.currentIndex)
+        }
     }
 
 
@@ -3264,6 +3303,7 @@ class PlayerViewModel @Inject constructor(
             playbackStateHolder.updateStablePlayerState {
                 it.copy(
                     currentSong = effectiveStartSong,
+                    currentMediaItemIndex = 0,
                     isPlaying = true,
                     playWhenReady = true,
                     totalDuration = effectiveStartSong.duration.coerceAtLeast(0L)
@@ -3280,6 +3320,7 @@ class PlayerViewModel @Inject constructor(
             playbackStateHolder.updateStablePlayerState {
                 it.copy(
                     currentSong = effectiveStartSong,
+                    currentMediaItemIndex = 0,
                     isPlaying = true,
                     playWhenReady = true,
                     totalDuration = effectiveStartSong.duration.coerceAtLeast(0L)
@@ -3287,45 +3328,33 @@ class PlayerViewModel @Inject constructor(
             }
             _isSheetVisible.value = true
 
-            // Pre-resolve the starting song's cloud URI before ExoPlayer touches it.
-            // This populates the resolvedUriCache so resolveDataSpec finds it instantly.
-            val startingUri = MediaItemBuilder.playbackUri(effectiveStartSong)
-            if (
-                startingUri.scheme == "telegram" ||
-                startingUri.scheme == "netease" ||
-                startingUri.scheme == "qqmusic" ||
-                startingUri.scheme == "navidrome" ||
-                startingUri.scheme == "jellyfin"
-            ) {
-                if (startingUri.scheme == "telegram") {
-                    ensureTelegramPlaybackObserversStarted()
-                }
-                dualPlayerEngine.resolveCloudUri(startingUri)
-            }
-
-            val preparedPlaybackQueue = preparePlaybackQueue(
-                songsToPlay = songsToPlay,
-                startSongId = effectiveStartSong.id,
-                playlistId = playlistId
-            )
+            val startMediaItem = buildResolvedPlaybackMediaItem(effectiveStartSong)
 
             val playSongsAction = {
                 // Use Direct Engine Access to avoid TransactionTooLargeException on Binder
                 val enginePlayer = dualPlayerEngine.masterPlayer
 
-                if (preparedPlaybackQueue.mediaItems.isNotEmpty()) {
-                    // Direct access: No IPC limit involved
-                    enginePlayer.setMediaItems(
-                        preparedPlaybackQueue.mediaItems,
-                        preparedPlaybackQueue.startIndex,
-                        0L
-                    )
-                    enginePlayer.prepare()
-                    enginePlayer.play()
-                } else {
-                    clearPreparingSongIfMatching(effectiveStartSong.id)
-                }
+                enginePlayer.setMediaItem(startMediaItem, 0L)
+                enginePlayer.prepare()
+                enginePlayer.play()
                 _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
+
+                if (songsToPlay.size > 1) {
+                    viewModelScope.launch {
+                        val preparedSegments = preparePlaybackQueueSegments(
+                            songsToPlay = songsToPlay,
+                            startSongId = effectiveStartSong.id,
+                            playlistId = playlistId
+                        )
+                        withContext(Dispatchers.Main.immediate) {
+                            attachPreparedQueueSegmentsIfCurrent(
+                                player = dualPlayerEngine.masterPlayer,
+                                startSongId = effectiveStartSong.id,
+                                preparedSegments = preparedSegments
+                            )
+                        }
+                    }
+                }
             }
 
             // We still check for mediaController to ensure the Service is bound and active
