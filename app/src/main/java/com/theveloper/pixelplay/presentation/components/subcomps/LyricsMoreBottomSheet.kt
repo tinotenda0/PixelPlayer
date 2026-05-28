@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.rounded.FormatAlignRight
@@ -106,13 +108,16 @@ fun LyricsMoreBottomSheet(
         sheetState = sheetState,
         containerColor = containerColor,
         contentColor = contentColor,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        contentWindowInsets = { WindowInsets(top = 0, bottom = 0) }
     ) {
+        val screenHeight = LocalConfiguration.current.screenHeightDp.dp
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                //.heightIn(max = screenHeight * 0.85f)
                 .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp)
+                .padding(bottom = 24.dp + navigationBarsPadding)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
