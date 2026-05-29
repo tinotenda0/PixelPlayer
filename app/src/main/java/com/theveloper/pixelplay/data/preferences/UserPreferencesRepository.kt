@@ -194,8 +194,6 @@ constructor(
 
         // Library Sync
         val LAST_SYNC_TIMESTAMP = longPreferencesKey("last_sync_timestamp")
-        val LAST_FILESYSTEM_SCAN_TIMESTAMP =
-            longPreferencesKey("last_filesystem_scan_timestamp")
         val DIRECTORY_RULES_VERSION = intPreferencesKey("directory_rules_version")
         val LAST_APPLIED_DIRECTORY_RULES_VERSION =
             intPreferencesKey("last_applied_directory_rules_version")
@@ -503,13 +501,6 @@ constructor(
                 preferences[PreferencesKeys.LAST_SYNC_TIMESTAMP] ?: 0L
             }
 
-    val lastFilesystemScanTimestampFlow: Flow<Long> =
-            dataStore.data.map { preferences ->
-                preferences[PreferencesKeys.LAST_FILESYSTEM_SCAN_TIMESTAMP]
-                    ?: preferences[PreferencesKeys.LAST_SYNC_TIMESTAMP]
-                    ?: 0L
-            }
-
     val directoryRulesVersionFlow: Flow<Int> =
             dataStore.data.map { preferences ->
                 preferences[PreferencesKeys.DIRECTORY_RULES_VERSION] ?: 0
@@ -524,10 +515,6 @@ constructor(
         return lastSyncTimestampFlow.first()
     }
 
-    suspend fun getLastFilesystemScanTimestamp(): Long {
-        return lastFilesystemScanTimestampFlow.first()
-    }
-
     suspend fun getDirectoryRulesVersion(): Int {
         return directoryRulesVersionFlow.first()
     }
@@ -539,12 +526,6 @@ constructor(
     suspend fun setLastSyncTimestamp(timestamp: Long) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.LAST_SYNC_TIMESTAMP] = timestamp
-        }
-    }
-
-    suspend fun setLastFilesystemScanTimestamp(timestamp: Long) {
-        dataStore.edit { preferences ->
-            preferences[PreferencesKeys.LAST_FILESYSTEM_SCAN_TIMESTAMP] = timestamp
         }
     }
 
@@ -974,7 +955,6 @@ constructor(
             preferences[PreferencesKeys.ALLOWED_DIRECTORIES] = allowedPaths
             // Directory rules changed: force next sync to fetch full library again.
             preferences[PreferencesKeys.LAST_SYNC_TIMESTAMP] = 0L
-            preferences[PreferencesKeys.LAST_FILESYSTEM_SCAN_TIMESTAMP] = 0L
             val currentVersion = preferences[PreferencesKeys.DIRECTORY_RULES_VERSION] ?: 0
             preferences[PreferencesKeys.DIRECTORY_RULES_VERSION] =
                 if (currentVersion == Int.MAX_VALUE) 0 else currentVersion + 1
@@ -987,7 +967,6 @@ constructor(
             preferences[PreferencesKeys.BLOCKED_DIRECTORIES] = blockedPaths
             // Directory rules changed: force next sync to fetch full library again.
             preferences[PreferencesKeys.LAST_SYNC_TIMESTAMP] = 0L
-            preferences[PreferencesKeys.LAST_FILESYSTEM_SCAN_TIMESTAMP] = 0L
             val currentVersion = preferences[PreferencesKeys.DIRECTORY_RULES_VERSION] ?: 0
             preferences[PreferencesKeys.DIRECTORY_RULES_VERSION] =
                 if (currentVersion == Int.MAX_VALUE) 0 else currentVersion + 1

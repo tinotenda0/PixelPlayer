@@ -48,6 +48,11 @@ class MediaStoreObserver @Inject constructor(
             true,
             this
         )
+        context.contentResolver.registerContentObserver(
+            MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL),
+            true,
+            this
+        )
         isRegistered = true
     }
 

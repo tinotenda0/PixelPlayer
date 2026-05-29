@@ -101,26 +101,4 @@ class UserPreferencesRepositoryTest {
             tempDir.toFile().deleteRecursively()
         }
     }
-
-    @Test
-    fun `lastFilesystemScanTimestampFlow falls back to last sync timestamp`() = runTest {
-        val tempDir = Files.createTempDirectory("user-preferences-repository-test")
-        try {
-            val repository = UserPreferencesRepository(
-                dataStore = PreferenceDataStoreFactory.create(
-                    scope = backgroundScope,
-                    produceFile = { tempDir.resolve("settings.preferences_pb").toFile() }
-                ),
-                json = Json
-            )
-
-            repository.setLastSyncTimestamp(1_234L)
-            assertEquals(1_234L, repository.lastFilesystemScanTimestampFlow.first())
-
-            repository.setLastFilesystemScanTimestamp(5_678L)
-            assertEquals(5_678L, repository.lastFilesystemScanTimestampFlow.first())
-        } finally {
-            tempDir.toFile().deleteRecursively()
-        }
-    }
 }
