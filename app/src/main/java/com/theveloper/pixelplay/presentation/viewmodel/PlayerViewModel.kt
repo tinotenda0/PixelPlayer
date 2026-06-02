@@ -1120,6 +1120,31 @@ class PlayerViewModel @Inject constructor(
         reloadLyricsForCurrentSong = ::loadLyricsForCurrentSong,
     )
 
+    /**
+     * Bundles the ViewModel-owned collaborators that [QueueStateHolder]'s shuffle entry points
+     * need (source resolution + shuffled-playback dispatch), without that holder depending on
+     * this ViewModel.
+     */
+    private fun shufflePlaybackCallbacks() = ShufflePlaybackCallbacks(
+        scope = viewModelScope,
+        currentStorageFilter = { playerUiState.value.currentStorageFilter },
+        albums = { libraryStateHolder.albums.value },
+        artists = { libraryStateHolder.artists.value },
+        playShuffled = { songs, queueName -> playSongsShuffled(songs, queueName, startAtZero = true) },
+    )
+
+    /**
+     * Bundles the ViewModel collaborators that [QueueStateHolder]'s album/artist play entry
+     * points need to dispatch sequential playback and reveal the player sheet.
+     */
+    private fun playbackSourceCallbacks() = PlaybackSourceCallbacks(
+        scope = viewModelScope,
+        playSongs = { songs, startSong, queueName, playlistId ->
+            playSongs(songs, startSong, queueName, playlistId)
+        },
+        showSheet = { _isSheetVisible.value = true },
+    )
+
     fun onSearchNavIconDoubleTapped() {
         _searchNavDoubleTapEvents.tryEmit(Unit)
     }
@@ -1479,17 +1504,8 @@ class PlayerViewModel @Inject constructor(
         )
     }
 
-    fun shuffleAllSongs(queueName: String = "All Songs (Shuffled)") {
-        Log.d("ShuffleDebug", "shuffleAllSongs called.")
-        
-        // Load random songs from DB instead of materializing the entire library
-        viewModelScope.launch {
-            val randomSongs = musicRepository.getRandomSongs(limit = 500)
-            if (randomSongs.isNotEmpty()) {
-                playSongsShuffled(randomSongs, queueName, startAtZero = true)
-            }
-        }
-    }
+    fun shuffleAllSongs(queueName: String = "All Songs (Shuffled)") =
+        queueStateHolder.shuffleAll(queueName, shufflePlaybackCallbacks())
 
     /**
      * Called from Quick Settings tile. Unlike shuffleAllSongs(), this always starts
@@ -1544,52 +1560,17 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun playRandomSong() {
-        viewModelScope.launch {
-            val randomSongs = musicRepository.getRandomSongs(limit = 500)
-            if (randomSongs.isNotEmpty()) {
-                playSongsShuffled(randomSongs, "All Songs (Shuffled)", startAtZero = true)
-            }
-        }
-    }
+    fun playRandomSong() =
+        queueStateHolder.playRandom(shufflePlaybackCallbacks())
 
-    fun shuffleFavoriteSongs() {
-        Log.d("ShuffleDebug", "shuffleFavoriteSongs called.")
+    fun shuffleFavoriteSongs() =
+        queueStateHolder.shuffleFavorites(shufflePlaybackCallbacks())
 
-        // Load favorite songs from DB on-demand instead of holding them in memory
-        viewModelScope.launch {
-            val favSongs = musicRepository.getFavoriteSongsOnce(playerUiState.value.currentStorageFilter)
-            if (favSongs.isNotEmpty()) {
-                playSongsShuffled(favSongs, "Liked Songs (Shuffled)", startAtZero = true)
-            }
-        }
-    }
+    fun shuffleRandomAlbum() =
+        queueStateHolder.shuffleRandomAlbum(shufflePlaybackCallbacks())
 
-    fun shuffleRandomAlbum() {
-        viewModelScope.launch {
-            val allAlbums = libraryStateHolder.albums.value
-            if (allAlbums.isNotEmpty()) {
-                val randomAlbum = allAlbums.random()
-                val albumSongs = musicRepository.getSongsForAlbum(randomAlbum.id).first()
-                if (albumSongs.isNotEmpty()) {
-                    playSongsShuffled(albumSongs, randomAlbum.title, startAtZero = true)
-                }
-            }
-        }
-    }
-
-    fun shuffleRandomArtist() {
-        viewModelScope.launch {
-            val allArtists = libraryStateHolder.artists.value
-            if (allArtists.isNotEmpty()) {
-                val randomArtist = allArtists.random()
-                val artistSongs = musicRepository.getSongsForArtist(randomArtist.id).first()
-                if (artistSongs.isNotEmpty()) {
-                    playSongsShuffled(artistSongs, randomArtist.name, startAtZero = true)
-                }
-            }
-        }
-    }
+    fun shuffleRandomArtist() =
+        queueStateHolder.shuffleRandomArtist(shufflePlaybackCallbacks())
 
 
     private fun loadPersistedDailyMix() {
@@ -2362,52 +2343,11 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun playAlbum(album: Album) {
-        Log.d("ShuffleDebug", "playAlbum called for album: ${album.title}")
-        viewModelScope.launch {
-            try {
-                val songsList: List<Song> = withContext(Dispatchers.IO) {
-                    musicRepository.getSongsForAlbum(album.id).first()
-                }
+    fun playAlbum(album: Album) =
+        queueStateHolder.playAlbum(album, playbackSourceCallbacks())
 
-                if (songsList.isNotEmpty()) {
-                    val sortedSongs = songsList.sortedWith(
-                        compareBy<Song> { it.discNumber ?: 1 }
-                            .thenBy { if (it.trackNumber > 0) it.trackNumber else Int.MAX_VALUE }
-                            .thenBy { it.title.lowercase() }
-                    )
-
-                    playSongs(sortedSongs, sortedSongs.first(), album.title, null)
-                    _isSheetVisible.value = true // Mostrar reproductor
-                } else {
-                    Log.w("PlayerViewModel", "Album '${album.title}' has no playable songs.")
-                }
-            } catch (e: Exception) {
-                Log.e("PlayerViewModel", "Error playing album ${album.title}", e)
-            }
-        }
-    }
-
-    fun playArtist(artist: Artist) {
-        Log.d("ShuffleDebug", "playArtist called for artist: ${artist.name}")
-        viewModelScope.launch {
-            try {
-                val songsList: List<Song> = withContext(Dispatchers.IO) {
-                    musicRepository.getSongsForArtist(artist.id).first()
-                }
-
-                if (songsList.isNotEmpty()) {
-                    playSongs(songsList, songsList.first(), artist.name, null)
-                    _isSheetVisible.value = true
-                } else {
-                    Log.w("PlayerViewModel", "Artist '${artist.name}' has no playable songs.")
-                    // podrías emitir un evento Toast
-                }
-            } catch (e: Exception) {
-                Log.e("PlayerViewModel", "Error playing artist ${artist.name}", e)
-            }
-        }
-    }
+    fun playArtist(artist: Artist) =
+        queueStateHolder.playArtist(artist, playbackSourceCallbacks())
 
     fun removeSongFromQueue(songId: String) {
         queueUndoStateHolder.removeSongFromQueue(
