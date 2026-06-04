@@ -5,7 +5,7 @@
     <string name="do_not_show_again">Non mostrare più</string>
     <string name="dismiss">Ignora</string>
     <string name="all_files_access_title">Autorizzazione speciale richiesta</string>
-    <string name="all_files_access_description">Per modificare i metadati dei brani (file .mp3), PixelPlayer necessita di un accesso speciale a tutti i file. Questo ci permette di modificare direttamente i tag delle tracce. Concedi questa autorizzazione nella schermata successiva per attivare la modifica dei metadati.</string>
+    <string name="all_files_access_description">Per modificare i metadati dei brani (.mp3), PixelPlayer necessita di un accesso speciale a tutti i file. Questo ci permette di modificare direttamente i tag delle tracce. Concedi questa autorizzazione nella schermata successiva per abilitare la modifica dei metadati.</string>
     <string name="grant_permission_button">Concedi autorizzazione</string>
     <string name="all_files_access_setting">Accesso a tutti i file</string>
     <string name="error">Errore</string>
@@ -22,14 +22,14 @@
     <string name="lrclib_uri">https://lrclib.net/</string>
     <string name="lyrics_not_found">Testi non trovati</string>
     <string name="search_lyrics_online_prompt">Vuoi cercare i testi online?</string>
-    <string name="lyrics_custom_search_hint">Non siamo riusciti a trovare i testi automaticamente. Puoi modificare il titolo o l\'artista e provare a cercare manualmente.</string>
+    <string name="lyrics_custom_search_hint">Non siamo riusciti a trovare i testi automaticamente. Puoi modificare il titolo o l'artista e provare a cercare manualmente.</string>
     <string name="failed_to_search_for_lyrics">Ricerca testi fallita</string>
     <string name="failed_to_fetch_lyrics_from_remote">Recupero testi da remoto fallito</string>
     <string name="lyrics_fetch_timeout">Timeout di connessione. Verifica la tua connessione Internet.</string>
     <string name="lyrics_network_error">Errore di rete. Verifica la tua connessione Internet.</string>
     <string name="lyrics_server_error">Errore server (codice %d). Riprova più tardi.</string>
-    <string name="found_n_matches_format">%d corrispondenza/e trovata/e</string>
-    <string name="searched_for_x_format">Ricerca di \"%s\"</string>
+    <string name="found_n_matches_format">%d corrispondenza(e) trovata(e)</string>
+    <string name="searched_for_x_format">Ricerca di "%s"</string>
     <string name="searching_lyrics">Ricerca testi…</string>
     <string name="lyrics_already_available">Testi già disponibili. Recupero online saltato.</string>
     <string name="lyrics_embedded_already_available">Testi incorporati già trovati. Recupero online saltato.</string>
@@ -53,11 +53,15 @@
 
     <string name="sync_scanning">Scansione file musicali…</string>
     <string name="sync_processing">Elaborazione file…</string>
-    <string name="sync_files_progress">%1$d su %2$d file</string>
+    <string name="sync_files_progress">%1$d di %2$d file</string>
     <string name="sync_in_progress">Sincronizzazione libreria…</string>
     <string name="sync_complete">Sincronizzazione completata</string>
     <string name="sync_pending">In attesa…</string>
     <string name="syncing_library">Sincronizzazione libreria…</string>
+    <string name="library_background_sync">Completamento in background…</string>
+    <string name="library_background_sync_lyrics">Scansione testi…</string>
+    <string name="library_background_sync_cache">Pulizia cache copertine…</string>
+    <string name="library_background_sync_cloud">Sincronizzazione sorgenti cloud…</string>
     <string name="unknown_song_title">Titolo sconosciuto</string>
     <string name="unknown_artist">Artista sconosciuto</string>
     <string name="unknown_album">Album sconosciuto</string>
@@ -77,15 +81,23 @@
     <string name="pause_playback">Pausa</string>
     <string name="play_playback">Riproduci</string>
     <string name="playlist_not_found">Playlist non trovata.</string>
+    <string name="disc_number_header">Disco %d</string>
 
     <string name="ai_error_api_key">Configura una chiave API valida per il provider IA selezionato nelle Impostazioni.</string>
     <string name="ai_error_generic">Errore IA: %s</string>
-    <string name="ai_error_quota">Il provider IA selezionato ha rifiutato la richiesta perché l\'account non ha più crediti o ha superato la quota.</string>
+    <string name="ai_error_quota">Il provider IA selezionato ha rifiutato la richiesta perché l'account non ha crediti o ha superato la quota.</string>
     <string name="ai_error_model_unavailable">Il modello IA selezionato non è più disponibile. PixelPlayer ha provato a passare automaticamente a un modello supportato.</string>
-    <string name="ai_no_songs_found">L\'IA non ha trovato nessun brano per la tua richiesta.</string>
-    <string name="ai_prompt_empty">Scrivi un\'idea per il tuo Daily Mix</string>
-    <string name="ai_daily_mix_updated">Daily Mix aggiornato con l\'IA</string>
-    <string name="ai_no_songs_for_mix">L\'IA non ha trovato nessun brano per questo mix</string>
+    <string name="ai_no_songs_found">L'IA non ha trovato brani per la tua richiesta.</string>
+    <string name="ai_prompt_empty">Scrivi un'idea per il tuo Daily Mix</string>
+    <string name="ai_daily_mix_updated">Daily Mix aggiornato con IA</string>
+    <string name="ai_no_songs_for_mix">L'IA non ha trovato brani per questo mix</string>
+
+    <string name="ai_translate_via_ai">Traduci con IA</string>
+    <string name="ai_lyrics_already_translated">Questi testi hanno già una traduzione</string>
+    <string name="ai_lyrics_already_in_target_language">Questi testi sono già in questa lingua</string>
+    <string name="ai_lyrics_api_not_configured">API non configurata</string>
+    <string name="ai_lyrics_translation_success">Testi tradotti con successo!</string>
+    <string name="ai_lyrics_translating">Traduzione testi in corso...</string>
 
     <string name="shortcut_shuffle_short">Casuale</string>
     <string name="shortcut_shuffle_long">Riproduci tutti i brani in modalità casuale</string>
@@ -98,13 +110,13 @@
 
     <string name="invalid_album_id">ID album non valido</string>
     <string name="album_id_not_found">ID album non trovato</string>
-    <string name="error_loading_album">Errore durante il caricamento dei dati dell\'album: %s</string>
+    <string name="error_loading_album">Errore durante il caricamento dei dati dell'album: %s</string>
     <string name="album_not_found">Album non trovato</string>
     <string name="could_not_update">Impossibile aggiornare: %s</string>
     <string name="invalid_artist_id">ID artista non valido</string>
     <string name="artist_id_not_found">ID artista non trovato</string>
-    <string name="error_loading_artist">Errore durante il caricamento dei dati dell\'artista: %s</string>
-    <string name="could_not_find_artist">Impossibile trovare l\'artista</string>
+    <string name="error_loading_artist">Errore durante il caricamento dei dati dell'artista: %s</string>
+    <string name="could_not_find_artist">Impossibile trovare l'artista</string>
     <string name="no_valid_songs">Nessun brano valido trovato da riprodurre</string>
 
     <string name="glance_widget_description">Widget reattivo che si adatta alla sua dimensione</string>
@@ -124,12 +136,12 @@
     <string name="error_unknown">Errore sconosciuto</string>
 
     <!-- Watch transfer foreground service -->
-    <string name="watch_transfer_sending_n_to_watch">Invio di %1$d brani all\'orologio</string>
-    <string name="watch_transfer_sending_to_watch">Invio all\'orologio</string>
+    <string name="watch_transfer_sending_n_to_watch">Invio di %1$d brani all'orologio</string>
+    <string name="watch_transfer_sending_to_watch">Invio all'orologio</string>
     <string name="watch_transfer_complete">Trasferimento completato</string>
     <string name="watch_transfer_failed">Trasferimento fallito</string>
     <string name="watch_transfer_cancelled">Trasferimento annullato</string>
-    <string name="watch_transfer_preparing">Preparazione trasferimento all\'orologio</string>
+    <string name="watch_transfer_preparing">Preparazione trasferimento all'orologio</string>
     <string name="watch_transfer_summary_n">%1$d trasferimenti</string>
     <string name="watch_transfer_starting">Avvio trasferimento…</string>
     <string name="watch_transfer_multiple_active">Più trasferimenti attivi</string>
@@ -140,14 +152,14 @@
     <string name="watch_transfer_status_cancelled">Annullato</string>
     <string name="watch_transfer_status_preparing">Preparazione</string>
     <string name="watch_transfer_starting_short">Avvio</string>
-    <string name="watch_transfer_channel_name">Trasferimenti all\'orologio</string>
-    <string name="watch_transfer_channel_description">Mostra l\'avanzamento in tempo reale dei trasferimenti musicali dal telefono all\'orologio</string>
+    <string name="watch_transfer_channel_name">Trasferimenti all'orologio</string>
+    <string name="watch_transfer_channel_description">Mostra l'avanzamento in tempo reale dei trasferimenti musicali dal telefono all'orologio</string>
 
     <!-- Cast HTTP server -->
     <string name="cast_server_channel_name">Server multimediale Cast</string>
     <string name="cast_server_notification_title">Trasmissione al dispositivo</string>
     <string name="cast_server_notification_text">Servizio multimediale verso dispositivo Cast</string>
-    <string name="cast_server_foreground_error">%1$s : %2$s</string>
+    <string name="cast_server_foreground_error">%1$s: %2$s</string>
 
     <!-- Backup / data transfer (ViewModels) -->
     <string name="backup_invalid_format">Backup non valido: %1$s</string>
@@ -167,7 +179,7 @@
     <string name="dev_test_crash_message">Crash di test attivato dalle Opzioni sviluppatore - questo è intenzionale per testare il sistema di segnalazione crash</string>
 
     <!-- PlayerViewModel -->
-    <string name="player_song_not_found_in_list">Brano non trovato nell\'elenco attuale</string>
+    <string name="player_song_not_found_in_list">Brano non trovato nell'elenco attuale</string>
     <string name="player_could_not_locate_song">Impossibile localizzare il brano</string>
     <string name="player_no_songs_in_library_toast">Nessun brano trovato nella libreria</string>
     <string name="player_playback_stopped_eot">Riproduzione interrotta: %1$s terminata (Fine traccia).</string>
@@ -184,7 +196,7 @@
     <string name="player_share_zip_failed_format">Condivisione fallita: %1$s</string>
     <string name="player_cannot_delete_currently_playing">Impossibile eliminare il brano in riproduzione</string>
     <string name="player_batch_delete_files_deleted_skipped_format">%1$d file eliminati (%2$d saltati - in riproduzione)</string>
-    <string name="player_batch_delete_partial_format">%1$d su %2$d file eliminati</string>
+    <string name="player_batch_delete_partial_format">%1$d di %2$d file eliminati</string>
     <string name="player_delete_files_failed">Eliminazione file fallita</string>
     <string name="player_file_deleted">File eliminato</string>
     <string name="player_delete_file_not_found">Impossibile eliminare il file o file non trovato</string>
@@ -222,4 +234,20 @@
     <string name="ui_format_percent_d">%1$d%%</string>
     <string name="backup_manifest_schema_v">v%1$d</string>
     <string name="backup_manifest_device_line">%1$s %2$s</string>
+
+    <!-- Batch Edit -->
+    <string name="batch_edit_toolbar_title">Modifica %d brani</string>
+    <string name="batch_edit_info_message">Solo i campi modificati verranno aggiornati. Lascia i campi vuoti per mantenere i valori esistenti.</string>
+    <string name="batch_edit_mixed_values">(Valori misti)</string>
+    <string name="batch_edit_optional">(Opzionale - lascia vuoto per saltare)</string>
+    <string name="batch_edit_success">Aggiornati correttamente %d brani</string>
+    <string name="batch_edit_partial_success">Aggiornati %d di %d brani. Alcuni file non sono stati modificati.</string>
+    <string name="batch_edit_failed">Aggiornamento brani fallito</string>
+
+    <!-- Batch Edit Cover Art -->
+    <string name="batch_edit_cover_art_heading">Copertina in batch</string>
+    <string name="batch_edit_cover_art_hint">Questo sostituirà la copertina per tutti i %d brani selezionati</string>
+    <string name="batch_edit_set_cover_art">Imposta copertina per tutti</string>
+    <string name="batch_edit_remove_all_art">Rimuovi tutte le copertine</string>
+    <string name="batch_edit_multiple_covers">(Più copertine diverse)</string>
 </resources>
