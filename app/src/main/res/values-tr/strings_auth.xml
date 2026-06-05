@@ -19,7 +19,7 @@
     <string name="auth_navidrome_title">Subsonic / Navidrome</string>
     <string name="auth_navidrome_subtitle">Kendi barındırdığınız müzik sunucusuna bağlanın</string>
     <string name="auth_navidrome_info_card">Navidrome, Airsonic, Gonic, Ampache ve Subsonic API ile uyumlu diğer sunucuları destekler.</string>
-    <string name="auth_server_url_placeholder_https">https://muzik.example.com</string>
+    <string name="auth_server_url_placeholder_https">https://music.example.com</string>
     <string name="auth_navidrome_server_url_hint">Sunucunuzun tam https:// kök adresini kullanın.</string>
     <string name="auth_navidrome_username_hint">Bu, Subsonic veya Navidrome hesap adınızdır.</string>
     <string name="auth_navidrome_password_hint">Sunucunuz destekliyorsa uygulama şifresi de geçerlidir.</string>
