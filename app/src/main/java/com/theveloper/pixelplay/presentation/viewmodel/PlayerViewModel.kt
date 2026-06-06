@@ -658,6 +658,13 @@ class PlayerViewModel @Inject constructor(
             initialValue = true
         )
 
+    val disableBlurAllOver: StateFlow<Boolean> = userPreferencesRepository.disableBlurAllOverFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
 
 
     private val _isInitialThemePreloadComplete = MutableStateFlow(false)

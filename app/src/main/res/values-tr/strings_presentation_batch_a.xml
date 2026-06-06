@@ -8,8 +8,8 @@
 
     <!-- Google Drive folder setup -->
     <string name="auth_gdrive_setting_up">Google Drive kuruluyor…</string>
-    <string name="auth_gdrive_connect_title">Google Drive'ı Bağla</string>
-    <string name="auth_gdrive_connect_subtitle">Müzik dosyalarını doğrudan Google Drive'ınızdan yayınlayın</string>
+    <string name="auth_gdrive_connect_title">Google Drive\'ı Bağla</string>
+    <string name="auth_gdrive_connect_subtitle">Müzik dosyalarını doğrudan Google Drive\'ınızdan yayınlayın</string>
     <string name="auth_gdrive_sign_in_with_google">Google ile oturum açın</string>
     <string name="auth_gdrive_select_music_folder_title">Bir müzik klasörü seçin</string>
     <string name="auth_gdrive_select_music_folder_subtitle">Müzik kaynağınız olarak kullanmak için bir klasör seçin veya oluşturun</string>

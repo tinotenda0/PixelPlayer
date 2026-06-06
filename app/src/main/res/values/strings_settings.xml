@@ -132,6 +132,10 @@
     <string
         name="setcat_smooth_corners_subtitle"
     >Use complex shaped corners effectively improving aesthetics but may affect performance on low-end devices</string>
+    <string name="setcat_disable_blur_all_over_title">Disable Blur Effects</string>
+    <string
+        name="setcat_disable_blur_all_over_subtitle"
+    >Turn off blur effects across the app to save battery and resources.</string>
     <string name="setcat_now_playing">Now Playing</string>
     <string name="setcat_player_theme_label">Player Theme</string>
     <string

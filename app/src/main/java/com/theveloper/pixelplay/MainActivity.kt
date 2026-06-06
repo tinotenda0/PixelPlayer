@@ -665,6 +665,8 @@ class MainActivity : ComponentActivity() {
         val useSmoothCorners by playerViewModel.useSmoothCorners.collectAsStateWithLifecycle()
         val isMiniPlayerDismissing by playerViewModel.isMiniPlayerDismissing.collectAsStateWithLifecycle()
         val hapticsEnabled by playerViewModel.hapticsEnabled.collectAsStateWithLifecycle()
+        val disableBlurAllOver by playerViewModel.disableBlurAllOver.collectAsStateWithLifecycle()
+        val predictiveBackCollapseFraction by playerViewModel.predictiveBackCollapseFraction.collectAsStateWithLifecycle()
         val rootView = LocalView.current
         val platformHapticFeedback = LocalHapticFeedback.current
         val appHapticsConfig = remember(hapticsEnabled) {
@@ -942,12 +944,17 @@ class MainActivity : ComponentActivity() {
                                 .fillMaxSize()
                                 .graphicsLayer {
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                        val fraction = expansionFractionProvider()
-                                        // Quantize to 4px steps: rebuild the RenderEffect only
-                                        // when the blur crosses a step, reuse the cached object
-                                        // every other frame.
-                                        val quantizedBlurPx = (fraction * 100f / 4f).roundToInt() * 4f
-                                        renderEffect = blurEffectCache.get(quantizedBlurPx)
+                                        if (disableBlurAllOver) {
+                                            renderEffect = null
+                                        } else {
+                                            val expansion = expansionFractionProvider()
+                                            val fraction = (expansion * (1f - predictiveBackCollapseFraction)).coerceIn(0f, 1f)
+                                            // Quantize to 2px steps: rebuild the RenderEffect only
+                                            // when the blur crosses a step, reuse the cached object
+                                            // every other frame.
+                                            val quantizedBlurPx = (fraction * 120f / 2f).roundToInt() * 2f
+                                            renderEffect = blurEffectCache.get(quantizedBlurPx)
+                                        }
                                     }
                                 }
                         ) {

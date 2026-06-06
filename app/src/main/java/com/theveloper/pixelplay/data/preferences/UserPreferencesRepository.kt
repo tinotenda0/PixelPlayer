@@ -215,6 +215,7 @@ constructor(
         val USE_ANIMATED_LYRICS = booleanPreferencesKey("use_animated_lyrics")
         val ANIMATED_LYRICS_BLUR_ENABLED = booleanPreferencesKey("animated_lyrics_blur_enabled")
         val ANIMATED_LYRICS_BLUR_STRENGTH = androidx.datastore.preferences.core.floatPreferencesKey("animated_lyrics_blur_strength")
+        val DISABLE_BLUR_ALL_OVER = booleanPreferencesKey("disable_blur_all_over")
 
         // Genre View Preference
         val IS_GENRE_GRID_VIEW = booleanPreferencesKey("is_genre_grid_view")
@@ -1419,6 +1420,17 @@ constructor(
     suspend fun setAnimatedLyricsBlurStrength(strength: Float) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.ANIMATED_LYRICS_BLUR_STRENGTH] = strength
+        }
+    }
+
+    val disableBlurAllOverFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.DISABLE_BLUR_ALL_OVER] ?: false
+        }
+
+    suspend fun setDisableBlurAllOver(disabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.DISABLE_BLUR_ALL_OVER] = disabled
         }
     }
 
