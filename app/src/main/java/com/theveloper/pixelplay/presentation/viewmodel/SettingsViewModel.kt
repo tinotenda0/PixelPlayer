@@ -456,6 +456,9 @@ class SettingsViewModel @Inject constructor(
     private val _dataTransferEvents = MutableSharedFlow<String>()
     val dataTransferEvents: SharedFlow<String> = _dataTransferEvents.asSharedFlow()
 
+    private val _dataTransferProgress = MutableStateFlow<BackupTransferProgressUpdate?>(null)
+    val dataTransferProgress: StateFlow<BackupTransferProgressUpdate?> = _dataTransferProgress.asStateFlow()
+
     init {
         viewModelScope.launch {
             backupManager.getBackupHistory().collect { history ->
@@ -474,12 +477,7 @@ class SettingsViewModel @Inject constructor(
                 _uiState.update { it.copy(collageAutoRotate = autoRotate) }
             }
         }
-    }
 
-    private val _dataTransferProgress = MutableStateFlow<BackupTransferProgressUpdate?>(null)
-    val dataTransferProgress: StateFlow<BackupTransferProgressUpdate?> = _dataTransferProgress.asStateFlow()
-
-    init {
         // One-time device capability check — result is cached inside HiFiCapabilityChecker
         _uiState.update {
             it.copy(

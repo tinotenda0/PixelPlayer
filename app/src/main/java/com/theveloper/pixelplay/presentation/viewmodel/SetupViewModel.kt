@@ -80,9 +80,6 @@ class SetupViewModel @Inject constructor(
     /**
      * Expose sync progress for UI to show during initial setup
      */
-    /**
-     * Expose sync progress for UI to show during initial setup
-     */
     val isSyncing = syncManager.isSyncing
 
     private val fileExplorerStateHolder = FileExplorerStateHolder(userPreferencesRepository, viewModelScope, context)
