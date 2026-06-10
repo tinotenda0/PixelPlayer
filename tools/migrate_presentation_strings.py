@@ -5,7 +5,6 @@ Run from repo root. Review diff before committing.
 """
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
