@@ -30,7 +30,7 @@ fun DailyMixMenu(
     isLoading: Boolean
 ) {
     val sheetState = rememberBottomSheetState(
-        initialValue = SheetValue.Hidden
+        initialValue = SheetValue.Expanded
     )
     var prompt by remember { mutableStateOf("") }
 
