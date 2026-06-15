@@ -50,7 +50,10 @@ class GeminiAiClient(private val apiKey: String) : AiClient {
     private data class GenerationConfig(
         val temperature: Double,
         val topK: Int = 64,
-        val topP: Double = 0.95
+        val topP: Double = 0.95,
+        @SerialName("maxOutputTokens") val maxOutputTokens: Int = 8192,
+        @SerialName("presencePenalty") val presencePenalty: Double? = null,
+        @SerialName("frequencyPenalty") val frequencyPenalty: Double? = null
     )
 
     @Serializable
@@ -81,7 +84,12 @@ class GeminiAiClient(private val apiKey: String) : AiClient {
         model: String,
         systemPrompt: String,
         prompt: String,
-        temperature: Float
+        temperature: Float,
+        topP: Float,
+        topK: Int,
+        maxTokens: Int,
+        presencePenalty: Float,
+        frequencyPenalty: Float
     ): String {
         return withContext(Dispatchers.IO) {
             val resolvedModel = model.ifBlank { DEFAULT_GEMINI_MODEL }
@@ -91,7 +99,14 @@ class GeminiAiClient(private val apiKey: String) : AiClient {
                 systemInstruction = systemPrompt
                     .takeIf { it.isNotBlank() }
                     ?.let { Content(parts = listOf(Part(it))) },
-                generationConfig = GenerationConfig(temperature = temperature.toDouble())
+                generationConfig = GenerationConfig(
+                    temperature = temperature.toDouble(),
+                    topK = topK,
+                    topP = topP.toDouble(),
+                    maxOutputTokens = maxTokens,
+                    presencePenalty = presencePenalty.toDouble().takeIf { it != 0.0 },
+                    frequencyPenalty = frequencyPenalty.toDouble().takeIf { it != 0.0 }
+                )
             )
 
             val jsonBody = json.encodeToString(GenerateRequest.serializer(), requestBody)
