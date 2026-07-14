@@ -211,6 +211,14 @@
     <string name="plex_accounts_add">Add account</string>
     <string name="plex_accounts_active">Active</string>
     <string name="plex_accounts_remove_cd">Remove account</string>
+    <string name="plex_remote_button">Remote control</string>
+    <string name="plex_remote_title">Remote Control</string>
+    <string name="plex_remote_subtitle">Control Plexamp on your other devices.</string>
+    <string name="plex_remote_refresh_cd">Refresh player list</string>
+    <string name="plex_remote_empty">No controllable players found. Make sure Plexamp is open on the other device, signed into the same account, with \"Advertise as player\" enabled, and on the same network.</string>
+    <string name="plex_remote_nothing_playing">Nothing playing on this device</string>
+    <string name="plex_remote_unknown_track">Playing on remote device</string>
+    <string name="plex_remote_change_player">Choose another player</string>
 
     <!-- Google Drive Auth -->
     <string name="auth_gdrive_connect_subtitle">Stream music files directly from your Google Drive</string>

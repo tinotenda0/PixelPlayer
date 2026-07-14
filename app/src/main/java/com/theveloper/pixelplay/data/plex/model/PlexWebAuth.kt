@@ -21,7 +21,27 @@ data class PlexServerResource(
     val clientIdentifier: String,
     /** Server-scoped access token for this user (falls back to the account token). */
     val accessToken: String?,
-    val connections: List<PlexServerConnection>
+    val connections: List<PlexServerConnection>,
+    val product: String = ""
+)
+
+/** A remote-controllable Plex player (e.g. Plexamp on another device). */
+data class PlexPlayerDevice(
+    val name: String,
+    val product: String,
+    val clientIdentifier: String,
+    /** Reachable base address, e.g. http://192.168.1.20:32500 */
+    val uri: String
+)
+
+/** Snapshot of what a remote player is doing (from its music timeline). */
+data class PlexRemoteTimeline(
+    val state: String,          // playing | paused | stopped
+    val timeMs: Long,
+    val durationMs: Long,
+    val ratingKey: String?,
+    val machineIdentifier: String?,
+    val volume: Int?            // 0-100 when reported
 )
 
 /** A signed-in Plex identity bound to one server. */

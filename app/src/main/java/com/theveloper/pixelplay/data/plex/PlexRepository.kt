@@ -18,9 +18,12 @@ import com.theveloper.pixelplay.data.database.toEntity
 import com.theveloper.pixelplay.data.database.toSong
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.network.plex.PlexApiService
+import com.theveloper.pixelplay.data.network.plex.PlexCompanionClient
 import com.theveloper.pixelplay.data.network.plex.PlexResponseParser
 import com.theveloper.pixelplay.data.plex.model.PlexAccount
 import com.theveloper.pixelplay.data.plex.model.PlexCredentials
+import com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice
+import com.theveloper.pixelplay.data.plex.model.PlexRemoteTimeline
 import com.theveloper.pixelplay.data.plex.model.PlexSong
 import com.theveloper.pixelplay.data.preferences.PlaylistPreferencesRepository
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -30,6 +33,9 @@ import com.theveloper.pixelplay.data.stream.CloudMusicUtils
 import com.theveloper.pixelplay.data.worker.PlexSyncWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,6 +54,7 @@ import kotlin.math.absoluteValue
 @Singleton
 class PlexRepository @Inject constructor(
     private val api: PlexApiService,
+    private val companionClient: PlexCompanionClient,
     private val dao: PlexDao,
     private val musicDao: MusicDao,
     private val playlistPreferencesRepository: PlaylistPreferencesRepository,
@@ -639,6 +646,116 @@ class PlexRepository @Inject constructor(
         return dao.searchSongs(query).map { entities ->
             entities.map { it.toSong() }
         }
+    }
+
+    // ─── Remote control (Plex Companion / Plexamp) ─────────────────────────
+
+    @Volatile
+    private var cachedServerMachineId: String? = null
+
+    private suspend fun getServerMachineId(): String? {
+        cachedServerMachineId?.let { return it }
+        return api.getServerMachineIdentifier().getOrNull()?.also {
+            cachedServerMachineId = it
+        }
+    }
+
+    /**
+     * Remote-controllable players on the active account (other Plexamp
+     * instances etc.), each resolved to its first reachable address.
+     */
+    suspend fun getRemotePlayers(): Result<List<PlexPlayerDevice>> {
+        val account = _activeAccountFlow.value
+            ?: return Result.failure(Exception("Not logged in"))
+
+        val resources = api.getPlayers(account.plexTvToken).getOrElse {
+            return Result.failure(it)
+        }
+
+        val players = coroutineScope {
+            resources
+                .filter { it.clientIdentifier.isNotBlank() }
+                .map { resource ->
+                    async {
+                        // Local, direct addresses first; Companion players don't
+                        // publish relay endpoints that are useful to us.
+                        val ordered = resource.connections.sortedWith(
+                            compareByDescending<com.theveloper.pixelplay.data.plex.model.PlexServerConnection> { it.isLocal }
+                                .thenBy { it.isRelay }
+                        )
+                        val reachable = ordered.firstOrNull { connection ->
+                            !connection.isRelay && companionClient.isReachable(
+                                connection.uri, resource.clientIdentifier, account.plexTvToken
+                            )
+                        }
+                        reachable?.let {
+                            PlexPlayerDevice(
+                                name = resource.name.ifBlank { resource.product },
+                                product = resource.product,
+                                clientIdentifier = resource.clientIdentifier,
+                                uri = it.uri
+                            )
+                        }
+                    }
+                }
+                .mapNotNull { it.await() }
+        }
+
+        return Result.success(players)
+    }
+
+    suspend fun sendRemoteCommand(device: PlexPlayerDevice, command: String): Result<Unit> {
+        val token = _activeAccountFlow.value?.plexTvToken
+        return companionClient.sendPlaybackCommand(device, command, token)
+    }
+
+    suspend fun setRemoteVolume(device: PlexPlayerDevice, volume: Int): Result<Unit> {
+        val token = _activeAccountFlow.value?.plexTvToken
+        return companionClient.setVolume(device, volume, token)
+    }
+
+    suspend fun seekRemote(device: PlexPlayerDevice, positionMs: Long): Result<Unit> {
+        val token = _activeAccountFlow.value?.plexTvToken
+        return companionClient.seekTo(device, positionMs, token)
+    }
+
+    suspend fun getRemoteTimeline(device: PlexPlayerDevice): Result<PlexRemoteTimeline?> {
+        val token = _activeAccountFlow.value?.plexTvToken
+        return companionClient.getTimeline(device, token)
+    }
+
+    /** Local-mirror lookup so the remote screen can show title/artist. */
+    suspend fun getSongByRatingKey(ratingKey: String): Song? {
+        return try {
+            dao.getSongByPlexId(ratingKey)?.toSong()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Start playing a track from this account's server on a remote player:
+     * creates a play queue on the server, then points the player at it.
+     */
+    suspend fun playSongOnDevice(device: PlexPlayerDevice, plexId: String): Result<Unit> {
+        val account = _activeAccountFlow.value
+            ?: return Result.failure(Exception("Not logged in"))
+        val machineId = getServerMachineId()
+            ?: return Result.failure(Exception("Could not resolve server identity"))
+
+        val playQueueId = api.createPlayQueue(plexId, machineId).getOrElse {
+            return Result.failure(it)
+        }
+
+        return companionClient.playMedia(
+            device = device,
+            serverUrl = account.serverUrl,
+            serverMachineIdentifier = machineId,
+            serverToken = account.serverToken,
+            playQueueId = playQueueId,
+            trackKey = "/library/metadata/$plexId",
+            token = account.plexTvToken
+        )
     }
 
     // ─── Playback Reporting ────────────────────────────────────────────────

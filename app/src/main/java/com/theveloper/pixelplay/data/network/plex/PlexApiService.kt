@@ -264,6 +264,23 @@ class PlexApiService @Inject constructor(
 
     /** Media servers this token can access, with all their advertised addresses. */
     suspend fun getServers(token: String): Result<List<PlexServerResource>> {
+        return getResources(token) { provides -> provides.contains("server") }
+    }
+
+    /**
+     * Remote-controllable players on the account (Plexamp instances etc.).
+     * Players advertise provides=client and/or player.
+     */
+    suspend fun getPlayers(token: String): Result<List<PlexServerResource>> {
+        return getResources(token) { provides ->
+            provides.contains("player") || provides.contains("client")
+        }
+    }
+
+    private suspend fun getResources(
+        token: String,
+        providesFilter: (String) -> Boolean
+    ): Result<List<PlexServerResource>> {
         val url = "https://plex.tv/api/v2/resources".toHttpUrl().newBuilder()
             .addQueryParameter("includeHttps", "1")
             .addQueryParameter("includeRelay", "1")
@@ -274,7 +291,7 @@ class PlexApiService @Inject constructor(
             val resources = JSONArray(body)
             (0 until resources.length()).mapNotNull { i ->
                 val resource = resources.optJSONObject(i) ?: return@mapNotNull null
-                if (!resource.optString("provides").contains("server")) return@mapNotNull null
+                if (!providesFilter(resource.optString("provides"))) return@mapNotNull null
 
                 val connectionsJson = resource.optJSONArray("connections") ?: JSONArray()
                 val connections = (0 until connectionsJson.length()).mapNotNull { c ->
@@ -293,8 +310,59 @@ class PlexApiService @Inject constructor(
                     name = resource.optString("name", "Plex Server"),
                     clientIdentifier = resource.optString("clientIdentifier", ""),
                     accessToken = resource.optString("accessToken").takeIf { it.isNotBlank() },
-                    connections = connections
+                    connections = connections,
+                    product = resource.optString("product", "")
                 )
+            }
+        }
+    }
+
+    /** The active server's stable machine identifier (needed for remote playMedia). */
+    suspend fun getServerMachineIdentifier(): Result<String> {
+        return requestContainer("/identity").mapCatching { container ->
+            container.optString("machineIdentifier").takeIf { it.isNotBlank() }
+                ?: throw Exception("Server identity has no machineIdentifier")
+        }
+    }
+
+    /**
+     * Create an audio play queue on the server for a track, so a remote player
+     * can be pointed at it via Companion playMedia.
+     */
+    suspend fun createPlayQueue(ratingKey: String, machineIdentifier: String): Result<Long> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val cred = credentials ?: throw IllegalStateException("No credentials configured")
+                val uri = "server://$machineIdentifier/com.plexapp.plugins.library/library/metadata/$ratingKey"
+                val url = "${cred.normalizedServerUrl}/playQueues".toHttpUrl().newBuilder()
+                    .addQueryParameter("type", "audio")
+                    .addQueryParameter("uri", uri)
+                    .addQueryParameter("shuffle", "0")
+                    .addQueryParameter("repeat", "0")
+                    .addQueryParameter("continuous", "0")
+                    .build()
+
+                val request = Request.Builder()
+                    .url(url)
+                    .withPlexHeaders(token = cred.authToken)
+                    .post(FormBody.Builder().build())
+                    .build()
+
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        return@withContext Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
+                    }
+                    val container = JSONObject(response.body.string())
+                        .optJSONObject("MediaContainer") ?: JSONObject()
+                    val playQueueId = container.optLong("playQueueID", -1L)
+                    if (playQueueId <= 0) {
+                        return@withContext Result.failure(Exception("No playQueueID in response"))
+                    }
+                    Result.success(playQueueId)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: Failed to create play queue")
+                Result.failure(e)
             }
         }
     }

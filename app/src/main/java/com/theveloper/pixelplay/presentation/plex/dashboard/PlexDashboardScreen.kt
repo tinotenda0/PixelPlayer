@@ -22,6 +22,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DownloadForOffline
+import androidx.compose.material.icons.rounded.SettingsRemote
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Sync
@@ -58,6 +59,11 @@ fun PlexDashboardScreen(
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     val activeAccount by viewModel.activeAccount.collectAsStateWithLifecycle()
     var showAccountSheet by remember { mutableStateOf(false) }
+    var showRemoteSheet by remember { mutableStateOf(false) }
+    val remotePlayers by viewModel.remotePlayers.collectAsStateWithLifecycle()
+    val isLoadingRemotePlayers by viewModel.isLoadingRemotePlayers.collectAsStateWithLifecycle()
+    val selectedRemotePlayer by viewModel.selectedRemotePlayer.collectAsStateWithLifecycle()
+    val remoteNowPlaying by viewModel.remoteNowPlaying.collectAsStateWithLifecycle()
 
     val cardShape = AbsoluteSmoothCornerShape(
         cornerRadiusTR = 20.dp, cornerRadiusTL = 20.dp,
@@ -104,6 +110,10 @@ fun PlexDashboardScreen(
             username = activeAccount?.username ?: viewModel.username,
             serverName = activeAccount?.serverName,
             onOpenAccounts = { showAccountSheet = true },
+            onOpenRemote = {
+                showRemoteSheet = true
+                viewModel.loadRemotePlayers()
+            },
             downloadCount = downloadCount,
             downloadTotalBytes = downloadTotalBytes,
             downloadQueueProgress = downloadQueueProgress,
@@ -121,6 +131,24 @@ fun PlexDashboardScreen(
             cardShape = cardShape,
             paddingValues = paddingValues
         )
+
+        if (showRemoteSheet) {
+            PlexRemoteSheet(
+                players = remotePlayers,
+                isLoadingPlayers = isLoadingRemotePlayers,
+                selectedPlayer = selectedRemotePlayer,
+                nowPlaying = remoteNowPlaying,
+                onRefresh = { viewModel.loadRemotePlayers() },
+                onSelectPlayer = { viewModel.selectRemotePlayer(it) },
+                onChangePlayer = { viewModel.clearRemotePlayer() },
+                onCommand = { viewModel.sendRemoteCommand(it) },
+                onVolume = { viewModel.setRemoteVolume(it) },
+                onDismiss = {
+                    showRemoteSheet = false
+                    viewModel.clearRemotePlayer()
+                }
+            )
+        }
 
         if (showAccountSheet) {
             PlexAccountsSheet(
@@ -145,6 +173,7 @@ private fun PlexDashboardContent(
     username: String?,
     serverName: String?,
     onOpenAccounts: () -> Unit,
+    onOpenRemote: () -> Unit,
     downloadCount: Int,
     downloadTotalBytes: Long,
     downloadQueueProgress: com.theveloper.pixelplay.data.plex.PlexDownloadManager.QueueProgress?,
@@ -290,6 +319,7 @@ private fun PlexDashboardContent(
             isSyncing = isSyncing,
             onSyncAll = onSyncAll,
             onLogout = onLogout,
+            onOpenRemote = onOpenRemote,
             cardShape = cardShape
         )
         }
@@ -401,6 +431,7 @@ private fun PlexMenuCard(
     isSyncing: Boolean,
     onSyncAll: () -> Unit,
     onLogout: () -> Unit,
+    onOpenRemote: () -> Unit,
     cardShape: AbsoluteSmoothCornerShape
 ) {
     Card(
@@ -477,6 +508,25 @@ private fun PlexMenuCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.cloud_dashboard_action_disconnect), fontFamily = GoogleSansRounded)
                 }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            FilledTonalButton(
+                onClick = onOpenRemote,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            ) {
+                Icon(
+                    Icons.Rounded.SettingsRemote,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.plex_remote_button), fontFamily = GoogleSansRounded)
             }
         }
     }
