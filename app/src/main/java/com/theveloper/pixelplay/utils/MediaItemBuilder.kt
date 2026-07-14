@@ -257,6 +257,14 @@ object MediaItemBuilder {
             )
         }
 
+        // Streaming-provider covers (plex_cover:// etc.) can't be opened by
+        // external controllers directly — expose them through the shared
+        // artwork provider, which loads them via the app's Coil pipeline.
+        rawArtworkUri?.let { raw ->
+            SharedArtworkContentProvider.buildCloudArtworkUri(context.applicationContext, raw)
+                ?.let { return it }
+        }
+
         val normalizedUri = normalizeArtworkUri(rawArtworkUri, SUPPORTED_EXTERNAL_ARTWORK_SCHEMES)
             ?: return null
         return when (normalizedUri.scheme?.lowercase()) {

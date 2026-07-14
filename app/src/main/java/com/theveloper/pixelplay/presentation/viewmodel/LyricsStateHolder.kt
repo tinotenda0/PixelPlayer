@@ -116,8 +116,14 @@ class LyricsStateHolder @Inject constructor(
     }
 
     private companion object {
-        /** Upper bound for the automatic (on-play) lyrics lookup. */
-        private const val AUTO_FETCH_TIMEOUT_MS = 5_000L
+        /**
+         * Upper bound for the automatic (on-play) remote lyrics lookup.
+         * Measured July 2026: LRCLIB routinely takes 6-13s per query, so a
+         * tighter cap just kills requests before the response lands. The
+         * lookup runs at most once per song per session, so the cost is paid
+         * a single time and the result (or the miss) is remembered.
+         */
+        private const val AUTO_FETCH_TIMEOUT_MS = 15_000L
     }
 
     // Songs already given a background remote-search attempt this session, so
@@ -125,14 +131,49 @@ class LyricsStateHolder @Inject constructor(
     private val autoFetchAttemptedSongIds =
         java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
+    // Songs whose automatic load already completed with no lyrics this session.
+    // Re-triggers (state emissions, hydration, controller reconnects) settle
+    // instantly against this instead of restarting the loading state — the
+    // visible symptom of not having it was the lyrics spinner looping forever.
+    private val autoLoadNoResultSongIds =
+        java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    private var activeLoadSongId: String? = null
+
     /**
      * Load lyrics for a song.
      * @param song The song to load lyrics for
      * @param sourcePreference The preferred source for lyrics
      */
     fun loadLyricsForSong(song: Song, sourcePreference: LyricsSourcePreference) {
-        loadingJob?.cancel()
         val targetSongId = song.id
+
+        // Same song already loading — let the in-flight attempt finish instead
+        // of cancelling and restarting it (which resets the 5s budget forever).
+        if (loadingJob?.isActive == true && activeLoadSongId == targetSongId) {
+            return
+        }
+
+        // Already concluded "no lyrics" for this song this session: settle with
+        // a cheap stored-only check (it may have gained lyrics via the manual
+        // dialog since) and never re-enter the loading state.
+        if (targetSongId in autoLoadNoResultSongIds) {
+            loadingJob?.cancel()
+            activeLoadSongId = targetSongId
+            loadingJob = scope?.launch {
+                val stored = withContext(Dispatchers.IO) {
+                    runCatching { musicRepository.getStoredLyrics(song)?.first }.getOrNull()
+                }
+                if (stored != null) {
+                    autoLoadNoResultSongIds.remove(targetSongId)
+                }
+                loadCallback?.onLyricsLoaded(targetSongId, stored)
+            }
+            return
+        }
+
+        loadingJob?.cancel()
+        activeLoadSongId = targetSongId
 
         loadingJob = scope?.launch {
             loadCallback?.onLoadingStarted(targetSongId)
@@ -202,6 +243,9 @@ class LyricsStateHolder @Inject constructor(
                 }
             }
 
+            if (fetchedLyrics == null) {
+                autoLoadNoResultSongIds.add(targetSongId)
+            }
             loadCallback?.onLyricsLoaded(targetSongId, fetchedLyrics)
         }
     }
@@ -374,6 +418,7 @@ class LyricsStateHolder @Inject constructor(
      * Accept a search result.
      */
     fun acceptLyricsSearchResult(result: LyricsSearchResult, currentSong: Song) {
+        autoLoadNoResultSongIds.remove(currentSong.id)
         scope?.launch {
             _searchUiState.value = LyricsSearchUiState.Success(result.lyrics)
 
@@ -395,6 +440,7 @@ class LyricsStateHolder @Inject constructor(
      * Import from file.
      */
     fun importLyricsFromFile(songId: Long, validatedImport: ValidatedLyricsImport, currentSong: Song?) {
+        autoLoadNoResultSongIds.remove(songId.toString())
         scope?.launch {
             val sanitizedContent = validatedImport.sanitizedContent
             val parsedLyrics = validatedImport.parsedLyrics
@@ -476,6 +522,8 @@ class LyricsStateHolder @Inject constructor(
 
     fun resetLyrics(songId: Long) {
         resetSearchState()
+        autoLoadNoResultSongIds.remove(songId.toString())
+        autoFetchAttemptedSongIds.remove(songId.toString())
         scope?.launch {
             musicRepository.resetLyrics(songId)
             _songUpdates.emit(Song.emptySong().copy(id = songId.toString()) to null)
@@ -484,6 +532,8 @@ class LyricsStateHolder @Inject constructor(
 
     fun resetAllLyrics() {
         resetSearchState()
+        autoLoadNoResultSongIds.clear()
+        autoFetchAttemptedSongIds.clear()
         scope?.launch {
             musicRepository.resetAllLyrics()
         }

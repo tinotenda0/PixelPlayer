@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.data.database.EngagementDao
 import com.theveloper.pixelplay.data.model.Album
 import com.theveloper.pixelplay.data.model.Artist
@@ -38,6 +39,10 @@ class AutoMediaBrowseTree @Inject constructor(
         const val ALBUM_PREFIX = "ALBUM_"
         const val ARTIST_PREFIX = "ARTIST_"
         const val PLAYLIST_PREFIX = "PLAYLIST_"
+
+        /** Synthetic "Play all" / "Shuffle" rows shown at the top of containers. */
+        const val ACTION_PLAY_PREFIX = "AUTO_ACTION_PLAY_"
+        const val ACTION_SHUFFLE_PREFIX = "AUTO_ACTION_SHUFFLE_"
 
         const val CONTEXT_TYPE_EXTRA = "com.theveloper.pixelplay.auto.extra.CONTEXT_TYPE"
         const val CONTEXT_ID_EXTRA = "com.theveloper.pixelplay.auto.extra.CONTEXT_ID"
@@ -180,7 +185,7 @@ class AutoMediaBrowseTree @Inject constructor(
     private suspend fun getChildrenForPrefix(parentId: String, offset: Int, limit: Int): List<MediaItem> {
         val context = resolveContextFromParent(parentId) ?: return emptyList()
         val songs = getSongsForContext(context.first, context.second)
-        return songs.drop(offset)
+        val songItems = songs.drop(offset)
             .take(limit)
             .map { song ->
                 buildPlayableSongItem(
@@ -190,6 +195,41 @@ class AutoMediaBrowseTree @Inject constructor(
                     parentId = parentId
                 )
             }
+
+        // Play / Shuffle rows at the top of the first page, like other players.
+        return if (offset == 0 && songs.isNotEmpty()) {
+            buildContainerActionItems(parentId) + songItems
+        } else {
+            songItems
+        }
+    }
+
+    private fun buildContainerActionItems(parentId: String): List<MediaItem> = listOf(
+        buildActionItem(
+            mediaId = ACTION_PLAY_PREFIX + parentId,
+            title = context.getString(R.string.auto_action_play),
+            iconRes = R.drawable.rounded_play_arrow_filled_24
+        ),
+        buildActionItem(
+            mediaId = ACTION_SHUFFLE_PREFIX + parentId,
+            title = context.getString(R.string.auto_action_shuffle),
+            iconRes = R.drawable.ic_shortcut_shuffle
+        )
+    )
+
+    private fun buildActionItem(mediaId: String, title: String, iconRes: Int): MediaItem {
+        val metadata = MediaMetadata.Builder()
+            .setTitle(title)
+            .setIsBrowsable(false)
+            .setIsPlayable(true)
+            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+            .setArtworkUri(Uri.parse("android.resource://${context.packageName}/$iconRes"))
+            .build()
+
+        return MediaItem.Builder()
+            .setMediaId(mediaId)
+            .setMediaMetadata(metadata)
+            .build()
     }
 
     suspend fun getSongsForContext(contextType: String, contextId: String?): List<Song> {

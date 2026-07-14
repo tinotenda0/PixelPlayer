@@ -833,6 +833,12 @@ class MusicService : MediaLibraryService() {
                 mediaItems: MutableList<MediaItem>
             ): ListenableFuture<MutableList<MediaItem>> {
                 return serviceScope.future {
+                    mediaItems.firstOrNull()?.mediaId?.let { requestedId ->
+                        resolveAutoActionQueue(requestedId)?.let { queue ->
+                            grantArtworkUriPermissions(controller.packageName, queue.mediaItems)
+                            return@future queue.mediaItems
+                        }
+                    }
                     if (mediaItems.size == 1 && !controller.packageName.startsWith(APP_PACKAGE_PREFIX)) {
                         resolveContextQueueForRequestedItem(mediaItems.first(), controller)?.let { queue ->
                             grantArtworkUriPermissions(controller.packageName, queue.mediaItems)
@@ -858,6 +864,17 @@ class MusicService : MediaLibraryService() {
                 return serviceScope.future {
                     val requestedIndex = startIndex.coerceIn(0, (mediaItems.size - 1).coerceAtLeast(0))
                     val requestedItem = mediaItems.getOrNull(requestedIndex)
+
+                    requestedItem?.mediaId?.let { requestedId ->
+                        resolveAutoActionQueue(requestedId)?.let { queue ->
+                            grantArtworkUriPermissions(controller.packageName, queue.mediaItems)
+                            return@future MediaSession.MediaItemsWithStartPosition(
+                                queue.mediaItems,
+                                queue.startIndex,
+                                0L
+                            )
+                        }
+                    }
 
                     val contextQueue = if (requestedItem != null && !controller.packageName.startsWith(APP_PACKAGE_PREFIX)) {
                         resolveContextQueueForRequestedItem(requestedItem, controller)
@@ -2830,6 +2847,32 @@ class MusicService : MediaLibraryService() {
         return ContextQueueResolution(
             mediaItems = queueMediaItems,
             startIndex = startIndex
+        )
+    }
+
+    /**
+     * Expands the synthetic "Play" / "Shuffle" rows shown at the top of Android
+     * Auto containers into the full context queue.
+     */
+    private suspend fun resolveAutoActionQueue(mediaId: String): ContextQueueResolution? {
+        val (shuffle, parentId) = when {
+            mediaId.startsWith(AutoMediaBrowseTree.ACTION_PLAY_PREFIX) ->
+                false to mediaId.removePrefix(AutoMediaBrowseTree.ACTION_PLAY_PREFIX)
+            mediaId.startsWith(AutoMediaBrowseTree.ACTION_SHUFFLE_PREFIX) ->
+                true to mediaId.removePrefix(AutoMediaBrowseTree.ACTION_SHUFFLE_PREFIX)
+            else -> return null
+        }
+
+        val (contextType, contextId) = resolveAutoContextFromParentId(parentId) ?: return null
+        val songs = autoMediaBrowseTree.getSongsForContext(contextType, contextId)
+        if (songs.isEmpty()) return null
+
+        val orderedSongs = if (shuffle) songs.shuffled() else songs
+        return ContextQueueResolution(
+            mediaItems = orderedSongs
+                .map { MediaItemBuilder.buildForExternalController(this, it) }
+                .toMutableList(),
+            startIndex = 0
         )
     }
 
