@@ -81,6 +81,7 @@ import com.theveloper.pixelplay.presentation.components.MiniPlayerHeight
 import com.theveloper.pixelplay.presentation.components.subcomps.TightWrapText
 import com.theveloper.pixelplay.presentation.netease.auth.NeteaseLoginActivity
 import com.theveloper.pixelplay.presentation.jellyfin.auth.JellyfinLoginActivity
+import com.theveloper.pixelplay.presentation.plex.auth.PlexLoginActivity
 import com.theveloper.pixelplay.presentation.navidrome.auth.NavidromeLoginActivity
 import com.theveloper.pixelplay.presentation.qqmusic.auth.QqMusicLoginActivity
 import com.theveloper.pixelplay.presentation.telegram.auth.TelegramLoginActivity
@@ -98,6 +99,7 @@ fun AccountsScreen(
     onOpenQqMusicDashboard: () -> Unit = {},
     onOpenNavidromeDashboard: () -> Unit = {},
     onOpenJellyfinDashboard: () -> Unit = {},
+    onOpenPlexDashboard: () -> Unit = {},
     viewModel: AccountsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -213,6 +215,7 @@ fun AccountsScreen(
                                 onOpenQqMusicDashboard = onOpenQqMusicDashboard,
                                 onOpenNavidromeDashboard = onOpenNavidromeDashboard,
                                 onOpenJellyfinDashboard = onOpenJellyfinDashboard,
+                                onOpenPlexDashboard = onOpenPlexDashboard,
                                 preferNeteaseDashboard = true
                             )
                         },
@@ -225,6 +228,8 @@ fun AccountsScreen(
                             painterResource(R.drawable.telegram)
                         } else if (account.service == ExternalServiceAccount.JELLYFIN) {
                             painterResource(R.drawable.ic_jellyfin)
+                        } else if (account.service == ExternalServiceAccount.PLEX) {
+                            painterResource(R.drawable.ic_plex)
                         } else if (account.service == ExternalServiceAccount.NAVIDROME) {
                             painterResource(R.drawable.ic_navidrome_md3)
                         } else null
@@ -242,6 +247,7 @@ fun AccountsScreen(
                                 onOpenQqMusicDashboard = onOpenQqMusicDashboard,
                                 onOpenNavidromeDashboard = onOpenNavidromeDashboard,
                                 onOpenJellyfinDashboard = onOpenJellyfinDashboard,
+                                onOpenPlexDashboard = onOpenPlexDashboard,
                                 preferNeteaseDashboard = false
                             )
                         }
@@ -562,6 +568,7 @@ private fun EmptyAccountsCard(
                     ExternalServiceAccount.TELEGRAM -> painterResource(R.drawable.telegram)
                     ExternalServiceAccount.GOOGLE_DRIVE -> painterResource(R.drawable.rounded_drive_export_24)
                     ExternalServiceAccount.JELLYFIN -> painterResource(R.drawable.ic_jellyfin)
+                    ExternalServiceAccount.PLEX -> painterResource(R.drawable.ic_plex)
                     ExternalServiceAccount.NAVIDROME -> painterResource(R.drawable.ic_navidrome_md3)
                 }
                 FilledTonalButton(
@@ -655,6 +662,14 @@ private fun servicePalette(service: ExternalServiceAccount): ServicePalette {
             primaryActionContainer = Color(0xFFE3F2FD),
             primaryActionTint = Color(0xFF1565C0)
         )
+        ExternalServiceAccount.PLEX -> ServicePalette(
+            iconContainer = Color(0xFFE5A00D),
+            iconTint = Color.White,
+            statusContainer = Color(0xFFFFF3D6),
+            statusTint = Color(0xFF6B4E00),
+            primaryActionContainer = Color(0xFFFFF0C7),
+            primaryActionTint = Color(0xFF704900)
+        )
     }
 }
 
@@ -666,6 +681,7 @@ private fun accountIcon(service: ExternalServiceAccount): ImageVector {
         ExternalServiceAccount.QQ_MUSIC -> Icons.Rounded.MusicNote
         ExternalServiceAccount.NAVIDROME -> Icons.Rounded.CloudQueue
         ExternalServiceAccount.JELLYFIN -> Icons.Rounded.CloudQueue
+        ExternalServiceAccount.PLEX -> Icons.Rounded.CloudQueue
     }
 }
 
@@ -702,6 +718,13 @@ private fun ServiceIcon(service: ExternalServiceAccount, tint: Color, modifier: 
             tint = tint,
             modifier = modifier
         )
+    } else if (service == ExternalServiceAccount.PLEX) {
+        Icon(
+            painter = painterResource(R.drawable.ic_plex),
+            contentDescription = null,
+            tint = tint,
+            modifier = modifier
+        )
     } else {
         Icon(
             imageVector = accountIcon(service),
@@ -721,6 +744,7 @@ private fun serviceDisplayName(service: ExternalServiceAccount): String {
         ExternalServiceAccount.QQ_MUSIC -> stringResource(R.string.auth_qq_title)
         ExternalServiceAccount.NAVIDROME -> stringResource(R.string.auth_subsonic_title)
         ExternalServiceAccount.JELLYFIN -> stringResource(R.string.auth_jellyfin_title)
+        ExternalServiceAccount.PLEX -> stringResource(R.string.auth_plex_title)
     }
 }
 
@@ -731,6 +755,7 @@ private fun openService(
     onOpenQqMusicDashboard: () -> Unit,
     onOpenNavidromeDashboard: () -> Unit,
     onOpenJellyfinDashboard: () -> Unit,
+    onOpenPlexDashboard: () -> Unit,
     preferNeteaseDashboard: Boolean
 ) {
     when (service) {
@@ -780,6 +805,16 @@ private fun openService(
                 safeStartActivity(
                     context = context,
                     intent = Intent(context, JellyfinLoginActivity::class.java)
+                )
+            }
+        }
+        ExternalServiceAccount.PLEX -> {
+            if (preferNeteaseDashboard) {
+                onOpenPlexDashboard()
+            } else {
+                safeStartActivity(
+                    context = context,
+                    intent = Intent(context, PlexLoginActivity::class.java)
                 )
             }
         }

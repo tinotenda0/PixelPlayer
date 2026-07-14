@@ -79,6 +79,7 @@ data class SettingsUiState(
     val folderBackGestureNavigation: Boolean = true,
     val lyricsSourcePreference: LyricsSourcePreference = LyricsSourcePreference.EMBEDDED_FIRST,
     val autoScanLrcFiles: Boolean = false,
+    val autoFetchLyricsOnPlay: Boolean = true,
     val blockedDirectories: Set<String> = emptySet(),
     val availableModels: List<GeminiModel> = emptyList(),
     val isLoadingModels: Boolean = false,
@@ -194,6 +195,31 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
+
+    /** Live progress of the bulk lyrics prefetch job, null when not running. */
+    val lyricsPrefetchProgress: kotlinx.coroutines.flow.StateFlow<Pair<Int, Int>?> =
+        androidx.work.WorkManager.getInstance(context)
+            .getWorkInfosForUniqueWorkFlow(com.theveloper.pixelplay.data.worker.LyricsPrefetchWorker.WORK_NAME)
+            .map { infos ->
+                val running = infos.firstOrNull { it.state == androidx.work.WorkInfo.State.RUNNING }
+                    ?: return@map null
+                val current = running.progress.getInt(
+                    com.theveloper.pixelplay.data.worker.LyricsPrefetchWorker.PROGRESS_CURRENT, 0
+                )
+                val total = running.progress.getInt(
+                    com.theveloper.pixelplay.data.worker.LyricsPrefetchWorker.PROGRESS_TOTAL, 0
+                )
+                current to total
+            }
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), null)
+
+    fun startLyricsPrefetch() {
+        androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+            com.theveloper.pixelplay.data.worker.LyricsPrefetchWorker.WORK_NAME,
+            androidx.work.ExistingWorkPolicy.KEEP,
+            com.theveloper.pixelplay.data.worker.LyricsPrefetchWorker.oneTimeWork()
+        )
+    }
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     // AI Provider State
@@ -725,6 +751,12 @@ class SettingsViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            userPreferencesRepository.autoFetchLyricsOnPlayFlow.collect { enabled ->
+                _uiState.update { it.copy(autoFetchLyricsOnPlay = enabled) }
+            }
+        }
+
+        viewModelScope.launch {
             userPreferencesRepository.useAnimatedLyricsFlow.collect { enabled ->
                 _uiState.update { it.copy(useAnimatedLyrics = enabled) }
             }
@@ -1027,6 +1059,12 @@ class SettingsViewModel @Inject constructor(
     fun setAutoScanLrcFiles(enabled: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setAutoScanLrcFiles(enabled)
+        }
+    }
+
+    fun setAutoFetchLyricsOnPlay(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setAutoFetchLyricsOnPlay(enabled)
         }
     }
 

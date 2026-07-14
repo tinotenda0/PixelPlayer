@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -114,6 +115,16 @@ class LyricsStateHolder @Inject constructor(
         }
     }
 
+    private companion object {
+        /** Upper bound for the automatic (on-play) lyrics lookup. */
+        private const val AUTO_FETCH_TIMEOUT_MS = 5_000L
+    }
+
+    // Songs already given a background remote-search attempt this session, so
+    // replaying a lyric-less song doesn't hammer LRCLIB every time it starts.
+    private val autoFetchAttemptedSongIds =
+        java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
     /**
      * Load lyrics for a song.
      * @param song The song to load lyrics for
@@ -126,21 +137,85 @@ class LyricsStateHolder @Inject constructor(
         loadingJob = scope?.launch {
             loadCallback?.onLoadingStarted(targetSongId)
 
-            val fetchedLyrics = try {
-                withContext(Dispatchers.IO) {
-                    musicRepository.getLyrics(
-                        song = song,
-                        sourcePreference = sourcePreference
+            // Fast on-play chain: everything offline resolves in milliseconds,
+            // then at most ONE bounded network lookup. The old path funneled
+            // through the strict auto-matcher (multiple search strategies with
+            // retries and rate-limit waits) before falling back to a second full
+            // search — which is why lyrics felt slow and flaky on play.
+
+            // 1) Stored lyrics (DB / JSON disk cache / song row).
+            var fetchedLyrics: Lyrics? = withContext(Dispatchers.IO) {
+                runCatching { musicRepository.getStoredLyrics(song)?.first }.getOrNull()
+            }
+
+            // 2) Embedded tags and sidecar .lrc files, ordered by user preference.
+            if (fetchedLyrics == null) {
+                val localSources: List<suspend () -> String?> = when (sourcePreference) {
+                    LyricsSourcePreference.LOCAL_FIRST -> listOf(
+                        { readLocalLyricsFile(song) },
+                        { readEmbeddedLyricsFromFile(song) }
+                    )
+                    else -> listOf(
+                        { readEmbeddedLyricsFromFile(song) },
+                        { readLocalLyricsFile(song) }
                     )
                 }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (_: Exception) {
-                null
+                for (source in localSources) {
+                    val raw = withContext(Dispatchers.IO) {
+                        runCatching { source() }.getOrNull()
+                    } ?: continue
+                    val parsed = LyricsUtils.parseLyrics(raw)
+                    if (hasValidLyrics(parsed)) {
+                        fetchedLyrics = parsed.copy(areFromRemote = false)
+                        song.id.toLongOrNull()?.let { songId ->
+                            runCatching { musicRepository.updateLyrics(songId, raw) }
+                        }
+                        break
+                    }
+                }
+            }
+
+            // 3) One search-based remote lookup (the same matcher the manual
+            //    dialog uses — it succeeds far more often than the strict one),
+            //    hard-capped so the loading state never drags on. Attempted at
+            //    most once per song per session; hits are persisted so the next
+            //    load is instant.
+            if (fetchedLyrics == null && shouldAutoFetchFromRemote(song)) {
+                val remoteResult = try {
+                    kotlinx.coroutines.withTimeoutOrNull(AUTO_FETCH_TIMEOUT_MS) {
+                        withContext(Dispatchers.IO) {
+                            musicRepository.getLyricsFromRemote(song).getOrNull()
+                        }
+                    }
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (_: Exception) {
+                    null
+                }
+
+                if (remoteResult != null) {
+                    val (lyrics, rawLyrics) = remoteResult
+                    fetchedLyrics = lyrics
+                    _songUpdates.emit(
+                        song.withPersistedLyrics(rawLyrics, refreshedAlbumArtUri = null) to lyrics
+                    )
+                }
             }
 
             loadCallback?.onLyricsLoaded(targetSongId, fetchedLyrics)
         }
+    }
+
+    private suspend fun shouldAutoFetchFromRemote(song: Song): Boolean {
+        if (song.id.isBlank()) return false
+        val enabled = try {
+            userPreferencesRepository.autoFetchLyricsOnPlayFlow.first()
+        } catch (_: Exception) {
+            false
+        }
+        if (!enabled) return false
+        // add() returns false if this song was already attempted this session.
+        return autoFetchAttemptedSongIds.add(song.id)
     }
 
     /**

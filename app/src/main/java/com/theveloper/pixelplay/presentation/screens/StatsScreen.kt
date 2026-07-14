@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Hearing
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -209,6 +210,8 @@ fun StatsScreen(
     val tabContentSpacing = 20.dp
     var selectedTimelineMetric by rememberSaveable { mutableStateOf(TimelineMetric.ListeningTime) }
     var selectedCategoryDimension by rememberSaveable { mutableStateOf(CategoryDimension.Song) }
+    var showStatsShareSheet by remember { mutableStateOf(false) }
+    val statsShareSheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val pullToRefreshState = rememberPullToRefreshState()
     var isPullRefreshAnimating by remember { mutableStateOf(false) }
     var isPullRefreshMinDelayActive by remember { mutableStateOf(false) }
@@ -360,6 +363,19 @@ fun StatsScreen(
                         containerColor = Color.Transparent,
                         actions = {
                             FilledIconButton(
+                                onClick = { if (summary != null) showStatsShareSheet = true },
+                                enabled = summary != null,
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.IosShare,
+                                    contentDescription = stringResource(R.string.stats_share_action)
+                                )
+                            }
+                            FilledIconButton(
                                 modifier = Modifier
                                     .padding(end = 12.dp),
                                 onClick = statsViewModel::requestStatsRefresh,
@@ -385,6 +401,14 @@ fun StatsScreen(
                         showIndicator = showRangeTabIndicator,
                     )
                 }
+            }
+
+            if (showStatsShareSheet && summary != null) {
+                com.theveloper.pixelplay.presentation.components.StatsShareSheet(
+                    onDismissRequest = { showStatsShareSheet = false },
+                    sheetState = statsShareSheetState,
+                    summary = summary
+                )
             }
         }
     }

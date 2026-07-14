@@ -27,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.presentation.jellyfin.auth.JellyfinLoginActivity
 import com.theveloper.pixelplay.presentation.navidrome.auth.NavidromeLoginActivity
+import com.theveloper.pixelplay.presentation.plex.auth.PlexLoginActivity
 import com.theveloper.pixelplay.presentation.netease.auth.NeteaseLoginActivity
 import com.theveloper.pixelplay.presentation.qqmusic.auth.QqMusicLoginActivity
 import com.theveloper.pixelplay.presentation.telegram.auth.TelegramLoginActivity
@@ -49,6 +50,8 @@ fun StreamingProviderSheet(
     onNavigateToNavidromeDashboard: () -> Unit = {},
     isJellyfinLoggedIn: Boolean = false,
     onNavigateToJellyfinDashboard: () -> Unit = {},
+    isPlexLoggedIn: Boolean = false,
+    onNavigateToPlexDashboard: () -> Unit = {},
     sheetState: SheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true
     )
@@ -155,6 +158,23 @@ fun StreamingProviderSheet(
                                 onNavigateToJellyfinDashboard()
                             } else {
                                 context.startActivity(Intent(context, JellyfinLoginActivity::class.java))
+                            }
+                            onDismissRequest()
+                        }
+                    )
+
+                    ProviderRow(
+                        iconPainter = painterResource(R.drawable.ic_plex),
+                        iconTint = Color(0xFFE5A00D),
+                        title = "Plex",
+                        subtitle = if (isPlexLoggedIn) "Connected" else "Connect your Plex server",
+                        shape = providerSegmentItemShape,
+                        isConnected = isPlexLoggedIn,
+                        onClick = {
+                            if (isPlexLoggedIn) {
+                                onNavigateToPlexDashboard()
+                            } else {
+                                context.startActivity(Intent(context, PlexLoginActivity::class.java))
                             }
                             onDismissRequest()
                         }

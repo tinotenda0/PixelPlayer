@@ -165,7 +165,9 @@ object AppModule {
             PixelPlayDatabase.MIGRATION_38_39,
             PixelPlayDatabase.MIGRATION_39_40,
             PixelPlayDatabase.MIGRATION_40_41,
-            PixelPlayDatabase.MIGRATION_41_42
+            PixelPlayDatabase.MIGRATION_41_42,
+            PixelPlayDatabase.MIGRATION_42_43,
+            PixelPlayDatabase.MIGRATION_43_44
         )
             .addCallback(PixelPlayDatabase.createRuntimeArtifactsCallback())
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
@@ -261,6 +263,18 @@ object AppModule {
     @Provides
     fun provideJellyfinDao(database: PixelPlayDatabase): com.theveloper.pixelplay.data.database.JellyfinDao {
         return database.jellyfinDao()
+    }
+
+    @Singleton
+    @Provides
+    fun providePlexDao(database: PixelPlayDatabase): com.theveloper.pixelplay.data.database.PlexDao {
+        return database.plexDao()
+    }
+
+    @Singleton
+    @Provides
+    fun providePlexDownloadDao(database: PixelPlayDatabase): com.theveloper.pixelplay.data.database.PlexDownloadDao {
+        return database.plexDownloadDao()
     }
 
     @Provides
@@ -446,6 +460,7 @@ object AppModule {
             redactHeader("X-Emby-Token")
             redactHeader("X-Emby-Authorization")
             redactHeader("X-MediaBrowser-Token")
+            redactHeader("X-Plex-Token")
         }
         
         // Connection pool with optimized connections for better performance

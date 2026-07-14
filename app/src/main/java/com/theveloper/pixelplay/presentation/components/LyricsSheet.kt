@@ -434,6 +434,8 @@ fun LyricsSheet(
     // Save lyrics dialog state
     var showSaveLyricsDialog by remember { mutableStateOf(false) }
     var showSyncControls by remember { mutableStateOf(false) }
+    var showShareSheet by remember { mutableStateOf(false) }
+    val shareSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var previewSeekPositionMs by remember(currentSong?.id) { mutableStateOf<Long?>(null) }
 
     var showSyncedLyrics by remember(lyrics) {
@@ -1019,6 +1021,7 @@ fun LyricsSheet(
                     showSyncedLyrics = showSyncedLyrics == true,
                     isSyncControlsVisible = showSyncControls,
                     onSaveLyricsAsLrc = { showSaveLyricsDialog = true },
+                    onShareLyrics = { showShareSheet = true },
                     onResetImportedLyrics = {
                         wasResetTriggered = true
                         resetLyricsForCurrentSong()
@@ -1087,6 +1090,31 @@ fun LyricsSheet(
                         onFavoriteToggle()
                     },
                 )
+            }
+        }
+
+        if (showShareSheet) {
+            val shareSong = currentSong
+            val shareLyrics = lyrics
+            if (shareSong != null && shareLyrics != null) {
+                MaterialTheme(
+                    colorScheme = colorScheme,
+                    typography = MaterialTheme.typography,
+                    shapes = MaterialTheme.shapes
+                ) {
+                    ShareLyricsSheet(
+                        onDismissRequest = { showShareSheet = false },
+                        sheetState = shareSheetState,
+                        song = shareSong,
+                        lyrics = shareLyrics,
+                        containerColor = containerColor,
+                        contentColor = contentColor,
+                        accentColor = accentColor,
+                        onAccentColor = onAccentColor,
+                        cardContainerColor = colorScheme.primaryContainer,
+                        onCardContainerColor = colorScheme.onPrimaryContainer
+                    )
+                }
             }
         }
 

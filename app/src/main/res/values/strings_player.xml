@@ -151,6 +151,14 @@
     <string name="lyrics_embedded_already_available">Embedded lyrics already found. Online fetch skipped.</string>
     <string name="lyrics_local_lrc_already_available">Local (.lrc) lyrics already found. Online fetch skipped.</string>
 
+    <!-- ShareLyricsSheet -->
+    <string name="lyrics_share_title">Share Lyrics</string>
+    <string name="lyrics_share_subtitle">Pick up to %1$d lines to put on the card.</string>
+    <string name="lyrics_share_chooser_title">Share lyrics</string>
+    <string name="lyrics_share_as_text">As text</string>
+    <string name="lyrics_share_as_image">Share card</string>
+    <string name="lyrics_share_empty_hint">Select some lines below to preview your card…</string>
+
     <!-- LyricsMoreBottomSheet -->
     <string name="lyrics_save_title">Save Lyrics</string>
     <string name="lyrics_translate_via_ai">Translate via AI</string>

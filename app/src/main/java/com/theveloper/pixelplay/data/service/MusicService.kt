@@ -166,6 +166,8 @@ class MusicService : MediaLibraryService() {
     @Inject
     lateinit var navidromeRepository: NavidromeRepository
     @Inject
+    lateinit var plexRepository: com.theveloper.pixelplay.data.plex.PlexRepository
+    @Inject
     lateinit var listeningStatsTracker: ListeningStatsTracker
     @Inject
     @AppScope
@@ -887,6 +889,45 @@ class MusicService : MediaLibraryService() {
                     )
                 }
             }
+
+            /**
+             * Android Auto / system media resumption asks for a queue when the
+             * player is empty. Without this override media3 rejects the request,
+             * which surfaced as a permanent "playback error" in Auto. Serve the
+             * persisted queue snapshot (original cloud URIs — the data source
+             * resolves them at load time).
+             */
+            override fun onPlaybackResumption(
+                mediaSession: MediaSession,
+                controller: MediaSession.ControllerInfo
+            ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+                return serviceScope.future {
+                    val snapshot = runCatching {
+                        userPreferencesRepository.getPlaybackQueueSnapshotOnce()
+                    }.getOrNull()
+
+                    val items = snapshot?.items
+                        ?.mapNotNull(::buildMediaItemFromSnapshot)
+                        .orEmpty()
+                    if (snapshot == null || items.isEmpty()) {
+                        throw UnsupportedOperationException("No playback to resume")
+                    }
+
+                    val index = when {
+                        snapshot.currentIndex in items.indices -> snapshot.currentIndex
+                        !snapshot.currentMediaId.isNullOrBlank() ->
+                            items.indexOfFirst { it.mediaId == snapshot.currentMediaId }
+                                .takeIf { it >= 0 } ?: 0
+                        else -> 0
+                    }
+
+                    MediaSession.MediaItemsWithStartPosition(
+                        items,
+                        index,
+                        snapshot.currentPositionMs.coerceAtLeast(0L)
+                    )
+                }
+            }
         }
 
         mediaSession = MediaLibrarySession.Builder(this, engine.masterPlayer, callback)
@@ -1246,6 +1287,69 @@ class MusicService : MediaLibraryService() {
         navidromePlaybackReportJob = null
     }
 
+    private fun getPlexId(mediaItem: MediaItem?): String? {
+        if (mediaItem == null) return null
+        return mediaItem.mediaMetadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_PLEX_ID)
+            ?: mediaItem.mediaMetadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_CONTENT_URI)?.let {
+                if (it.startsWith("plex://")) it.substringAfter("plex://") else null
+            }
+    }
+
+    private fun isPlexMediaItem(mediaItem: MediaItem?): Boolean {
+        return getPlexId(mediaItem) != null
+    }
+
+    private fun reportPlexPlayback(state: String, mediaItem: MediaItem? = engine.masterPlayer.currentMediaItem) {
+        val player = engine.masterPlayer
+        val targetItem = mediaItem ?: return
+        val plexId = getPlexId(targetItem) ?: return
+
+        val durationMs = targetItem.mediaMetadata.extras?.getLong(MediaItemBuilder.EXTERNAL_EXTRA_DURATION) ?: 0L
+        // If reporting for current item, use player position.
+        // If reporting "stopped" for a transition, use the item's duration as final position.
+        val positionMs = if (targetItem === player.currentMediaItem) {
+            player.currentPosition
+        } else {
+            durationMs
+        }
+
+        // Plex timeline states: playing, paused, stopped, buffering.
+        val plexState = when (state) {
+            "starting" -> "buffering"
+            else -> state
+        }
+
+        // Use appScope for the network call so it survives if serviceScope is cancelled
+        appScope.launch(Dispatchers.IO) {
+            plexRepository.reportPlayback(
+                ratingKey = plexId,
+                positionMs = positionMs,
+                state = plexState,
+                durationMs = durationMs
+            )
+        }
+    }
+
+    private var plexPlaybackReportJob: Job? = null
+
+    private fun startPlexPlaybackReporting() {
+        plexPlaybackReportJob?.cancel()
+        plexPlaybackReportJob = serviceScope.launch {
+            while (true) {
+                delay(30_000) // Report every 30 seconds
+                val player = engine.masterPlayer
+                if (player.isPlaying && isPlexMediaItem(player.currentMediaItem)) {
+                    reportPlexPlayback("playing")
+                }
+            }
+        }
+    }
+
+    private fun stopPlexPlaybackReporting() {
+        plexPlaybackReportJob?.cancel()
+        plexPlaybackReportJob = null
+    }
+
     private val playerListener = object : Player.Listener {
         override fun onVolumeChanged(volume: Float) {
             replayGainProcessor.onPlayerVolumeChanged(volume)
@@ -1270,10 +1374,14 @@ class MusicService : MediaLibraryService() {
             if (isPlaying) {
                 reportNavidromePlayback("playing")
                 startNavidromePlaybackReporting()
+                reportPlexPlayback("playing")
+                startPlexPlaybackReporting()
             } else {
                 val state = if (player.playbackState == Player.STATE_ENDED) "stopped" else "paused"
                 reportNavidromePlayback(state)
                 stopNavidromePlaybackReporting()
+                reportPlexPlayback(state)
+                stopPlexPlaybackReporting()
             }
 
             // Re-apply the last known RG volume immediately when resuming playback.
@@ -1321,10 +1429,17 @@ class MusicService : MediaLibraryService() {
                         navidromeRepository.scrobble(navidromeId, submission = true)
                     }
                 }
+                getPlexId(mediaItem)?.let { plexId ->
+                    appScope.launch(Dispatchers.IO) {
+                        plexRepository.scrobble(plexId)
+                    }
+                }
 
                 endOfTrackTimerSongId = null
                 reportNavidromePlayback("stopped")
                 stopNavidromePlaybackReporting()
+                reportPlexPlayback("stopped")
+                stopPlexPlaybackReporting()
             } else {
                 syncLocalListeningStatsFromPlayer(mediaSession?.player ?: engine.masterPlayer)
             }
@@ -1351,6 +1466,7 @@ class MusicService : MediaLibraryService() {
             if (reason == Player.DISCONTINUITY_REASON_SEEK) {
                 val state = if (engine.masterPlayer.isPlaying) "playing" else "paused"
                 reportNavidromePlayback(state)
+                reportPlexPlayback(state)
             }
 
             if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION) {
@@ -1361,6 +1477,15 @@ class MusicService : MediaLibraryService() {
                     if (prevId != null) {
                         appScope.launch(Dispatchers.IO) {
                             navidromeRepository.scrobble(prevId, submission = true)
+                        }
+                    }
+                }
+                if (isPlexMediaItem(finishedItem)) {
+                    val prevPlexId = getPlexId(finishedItem)
+                    reportPlexPlayback("stopped", finishedItem)
+                    if (prevPlexId != null) {
+                        appScope.launch(Dispatchers.IO) {
+                            plexRepository.scrobble(prevPlexId)
                         }
                     }
                 }
@@ -1392,6 +1517,14 @@ class MusicService : MediaLibraryService() {
                 }
             } else {
                 stopNavidromePlaybackReporting()
+            }
+            if (isPlexMediaItem(mediaItem)) {
+                reportPlexPlayback("starting")
+                if (engine.masterPlayer.isPlaying) {
+                    startPlexPlaybackReporting()
+                }
+            } else {
+                stopPlexPlaybackReporting()
             }
 
             val eotTargetSongId = endOfTrackTimerSongId
@@ -1495,6 +1628,8 @@ class MusicService : MediaLibraryService() {
         listeningStatsTracker.finalizeCurrentSession(forceSynchronousPersistence = true)
         reportNavidromePlayback("stopped")
         stopNavidromePlaybackReporting()
+        reportPlexPlayback("stopped")
+        stopPlexPlaybackReporting()
         playbackSnapshotPersistJob?.cancel()
         mediaSessionButtonRefreshJob?.cancel()
         followUpMediaSessionUiRefreshJob?.cancel()
@@ -1669,8 +1804,13 @@ class MusicService : MediaLibraryService() {
         for (index in 0 until mediaItemCount) {
             val mediaItem = player.getMediaItemAt(index)
             val metadata = mediaItem.mediaMetadata
-            val uri = mediaItem.localConfiguration?.uri?.toString()
-                ?: metadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_CONTENT_URI)
+            // Prefer the original content URI: cloud items that already went
+            // through dispatch carry a resolved localhost-proxy URL in
+            // localConfiguration whose port dies with this process. Persisting
+            // the original cloud URI lets the restored queue re-resolve.
+            val uri = metadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_CONTENT_URI)
+                ?.takeIf { it.isNotBlank() }
+                ?: mediaItem.localConfiguration?.uri?.toString()
 
             if (mediaItem.mediaId.isBlank() || uri.isNullOrBlank()) {
                 continue

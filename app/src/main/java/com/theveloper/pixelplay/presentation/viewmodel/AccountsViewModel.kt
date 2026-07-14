@@ -6,6 +6,7 @@ import com.theveloper.pixelplay.data.gdrive.GDriveRepository
 import com.theveloper.pixelplay.data.jellyfin.JellyfinRepository
 import com.theveloper.pixelplay.data.navidrome.NavidromeRepository
 import com.theveloper.pixelplay.data.netease.NeteaseRepository
+import com.theveloper.pixelplay.data.plex.PlexRepository
 import com.theveloper.pixelplay.data.qqmusic.QqMusicRepository
 import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.telegram.TelegramRepository
@@ -28,7 +29,8 @@ enum class ExternalServiceAccount {
     NETEASE,
     QQ_MUSIC,
     NAVIDROME,
-    JELLYFIN
+    JELLYFIN,
+    PLEX
 }
 
 data class ExternalAccountUiModel(
@@ -52,7 +54,8 @@ class AccountsViewModel @Inject constructor(
     private val neteaseRepository: NeteaseRepository,
     private val qqMusicRepository: QqMusicRepository,
     private val navidromeRepository: NavidromeRepository,
-    private val jellyfinRepository: JellyfinRepository
+    private val jellyfinRepository: JellyfinRepository,
+    private val plexRepository: PlexRepository
 ) : ViewModel() {
 
     private val loggingOutServices = MutableStateFlow<Set<ExternalServiceAccount>>(emptySet())
@@ -101,6 +104,13 @@ class AccountsViewModel @Inject constructor(
         connected to playlistCount
     }
 
+    private val plexStateFlow = combine(
+        plexRepository.isLoggedInFlow,
+        plexRepository.getPlaylists().map { it.size }
+    ) { connected, playlistCount ->
+        connected to playlistCount
+    }
+
     val uiState: StateFlow<AccountsUiState> = combine(
         combine(
             listOf(
@@ -109,7 +119,8 @@ class AccountsViewModel @Inject constructor(
                 neteaseStateFlow,
                 qqMusicStateFlow,
                 navidromeStateFlow,
-                jellyfinStateFlow
+                jellyfinStateFlow,
+                plexStateFlow
             )
         ) { it.toList() },
         loggingOutServices
@@ -120,6 +131,7 @@ class AccountsViewModel @Inject constructor(
         val (qqConnected, qqPlaylistCount) = states[3] as Pair<Boolean, Int>
         val (navidromeConnected, navidromePlaylistCount) = states[4] as Pair<Boolean, Int>
         val (jellyfinConnected, jellyfinPlaylistCount) = states[5] as Pair<Boolean, Int>
+        val (plexConnected, plexPlaylistCount) = states[6] as Pair<Boolean, Int>
 
         val connectedAccounts = buildList {
             if (telegramConnected) {
@@ -224,6 +236,23 @@ class AccountsViewModel @Inject constructor(
                     )
                 )
             }
+            if (plexConnected) {
+                add(
+                    ExternalAccountUiModel(
+                        service = ExternalServiceAccount.PLEX,
+                        title = "Plex",
+                        accountLabel = plexRepository.username
+                            ?.takeIf { it.isNotBlank() }
+                            ?: "Plex account connected",
+                        syncedContentLabel = formatCount(
+                            count = plexPlaylistCount,
+                            singular = "synced playlist",
+                            plural = "synced playlists"
+                        ),
+                        isLoggingOut = ExternalServiceAccount.PLEX in activeLogouts
+                    )
+                )
+            }
         }
 
         val disconnectedServices = buildList {
@@ -233,6 +262,7 @@ class AccountsViewModel @Inject constructor(
             if (!qqConnected) add(ExternalServiceAccount.QQ_MUSIC)
             if (!navidromeConnected) add(ExternalServiceAccount.NAVIDROME)
             if (!jellyfinConnected) add(ExternalServiceAccount.JELLYFIN)
+            if (!plexConnected) add(ExternalServiceAccount.PLEX)
         }
 
         AccountsUiState(
@@ -259,6 +289,7 @@ class AccountsViewModel @Inject constructor(
                         ExternalServiceAccount.QQ_MUSIC -> qqMusicRepository.logout()
                         ExternalServiceAccount.NAVIDROME -> navidromeRepository.logout()
                         ExternalServiceAccount.JELLYFIN -> jellyfinRepository.logout()
+                        ExternalServiceAccount.PLEX -> plexRepository.logout()
                     }
                 }
             } finally {

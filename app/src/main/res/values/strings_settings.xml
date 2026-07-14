@@ -65,6 +65,11 @@
     <string name="settings_lyrics_embedded_first">Embedded First</string>
     <string name="settings_lyrics_online_first">Online First</string>
     <string name="settings_lyrics_local_first">Local (.lrc) First</string>
+    <string name="settings_auto_fetch_lyrics_title">Auto-fetch lyrics while playing</string>
+    <string name="settings_auto_fetch_lyrics_subtitle">Search online in the background when a playing song has no lyrics yet.</string>
+    <string name="settings_prefetch_lyrics_title">Download Missing Lyrics</string>
+    <string name="settings_prefetch_lyrics_subtitle">Fetch lyrics for every song without them (Wi-Fi only, runs in background).</string>
+    <string name="settings_prefetch_lyrics_running">Fetching %1$d of %2$d…</string>
     <string name="settings_reset_imported_lyrics_title">Reset Imported Lyrics</string>
     <string name="settings_reset_imported_lyrics_subtitle">Remove all imported lyrics from the database.</string>
     <string name="settings_dialog_reset_imported_lyrics_title">Reset imported lyrics?</string>

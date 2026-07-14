@@ -33,10 +33,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TelegramTopicEntity::class,
         JellyfinSongEntity::class,
         JellyfinPlaylistEntity::class,
+        PlexSongEntity::class,
+        PlexPlaylistEntity::class,
+        PlexDownloadEntity::class,
         AiCacheEntity::class,
         AiUsageEntity::class
     ],
-    version = 42,
+    version = 44,
     exportSchema = true
 )
 abstract class PixelPlayDatabase : RoomDatabase() {
@@ -54,6 +57,8 @@ abstract class PixelPlayDatabase : RoomDatabase() {
     abstract fun qqmusicDao(): QqMusicDao
     abstract fun navidromeDao(): NavidromeDao
     abstract fun jellyfinDao(): JellyfinDao
+    abstract fun plexDao(): PlexDao
+    abstract fun plexDownloadDao(): PlexDownloadDao
     abstract fun aiCacheDao(): AiCacheDao
     abstract fun aiUsageDao(): AiUsageDao
 
@@ -744,6 +749,72 @@ abstract class PixelPlayDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_navidrome_songs_navidrome_id ON navidrome_songs(navidrome_id)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_navidrome_songs_playlist_id ON navidrome_songs(playlist_id)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_navidrome_songs_playlist_id_date_added ON navidrome_songs(playlist_id, date_added)")
+            }
+        }
+
+        /**
+         * Add Plex support tables.
+         */
+        val MIGRATION_42_43 = object : Migration(42, 43) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `plex_songs` (
+                        `id` TEXT NOT NULL,
+                        `plex_id` TEXT NOT NULL,
+                        `playlist_id` TEXT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `artist` TEXT NOT NULL,
+                        `artist_id` TEXT,
+                        `album` TEXT NOT NULL,
+                        `album_id` TEXT,
+                        `duration` INTEGER NOT NULL,
+                        `track_number` INTEGER NOT NULL,
+                        `disc_number` INTEGER NOT NULL,
+                        `year` INTEGER NOT NULL,
+                        `genre` TEXT,
+                        `bitRate` INTEGER,
+                        `mime_type` TEXT,
+                        `path` TEXT NOT NULL,
+                        `date_added` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_plex_songs_plex_id` ON `plex_songs` (`plex_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_plex_songs_playlist_id` ON `plex_songs` (`playlist_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_plex_songs_playlist_id_date_added` ON `plex_songs` (`playlist_id`, `date_added`)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `plex_playlists` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `song_count` INTEGER NOT NULL,
+                        `duration` INTEGER NOT NULL,
+                        `last_sync_time` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `plex_downloads` (
+                        `plex_id` TEXT NOT NULL,
+                        `file_path` TEXT NOT NULL,
+                        `mime_type` TEXT,
+                        `size_bytes` INTEGER NOT NULL,
+                        `downloaded_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`plex_id`)
+                    )
+                """.trimIndent())
+            }
+        }
+
+        /**
+         * Add per-song art path for Plex (tracks inherit album/artist art, so the
+         * exact server path must be stored instead of guessing from the track id).
+         */
+        val MIGRATION_43_44 = object : Migration(43, 44) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE plex_songs ADD COLUMN thumb_path TEXT")
             }
         }
 

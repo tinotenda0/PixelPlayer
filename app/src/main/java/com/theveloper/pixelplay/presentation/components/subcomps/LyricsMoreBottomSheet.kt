@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.BrightnessHigh
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -69,6 +70,7 @@ fun LyricsMoreBottomSheet(
     showSyncedLyrics: Boolean,
     isSyncControlsVisible: Boolean,
     onSaveLyricsAsLrc: () -> Unit,
+    onShareLyrics: () -> Unit,
     onResetImportedLyrics: () -> Unit,
     onTranslateViaAi: () -> Unit,
     onToggleSyncControls: () -> Unit,
@@ -137,6 +139,32 @@ fun LyricsMoreBottomSheet(
                     color = accentColor,
                     style = MaterialTheme.typography.bodyLargeEmphasized
                 )
+                // Share lyrics as a card
+                if (lyrics != null) {
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.lyrics_share_title)) },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Rounded.IosShare,
+                                contentDescription = null
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 8.dp, bottomEnd = 8.dp))
+                            .background(itemBackgroundColor)
+                            .clickable {
+                                onDismissRequest()
+                                onShareLyrics()
+                            },
+                        colors = ListItemDefaults.colors(
+                            containerColor = Color.Transparent,
+                            headlineColor = contentColor,
+                            leadingIconColor = contentColor
+                        )
+                    )
+                }
+
                  // Save lyrics to .lrc
                 if (lyrics != null) {
                     ListItem(
@@ -149,7 +177,7 @@ fun LyricsMoreBottomSheet(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 8.dp, bottomEnd = 8.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(itemBackgroundColor)
                             .clickable {
                                 onDismissRequest()

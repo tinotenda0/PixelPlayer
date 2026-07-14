@@ -528,6 +528,22 @@ fun SettingsCategoryScreen(
                                     },
                                     leadingIcon = { Icon(painterResource(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
+                                SwitchSettingItem(
+                                    title = stringResource(R.string.settings_auto_fetch_lyrics_title),
+                                    subtitle = stringResource(R.string.settings_auto_fetch_lyrics_subtitle),
+                                    checked = uiState.autoFetchLyricsOnPlay,
+                                    onCheckedChange = { settingsViewModel.setAutoFetchLyricsOnPlay(it) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                val lyricsPrefetchProgress by settingsViewModel.lyricsPrefetchProgress.collectAsStateWithLifecycle()
+                                SettingsItem(
+                                    title = stringResource(R.string.settings_prefetch_lyrics_title),
+                                    subtitle = lyricsPrefetchProgress?.let { (current, total) ->
+                                        stringResource(R.string.settings_prefetch_lyrics_running, current, total)
+                                    } ?: stringResource(R.string.settings_prefetch_lyrics_subtitle),
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) },
+                                    onClick = { settingsViewModel.startLyricsPrefetch() }
+                                )
                                 SettingsItem(
                                     title = stringResource(R.string.settings_reset_imported_lyrics_title),
                                     subtitle = stringResource(R.string.settings_reset_imported_lyrics_subtitle),

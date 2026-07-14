@@ -306,12 +306,14 @@ fun SongPickerSelectionPane(
                 when (storageFilter) {
                     StorageFilter.OFFLINE -> songs.filter { s ->
                         s.telegramFileId == null && s.neteaseId == null && s.gdriveFileId == null &&
-                                s.qqMusicMid == null && s.navidromeId == null && s.jellyfinId == null
+                                s.qqMusicMid == null && s.navidromeId == null && s.jellyfinId == null &&
+                                s.plexId == null
                     }
 
                     StorageFilter.ONLINE -> songs.filter { s ->
                         s.telegramFileId != null || s.neteaseId != null || s.gdriveFileId != null ||
-                                s.qqMusicMid != null || s.navidromeId != null || s.jellyfinId != null
+                                s.qqMusicMid != null || s.navidromeId != null || s.jellyfinId != null ||
+                                s.plexId != null
                     }
 
                     else -> songs

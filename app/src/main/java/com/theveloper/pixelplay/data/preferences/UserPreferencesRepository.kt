@@ -207,6 +207,7 @@ class UserPreferencesRepository @Inject constructor(
         val LYRICS_SYNC_OFFSETS = stringPreferencesKey("lyrics_sync_offsets_json")
         val LYRICS_SOURCE_PREFERENCE = stringPreferencesKey("lyrics_source_preference")
         val AUTO_SCAN_LRC_FILES = booleanPreferencesKey("auto_scan_lrc_files")
+        val AUTO_FETCH_LYRICS_ON_PLAY = booleanPreferencesKey("auto_fetch_lyrics_on_play")
 
         // Developer options
         val ALBUM_ART_QUALITY = stringPreferencesKey("album_art_quality")
@@ -1097,6 +1098,18 @@ suspend fun markDirectoryRulesVersionApplied(version: Int) {
 
     suspend fun setAutoScanLrcFiles(enabled: Boolean) {
         dataStore.edit { it[PreferencesKeys.AUTO_SCAN_LRC_FILES] = enabled }
+    }
+
+    /**
+     * When a playing song has no stored lyrics and the strict automatic match
+     * finds nothing, quietly retry with the looser search-based fetch so lyrics
+     * are usually ready before the user ever opens the lyrics view.
+     */
+    val autoFetchLyricsOnPlayFlow: Flow<Boolean> =
+        pref { it[PreferencesKeys.AUTO_FETCH_LYRICS_ON_PLAY] ?: true }
+
+    suspend fun setAutoFetchLyricsOnPlay(enabled: Boolean) {
+        dataStore.edit { it[PreferencesKeys.AUTO_FETCH_LYRICS_ON_PLAY] = enabled }
     }
 
     val immersiveLyricsEnabledFlow: Flow<Boolean> =

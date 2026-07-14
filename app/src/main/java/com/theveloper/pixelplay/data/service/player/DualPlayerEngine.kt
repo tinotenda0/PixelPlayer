@@ -21,8 +21,14 @@ import androidx.media3.common.Timeline
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSpec
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.datasource.TransferListener
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -50,10 +56,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -219,6 +227,8 @@ class DualPlayerEngine @Inject constructor(
     private val qqMusicStreamProxy: QqMusicStreamProxy,
     private val navidromeStreamProxy: NavidromeStreamProxy,
     private val jellyfinStreamProxy: com.theveloper.pixelplay.data.jellyfin.JellyfinStreamProxy,
+    private val plexStreamProxy: com.theveloper.pixelplay.data.plex.PlexStreamProxy,
+    private val plexDownloadManager: com.theveloper.pixelplay.data.plex.PlexDownloadManager,
     private val gdriveStreamProxy: com.theveloper.pixelplay.data.gdrive.GDriveStreamProxy,
     private val telegramCacheManager: com.theveloper.pixelplay.data.telegram.TelegramCacheManager,
     private val connectivityStateHolder: com.theveloper.pixelplay.presentation.viewmodel.ConnectivityStateHolder
@@ -234,10 +244,11 @@ class DualPlayerEngine @Inject constructor(
         private const val POST_TRANSITION_OFFLOAD_GUARD_MS = 2_000L
         private const val MAX_AUXILIARY_TIMELINE_ITEMS = 200
         private val LOCAL_MEDIA_SCHEMES = setOf("content", "file", "android.resource")
-        private val REMOTE_MEDIA_SCHEMES = setOf("http", "https", "telegram", "netease", "qqmusic", "navidrome", "jellyfin", "gdrive")
+        private val REMOTE_MEDIA_SCHEMES = setOf("http", "https", "telegram", "netease", "qqmusic", "navidrome", "jellyfin", "plex", "gdrive")
         // Subset of REMOTE_MEDIA_SCHEMES: schemes that need proxy resolution.
         // http/https resolve directly and must NOT enter the resolvedUriCache lookup path.
-        private val CLOUD_PROXY_SCHEMES = setOf("telegram", "netease", "qqmusic", "navidrome", "jellyfin", "gdrive")
+        private val CLOUD_PROXY_SCHEMES = setOf("telegram", "netease", "qqmusic", "navidrome", "jellyfin", "plex", "gdrive")
+        private const val STREAM_CACHE_MAX_BYTES = 1024L * 1024L * 1024L // 1 GB
     }
 
     data class TransitionTarget(
@@ -245,6 +256,17 @@ class DualPlayerEngine @Inject constructor(
         val absoluteIndex: Int,
         val queueSize: Int
     )
+
+    // Single on-disk stream cache for the whole process (SimpleCache requires
+    // exactly one instance per directory). ~1 GB LRU of played cloud audio, so
+    // repeats and scrubbing don't re-stream from the server.
+    private val streamCache: SimpleCache by lazy {
+        SimpleCache(
+            File(context.cacheDir, "media_stream_cache"),
+            LeastRecentlyUsedCacheEvictor(STREAM_CACHE_MAX_BYTES),
+            StandaloneDatabaseProvider(context)
+        )
+    }
 
     private var scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     var hiFiModeEnabled: Boolean = false
@@ -1106,14 +1128,54 @@ class DualPlayerEngine @Inject constructor(
                     if (resolved != null) {
                         return dataSpec.buildUpon().setUri(resolved).build()
                     }
-                    Timber.tag("DualPlayerEngine").d("resolveDataSpec: Cache MISS for %s — using original URI", scheme)
+
+                    // Cache miss — happens whenever the queue was restored after
+                    // process death (force stop, app update, system kill) and the
+                    // in-memory resolution cache is empty. Resolve inline on this
+                    // loading thread (Resolver.resolveDataSpec may block) instead
+                    // of passing the raw cloud URI downstream, which is unopenable
+                    // and used to surface as a "Source error".
+                    Timber.tag("DualPlayerEngine").d(
+                        "resolveDataSpec: cache MISS for %s — resolving inline", scheme
+                    )
+                    val inlineResolved = runBlocking {
+                        runCatching { resolveCloudUri(uri) }.getOrNull()
+                    }
+                    if (inlineResolved != null && inlineResolved != uri) {
+                        return dataSpec.buildUpon().setUri(inlineResolved).build()
+                    }
+                    throw IOException("Could not resolve $scheme stream (not logged in or source offline)")
                 }
                 return dataSpec
             }
         }
-        
+
         val dataSourceFactory = DefaultDataSource.Factory(context)
-        val resolvingFactory = ResolvingDataSource.Factory(dataSourceFactory, resolver)
+
+        // Read-through disk cache for streamed audio. Only http(s) traffic is
+        // routed through it (local files/content URIs play directly), and cache
+        // keys for the localhost proxies use the path only, so entries survive
+        // the proxy's per-session port changes.
+        val cacheDataSourceFactory = CacheDataSource.Factory()
+            .setCache(streamCache)
+            .setUpstreamDataSourceFactory(dataSourceFactory)
+            .setCacheKeyFactory { spec ->
+                val host = spec.uri.host
+                if (host == "127.0.0.1" || host == "localhost") {
+                    spec.uri.path ?: spec.uri.toString()
+                } else {
+                    spec.uri.toString()
+                }
+            }
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+        val routingFactory = DataSource.Factory {
+            SchemeRoutingDataSource(
+                httpDataSource = cacheDataSourceFactory.createDataSource(),
+                directDataSource = dataSourceFactory.createDataSource()
+            )
+        }
+        val resolvingFactory = ResolvingDataSource.Factory(routingFactory, resolver)
         val extractorsFactory = DefaultExtractorsFactory()
             // FLAG_WORKAROUND_IGNORE_EDIT_LISTS intentionally removed: it breaks Opus files
             // by discarding the edit list that encodes the pre-skip (encoder delay), causing
@@ -1203,6 +1265,7 @@ class DualPlayerEngine @Inject constructor(
             "qqmusic" -> resolveQqMusicUriAsync(uriString)
             "navidrome" -> resolveNavidromeUriAsync(uriString)
             "jellyfin" -> resolveJellyfinUriAsync(uriString)
+            "plex" -> resolvePlexUriAsync(uriString)
             "gdrive" -> resolveGDriveUriAsync(uriString)
             else -> null
         }
@@ -1258,6 +1321,20 @@ class DualPlayerEngine @Inject constructor(
         if (!jellyfinStreamProxy.ensureReady(5_000L)) return@withContext null
         jellyfinStreamProxy.warmUpStreamUrl(uriString)
         jellyfinStreamProxy.resolveJellyfinUri(uriString)?.toUri()
+    }
+
+    private suspend fun resolvePlexUriAsync(uriString: String): Uri? = withContext(Dispatchers.IO) {
+        // Pinned tracks play straight from local storage — instant and offline-capable.
+        val ratingKey = Uri.parse(uriString).let { it.host ?: it.path?.removePrefix("/") }
+        if (ratingKey != null) {
+            plexDownloadManager.getLocalFilePath(ratingKey)?.let { localPath ->
+                return@withContext Uri.fromFile(File(localPath))
+            }
+        }
+
+        if (!plexStreamProxy.ensureReady(5_000L)) return@withContext null
+        plexStreamProxy.warmUpStreamUrl(uriString)
+        plexStreamProxy.resolvePlexUri(uriString)?.toUri()
     }
 
     private suspend fun resolveGDriveUriAsync(uriString: String): Uri? = withContext(Dispatchers.IO) {
@@ -1575,5 +1652,51 @@ class DualPlayerEngine @Inject constructor(
         playerB?.release()
         playerB = null
         isReleased = true
+    }
+}
+
+/**
+ * Routes http(s) reads through the caching data source and everything else
+ * (content://, file://, android.resource://) straight to the default source,
+ * so local media never gets duplicated into the stream cache.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+private class SchemeRoutingDataSource(
+    private val httpDataSource: DataSource,
+    private val directDataSource: DataSource
+) : DataSource {
+
+    private var active: DataSource? = null
+
+    override fun addTransferListener(transferListener: TransferListener) {
+        httpDataSource.addTransferListener(transferListener)
+        directDataSource.addTransferListener(transferListener)
+    }
+
+    override fun open(dataSpec: DataSpec): Long {
+        val scheme = dataSpec.uri.scheme?.lowercase()
+        val selected = if (scheme == "http" || scheme == "https") {
+            httpDataSource
+        } else {
+            directDataSource
+        }
+        active = selected
+        return selected.open(dataSpec)
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        val source = active ?: throw IOException("SchemeRoutingDataSource not opened")
+        return source.read(buffer, offset, length)
+    }
+
+    override fun getUri(): Uri? = active?.uri
+
+    override fun getResponseHeaders(): Map<String, List<String>> =
+        active?.responseHeaders ?: emptyMap()
+
+    override fun close() {
+        val current = active
+        active = null
+        current?.close()
     }
 }

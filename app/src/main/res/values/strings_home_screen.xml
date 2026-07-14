@@ -165,6 +165,15 @@
     <!-- StatsScreen -->
     <string name="stats_title">Listening Stats</string>
     <string name="stats_cd_refresh">Refresh listening stats</string>
+    <string name="stats_share_sheet_title">Share Recap</string>
+    <string name="stats_share_action">Share recap</string>
+    <string name="stats_share_chooser_title">Share listening recap</string>
+    <string name="stats_share_card_title">My music · %1$s</string>
+    <string name="stats_share_metric_time">Listened</string>
+    <string name="stats_share_metric_plays">Plays</string>
+    <string name="stats_share_metric_songs">Songs</string>
+    <string name="stats_share_top_songs">Top songs</string>
+    <string name="stats_share_top_artists">Top artists</string>
     <string name="stats_range_today">Today</string>
     <string name="stats_range_week_to_date">Week to Date</string>
     <string name="stats_range_month_to_date">Month to Date</string>

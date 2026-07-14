@@ -275,6 +275,7 @@ class SongInfoBottomSheetViewModel @Inject constructor(
             normalized.startsWith("navidrome://") || normalized.startsWith("navidrome:") -> "Navidrome"
             normalized.startsWith("gdrive://") || normalized.startsWith("gdrive:") -> "Google Drive"
             normalized.startsWith("jellyfin://") || normalized.startsWith("jellyfin:") -> "Jellyfin"
+            normalized.startsWith("plex://") || normalized.startsWith("plex:") -> "Plex"
             else -> null
         }
     }

@@ -125,7 +125,42 @@ class PlaylistViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Re-resolves every rule-based ("smart") playlist against current listening
+     * data, so Top Played / Recently Played / Forgotten Favorites / New Gems stay
+     * fresh instead of being frozen at creation time. Runs once per session.
+     */
+    private fun refreshSmartPlaylists() {
+        viewModelScope.launch {
+            try {
+                val playlists = playlistPreferencesRepository.userPlaylistsFlow.first()
+                playlists.forEach { playlist ->
+                    if (!playlist.source.startsWith("SMART:")) return@forEach
+                    val rule = SmartPlaylistRule.fromStorageKey(
+                        playlist.source.removePrefix("SMART:")
+                    ) ?: return@forEach
+
+                    val refreshedIds = buildSmartPlaylistSongIds(
+                        rule = rule,
+                        limit = SMART_PLAYLIST_MAX_ITEMS
+                    )
+                    if (refreshedIds.isNotEmpty() && refreshedIds != playlist.songIds) {
+                        playlistPreferencesRepository.updatePlaylist(
+                            playlist.copy(
+                                songIds = refreshedIds,
+                                lastModified = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("PlaylistVM", "Failed to refresh smart playlists", e)
+            }
+        }
+    }
+
     private fun loadPlaylistsAndInitialSortOption() {
+        refreshSmartPlaylists()
         viewModelScope.launch {
             // First, get the initial sort option
             val initialSortOptionName = playlistPreferencesRepository.playlistsSortOptionFlow.first()
@@ -330,7 +365,9 @@ class PlaylistViewModel @Inject constructor(
                 songIds
             }
             val resolvedSource = when {
-                resolvedSmartRule != null && source == "LOCAL" -> "SMART"
+                // Persist the rule key inside the source string so the playlist
+                // can be re-resolved automatically on later app launches.
+                resolvedSmartRule != null && source == "LOCAL" -> "SMART:${resolvedSmartRule.storageKey}"
                 else -> source
             }
 
