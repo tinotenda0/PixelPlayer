@@ -326,14 +326,15 @@ class PlexApiService @Inject constructor(
     }
 
     /**
-     * Create an audio play queue on the server for a track, so a remote player
-     * can be pointed at it via Companion playMedia.
+     * Create an audio play queue on the server so a remote player can be
+     * pointed at it via Companion playMedia. [metadataIds] is one ratingKey or
+     * a comma-separated list (queue order).
      */
-    suspend fun createPlayQueue(ratingKey: String, machineIdentifier: String): Result<Long> {
+    suspend fun createPlayQueue(metadataIds: String, machineIdentifier: String): Result<Long> {
         return withContext(Dispatchers.IO) {
             try {
                 val cred = credentials ?: throw IllegalStateException("No credentials configured")
-                val uri = "server://$machineIdentifier/com.plexapp.plugins.library/library/metadata/$ratingKey"
+                val uri = "server://$machineIdentifier/com.plexapp.plugins.library/library/metadata/$metadataIds"
                 val url = "${cred.normalizedServerUrl}/playQueues".toHttpUrl().newBuilder()
                     .addQueryParameter("type", "audio")
                     .addQueryParameter("uri", uri)

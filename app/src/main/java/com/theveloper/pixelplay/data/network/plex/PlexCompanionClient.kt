@@ -122,6 +122,7 @@ class PlexCompanionClient @Inject constructor(
         serverToken: String,
         playQueueId: Long,
         trackKey: String,
+        offsetMs: Long = 0L,
         token: String?
     ): Result<Unit> {
         val parsedServer = serverUrl.toHttpUrlOrNull()
@@ -133,7 +134,7 @@ class PlexCompanionClient @Inject constructor(
             params = mapOf(
                 "type" to "music",
                 "key" to trackKey,
-                "offset" to "0",
+                "offset" to offsetMs.coerceAtLeast(0L).toString(),
                 "machineIdentifier" to serverMachineIdentifier,
                 "protocol" to parsedServer.scheme,
                 "address" to parsedServer.host,

@@ -196,6 +196,8 @@ class PlayerViewModel @Inject constructor(
     private val lyricsStateHolder: LyricsStateHolder,
     private val castStateHolder: CastStateHolder,
     private val castRouteStateHolder: CastRouteStateHolder,
+    private val plexRemotePlaybackManager: com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager,
+    private val plexRepository: com.theveloper.pixelplay.data.plex.PlexRepository,
     private val queueStateHolder: QueueStateHolder,
     private val queueUndoStateHolder: QueueUndoStateHolder,
     private val playlistDismissUndoStateHolder: PlaylistDismissUndoStateHolder,
@@ -728,6 +730,86 @@ class PlayerViewModel @Inject constructor(
     suspend fun getSongsForCurrentFavoriteSelection(): List<Song> =
         playbackDispatchStateHolder.getSongsForCurrentFavoriteSelection()
 
+    // ─── Plex Companion remote output (Plexamp on other devices) ──────────
+
+    val plexRemoteDevice: StateFlow<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice?> =
+        plexRemotePlaybackManager.activeDevice
+
+    val plexRemoteSession: StateFlow<com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager.Snapshot?> =
+        plexRemotePlaybackManager.session
+
+    private val _plexRemotePlayers =
+        MutableStateFlow<List<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice>>(emptyList())
+    val plexRemotePlayers: StateFlow<List<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice>> =
+        _plexRemotePlayers.asStateFlow()
+
+    fun loadPlexRemotePlayers() {
+        viewModelScope.launch {
+            plexRepository.getRemotePlayers().onSuccess { players ->
+                _plexRemotePlayers.value = players
+            }
+        }
+    }
+
+    /**
+     * Make a Plexamp/Companion player the active output. Pauses local
+     * playback and, when the current song lives on the Plex server, transfers
+     * the queue and position over — like moving a session between Plexamps.
+     */
+    fun connectPlexRemote(device: com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice) {
+        // Never run two remote sessions at once.
+        if (castStateHolder.castSession.value != null) {
+            disconnect()
+        }
+
+        val currentSong = playbackStateHolder.stablePlayerState.value.currentSong
+        val currentPosition = playbackStateHolder.currentPosition.value
+        val queue = playerUiState.value.currentPlaybackQueue.toList()
+
+        mediaController?.pause()
+        plexRemotePlaybackManager.connect(device)
+
+        if (currentSong?.plexId != null && queue.isNotEmpty()) {
+            viewModelScope.launch {
+                plexRemotePlaybackManager.playQueue(
+                    songs = queue,
+                    startSong = currentSong,
+                    startPositionMs = currentPosition
+                )
+            }
+        }
+    }
+
+    fun disconnectPlexRemote() {
+        plexRemotePlaybackManager.disconnect()
+    }
+
+    fun setPlexRemoteVolume(volume: Int) {
+        plexRemotePlaybackManager.setVolume(volume)
+    }
+
+    /** Mirrors the remote session into the main player state while active. */
+    private fun observePlexRemoteSession() {
+        viewModelScope.launch {
+            plexRemotePlaybackManager.session.collect { snapshot ->
+                if (plexRemotePlaybackManager.activeDevice.value == null || snapshot == null) {
+                    return@collect
+                }
+                val song = plexRemotePlaybackManager.resolveSongForRatingKey(snapshot.ratingKey)
+                playbackStateHolder.updateStablePlayerState { state ->
+                    state.copy(
+                        currentSong = song ?: state.currentSong,
+                        isPlaying = snapshot.state == "playing",
+                        playWhenReady = snapshot.state == "playing",
+                        isBuffering = snapshot.state == "buffering",
+                        totalDuration = if (snapshot.durationMs > 0) snapshot.durationMs else state.totalDuration
+                    )
+                }
+                playbackStateHolder.setCurrentPosition(snapshot.positionMs)
+            }
+        }
+    }
+
     val castRoutes: StateFlow<List<MediaRouter.RouteInfo>> = castStateHolder.castRoutes
     val selectedRoute: StateFlow<MediaRouter.RouteInfo?> = castStateHolder.selectedRoute
     /** Pre-mapped so UI composables don't create a new Flow on every recomposition. */
@@ -775,6 +857,7 @@ class PlayerViewModel @Inject constructor(
         themeStateHolder.initialize(viewModelScope)
         playbackDispatchStateHolder.initialize(playbackDispatchCallbacks())
         mediaControllerSyncStateHolder.initialize(controllerSyncCallbacks())
+        observePlexRemoteSession()
 
         // On cold start, the MediaController connects asynchronously, leaving stablePlayerState.currentSong
         // null until that happens. Pre-load the palette from the persisted snapshot so the mini player

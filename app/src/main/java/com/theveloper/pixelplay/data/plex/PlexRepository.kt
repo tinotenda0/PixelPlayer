@@ -734,16 +734,26 @@ class PlexRepository @Inject constructor(
     }
 
     /**
-     * Start playing a track from this account's server on a remote player:
-     * creates a play queue on the server, then points the player at it.
+     * Start playing a queue of tracks from this account's server on a remote
+     * player: creates a play queue on the server, then points the player at
+     * it, selecting [startRatingKey] at [offsetMs].
      */
-    suspend fun playSongOnDevice(device: PlexPlayerDevice, plexId: String): Result<Unit> {
+    suspend fun playQueueOnDevice(
+        device: PlexPlayerDevice,
+        ratingKeys: List<String>,
+        startRatingKey: String,
+        offsetMs: Long = 0L
+    ): Result<Unit> {
+        if (ratingKeys.isEmpty()) return Result.failure(Exception("Empty queue"))
         val account = _activeAccountFlow.value
             ?: return Result.failure(Exception("Not logged in"))
         val machineId = getServerMachineId()
             ?: return Result.failure(Exception("Could not resolve server identity"))
 
-        val playQueueId = api.createPlayQueue(plexId, machineId).getOrElse {
+        val playQueueId = api.createPlayQueue(
+            metadataIds = ratingKeys.joinToString(","),
+            machineIdentifier = machineId
+        ).getOrElse {
             return Result.failure(it)
         }
 
@@ -753,7 +763,8 @@ class PlexRepository @Inject constructor(
             serverMachineIdentifier = machineId,
             serverToken = account.serverToken,
             playQueueId = playQueueId,
-            trackKey = "/library/metadata/$plexId",
+            trackKey = "/library/metadata/$startRatingKey",
+            offsetMs = offsetMs,
             token = account.plexTvToken
         )
     }
