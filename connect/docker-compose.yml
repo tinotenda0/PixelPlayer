@@ -1,0 +1,13 @@
+services:
+  pixelplay-connect:
+    build: .
+    container_name: pixelplay-connect
+    restart: unless-stopped
+    ports:
+      - "32599:32599"
+    environment:
+      # Point this at your Plex Media Server (used by web clients for
+      # artwork and audio streaming URLs).
+      - PLEX_SERVER_URL=http://192.168.1.10:32400
+    volumes:
+      - ./data:/app/data

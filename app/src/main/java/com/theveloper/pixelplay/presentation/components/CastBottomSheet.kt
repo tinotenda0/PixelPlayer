@@ -181,6 +181,7 @@ fun CastBottomSheet(
     val plexRemotePlayers by playerViewModel.plexRemotePlayers.collectAsStateWithLifecycle()
     val plexRemoteDevice by playerViewModel.plexRemoteDevice.collectAsStateWithLifecycle()
     val plexRemoteSession by playerViewModel.plexRemoteSession.collectAsStateWithLifecycle()
+    val plexConnectSession by playerViewModel.plexConnectSession.collectAsStateWithLifecycle()
     val trackVolume by playerViewModel.trackVolume.collectAsStateWithLifecycle()
     val isPlaying = playerViewModel.stablePlayerState.collectAsStateWithLifecycle().value.isPlaying
     val context = LocalContext.current
@@ -220,6 +221,11 @@ fun CastBottomSheet(
 
     val activeRoute = selectedRoute?.takeUnless { it.isDefault }
     val isPlexRemote = plexRemoteDevice != null
+    val connectSelfId = playerViewModel.plexConnectDeviceId
+    val connectActiveDevice = plexConnectSession?.devices?.firstOrNull { it.isActive }
+    val isConnectRemote = connectActiveDevice != null && connectActiveDevice.id != connectSelfId
+    val connectPlayers = plexConnectSession?.devices.orEmpty()
+        .filter { it.id != connectSelfId && "player" in it.capabilities }
     val isRemoteSession = (isRemotePlaybackActive || isCastConnecting) && activeRoute != null
 
     val availableRoutes = if (isWifiEnabled) {
@@ -264,6 +270,28 @@ fun CastBottomSheet(
                         isSelected = isRouteActive
                     )
                 }
+            )
+        }
+
+        // PixelPlayer Connect devices (web players, other PixelPlayers) on
+        // this user's broker session.
+        connectPlayers.forEach { device ->
+            add(
+                CastDeviceUi(
+                    id = "connect_${device.id}",
+                    name = device.name,
+                    deviceType = MediaRouter.RouteInfo.DEVICE_TYPE_REMOTE_SPEAKER,
+                    playbackType = MediaRouter.RouteInfo.PLAYBACK_TYPE_REMOTE,
+                    connectionState = if (device.isActive) {
+                        MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTED
+                    } else {
+                        MediaRouter.RouteInfo.CONNECTION_STATE_DISCONNECTED
+                    },
+                    volumeHandling = MediaRouter.RouteInfo.PLAYBACK_VOLUME_VARIABLE,
+                    volume = if (device.isActive) device.volume ?: 0 else 0,
+                    volumeMax = 100,
+                    isSelected = device.isActive
+                )
             )
         }
 
@@ -315,7 +343,20 @@ fun CastBottomSheet(
         }
     }
 
-    val activeDevice = if (isPlexRemote) {
+    val activeDevice = if (isConnectRemote) {
+        val device = checkNotNull(connectActiveDevice)
+        ActiveDeviceUi(
+            id = "connect_${device.id}",
+            title = device.name,
+            subtitle = device.product.ifBlank { stringResource(R.string.cast_subtitle_session) },
+            isRemote = true,
+            icon = Icons.Rounded.Speaker,
+            isConnecting = false,
+            volume = (device.volume ?: 50).toFloat(),
+            volumeRange = 0f..100f,
+            connectionLabel = stringResource(R.string.cast_connected)
+        )
+    } else if (isPlexRemote) {
         val plexDevice = checkNotNull(plexRemoteDevice)
         ActiveDeviceUi(
             id = "plex_${plexDevice.clientIdentifier}",
@@ -416,6 +457,10 @@ fun CastBottomSheet(
                                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     context.startActivity(intent)
                                 }
+                                id.startsWith("connect_") -> {
+                                    // Spotify-style transfer through the broker.
+                                    playerViewModel.transferPlaybackTo(id.removePrefix("connect_"))
+                                }
                                 id.startsWith("plex_") -> {
                                     plexRemotePlayers
                                         .firstOrNull { "plex_${it.clientIdentifier}" == id }
@@ -429,7 +474,9 @@ fun CastBottomSheet(
                             }
                         },
                         onDisconnect = {
-                            if (isPlexRemote) {
+                            if (isConnectRemote) {
+                                playerViewModel.playConnectSessionHere()
+                            } else if (isPlexRemote) {
                                 playerViewModel.disconnectPlexRemote()
                             } else {
                                 playerViewModel.disconnect()
@@ -438,6 +485,7 @@ fun CastBottomSheet(
                         },
                         onVolumeChange = { value ->
                             when {
+                                isConnectRemote -> playerViewModel.setConnectRemoteVolume(value.toInt())
                                 isPlexRemote -> playerViewModel.setPlexRemoteVolume(value.toInt())
                                 uiState.activeDevice.isRemote -> playerViewModel.setRouteVolume(value.toInt())
                                 else -> playerViewModel.setTrackVolume(value)
@@ -457,7 +505,7 @@ fun CastBottomSheet(
                             playerViewModel.refreshCastRoutes()
                             playerViewModel.refreshLocalConnectionInfo(refreshBluetoothDevices = true)
                         },
-                        startWithControls = isRemoteSession || isPlexRemote
+                        startWithControls = isRemoteSession || isPlexRemote || isConnectRemote
                     )
                 }
             }

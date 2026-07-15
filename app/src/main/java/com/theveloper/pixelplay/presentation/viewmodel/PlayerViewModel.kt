@@ -197,6 +197,7 @@ class PlayerViewModel @Inject constructor(
     private val castStateHolder: CastStateHolder,
     private val castRouteStateHolder: CastRouteStateHolder,
     private val plexRemotePlaybackManager: com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager,
+    private val plexConnectClient: com.theveloper.pixelplay.data.plex.connect.PlexConnectClient,
     private val plexRepository: com.theveloper.pixelplay.data.plex.PlexRepository,
     private val queueStateHolder: QueueStateHolder,
     private val queueUndoStateHolder: QueueUndoStateHolder,
@@ -792,6 +793,41 @@ class PlayerViewModel @Inject constructor(
         plexRemotePlaybackManager.setVolume(volume)
     }
 
+    // ─── PixelPlayer Connect (broker sessions across devices) ────────────
+
+    val plexConnectSession: StateFlow<com.theveloper.pixelplay.data.plex.connect.PlexConnectClient.ConnectSession?> =
+        plexConnectClient.session
+
+    val plexConnectDeviceId: String get() = plexConnectClient.deviceId
+
+    fun transferPlaybackTo(deviceId: String) = plexConnectClient.transfer(deviceId)
+
+    /** Spotify's "listen on this device": pull the session back to the phone. */
+    fun playConnectSessionHere() = plexConnectClient.transfer(plexConnectClient.deviceId)
+
+    fun setConnectRemoteVolume(volume: Int) = plexConnectClient.setRemoteVolume(volume)
+
+    /** Mirrors a remote Connect session into the main player UI. */
+    private fun observeConnectSession() {
+        viewModelScope.launch {
+            plexConnectClient.session.collect { session ->
+                if (session == null || !plexConnectClient.isRemoteActive) return@collect
+                val track = session.currentTrack ?: return@collect
+                val song = plexConnectClient.resolveSongForTrack(track)
+                playbackStateHolder.updateStablePlayerState { state ->
+                    state.copy(
+                        currentSong = song,
+                        isPlaying = session.state == "playing",
+                        playWhenReady = session.state == "playing",
+                        isBuffering = session.state == "buffering",
+                        totalDuration = if (session.durationMs > 0) session.durationMs else track.durationMs
+                    )
+                }
+                playbackStateHolder.setCurrentPosition(session.extrapolatedPositionMs())
+            }
+        }
+    }
+
     /** Mirrors the remote session into the main player state while active. */
     private fun observePlexRemoteSession() {
         viewModelScope.launch {
@@ -862,6 +898,7 @@ class PlayerViewModel @Inject constructor(
         playbackDispatchStateHolder.initialize(playbackDispatchCallbacks())
         mediaControllerSyncStateHolder.initialize(controllerSyncCallbacks())
         observePlexRemoteSession()
+        observeConnectSession()
 
         // On cold start, the MediaController connects asynchronously, leaving stablePlayerState.currentSong
         // null until that happens. Pre-load the palette from the persisted snapshot so the mini player

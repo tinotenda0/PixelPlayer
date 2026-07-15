@@ -93,6 +93,7 @@ class MediaControllerSyncStateHolder @Inject constructor(
     private val libraryStateHolder: LibraryStateHolder,
     private val castStateHolder: CastStateHolder,
     private val plexRemotePlaybackManager: com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager,
+    private val plexConnectClient: com.theveloper.pixelplay.data.plex.connect.PlexConnectClient,
     private val connectivityStateHolder: ConnectivityStateHolder,
     private val themeStateHolder: ThemeStateHolder,
     private val lyricsStateHolder: LyricsStateHolder,
@@ -655,7 +656,8 @@ class MediaControllerSyncStateHolder @Inject constructor(
                 if (playbackState == Player.STATE_IDLE && playerCtrl.mediaItemCount == 0) {
                     playbackDispatchStateHolder.clearPreparingSongIfMatching()
                     if (!castStateHolder.isCastConnecting.value && !castStateHolder.isRemotePlaybackActive.value &&
-                        !plexRemotePlaybackManager.isActive) {
+                        !plexRemotePlaybackManager.isActive &&
+                        !plexConnectClient.isRemoteActive) {
                         lyricsStateHolder.cancelLoading()
                         playbackStateHolder.updateStablePlayerState {
                             it.copy(
@@ -764,7 +766,8 @@ class MediaControllerSyncStateHolder @Inject constructor(
                         }
                     } ?: run {
                         if (!castStateHolder.isCastConnecting.value && !castStateHolder.isRemotePlaybackActive.value &&
-                        !plexRemotePlaybackManager.isActive) {
+                        !plexRemotePlaybackManager.isActive &&
+                        !plexConnectClient.isRemoteActive) {
                             lyricsStateHolder.cancelLoading()
                             playbackStateHolder.updateStablePlayerState {
                                 it.copy(

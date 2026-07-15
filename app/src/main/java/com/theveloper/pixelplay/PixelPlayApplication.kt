@@ -81,6 +81,9 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
     @Inject
     lateinit var plexCompanionTarget: dagger.Lazy<com.theveloper.pixelplay.data.plex.companion.PlexCompanionTarget>
 
+    @Inject
+    lateinit var plexConnectClient: dagger.Lazy<com.theveloper.pixelplay.data.plex.connect.PlexConnectClient>
+
     private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // AÑADE EL COMPANION OBJECT
@@ -141,13 +144,17 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
         }
 
         // Advertise this install as a Plex Companion player whenever a Plex
-        // account is active, so Plexamp & co. can cast to PixelPlayer.
+        // account is active, so Plexamp & co. can cast to PixelPlayer. The
+        // Connect client reconnects per account so sessions follow the
+        // signed-in Plex (home) user.
         startupScope.launch {
             plexRepository.get().activeAccountFlow.collect { account ->
                 if (account != null) {
                     plexCompanionTarget.get().start()
+                    plexConnectClient.get().restart()
                 } else {
                     plexCompanionTarget.get().stop()
+                    plexConnectClient.get().stop()
                 }
             }
         }

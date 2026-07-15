@@ -34,7 +34,17 @@ data class CompanionPlaybackState(
     val playQueueId: Long?,
     val volume: Int,            // 0..100
     val shuffle: Boolean,
-    val repeatMode: Int         // Player.REPEAT_MODE_*
+    val repeatMode: Int,        // Player.REPEAT_MODE_*
+    val index: Int = 0          // current position in the player's queue
+)
+
+/** One queue entry as reported to remote-control surfaces. */
+data class CompanionQueueTrack(
+    val ratingKey: String,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val durationMs: Long
 )
 
 /**
@@ -119,6 +129,42 @@ class PlexCompanionPlayerBridge @Inject constructor(
 
     suspend fun seekTo(positionMs: Long) = onController { it.seekTo(positionMs.coerceAtLeast(0L)) }
 
+    /** Jump to a specific index in the current queue. */
+    suspend fun playIndex(index: Int) = onController {
+        if (index in 0 until it.mediaItemCount) {
+            it.seekTo(index, 0L)
+            it.play()
+        }
+    }
+
+    /**
+     * Plex-backed tracks currently in the player's queue, in order. Items
+     * without a rating key (non-Plex songs) are skipped.
+     */
+    suspend fun currentQueueTracks(maxItems: Int = 500): List<CompanionQueueTrack> {
+        return try {
+            val ctrl = controller()
+            withContext(Dispatchers.Main) {
+                (0 until minOf(ctrl.mediaItemCount, maxItems)).mapNotNull { i ->
+                    val item = ctrl.getMediaItemAt(i)
+                    val extras = item.mediaMetadata.extras
+                    val ratingKey = extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_PLEX_ID)
+                        ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    CompanionQueueTrack(
+                        ratingKey = ratingKey,
+                        title = item.mediaMetadata.title?.toString() ?: "Unknown",
+                        artist = item.mediaMetadata.artist?.toString() ?: "Unknown",
+                        album = item.mediaMetadata.albumTitle?.toString() ?: "",
+                        durationMs = extras.getLong(MediaItemBuilder.EXTERNAL_EXTRA_DURATION, 0L)
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).w(e, "currentQueueTracks failed")
+            emptyList()
+        }
+    }
+
     /** Companion volume is 0..100 against the music stream. */
     fun setVolume(volume: Int) {
         val am = audioManager ?: return
@@ -162,7 +208,8 @@ class PlexCompanionPlayerBridge @Inject constructor(
                     playQueueId = activePlayQueueId,
                     volume = currentVolumePercent(),
                     shuffle = ctrl.shuffleModeEnabled,
-                    repeatMode = ctrl.repeatMode
+                    repeatMode = ctrl.repeatMode,
+                    index = ctrl.currentMediaItemIndex.coerceAtLeast(0)
                 )
             }
         } catch (e: Exception) {

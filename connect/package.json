@@ -1,0 +1,15 @@
+{
+  "name": "pixelplay-connect",
+  "version": "1.0.0",
+  "description": "LAN session broker for PixelPlayer — Spotify-Connect-style playback sessions per Plex user",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

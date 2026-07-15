@@ -40,6 +40,7 @@ class PlaybackStateHolder @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val castStateHolder: CastStateHolder,
     private val plexRemotePlaybackManager: com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager,
+    private val plexConnectClient: com.theveloper.pixelplay.data.plex.connect.PlexConnectClient,
     private val queueStateHolder: QueueStateHolder,
     @param:ApplicationContext private val appContext: Context
 ) {
@@ -441,6 +442,12 @@ class PlaybackStateHolder @Inject constructor(
     }
 
     fun seekTo(position: Long) {
+        if (plexConnectClient.isRemoteActive) {
+            val targetPosition = position.coerceAtLeast(0L)
+            setCurrentPosition(targetPosition)
+            plexConnectClient.seekTo(targetPosition)
+            return
+        }
         if (plexRemotePlaybackManager.isActive) {
             val targetPosition = position.coerceAtLeast(0L)
             setCurrentPosition(targetPosition)
@@ -495,6 +502,10 @@ class PlaybackStateHolder @Inject constructor(
     }
 
     fun previousSong() {
+        if (plexConnectClient.isRemoteActive) {
+            plexConnectClient.previous()
+            return
+        }
         if (plexRemotePlaybackManager.isActive) {
             plexRemotePlaybackManager.previous()
             return
@@ -513,6 +524,10 @@ class PlaybackStateHolder @Inject constructor(
     }
 
     fun nextSong() {
+        if (plexConnectClient.isRemoteActive) {
+            plexConnectClient.next()
+            return
+        }
         if (plexRemotePlaybackManager.isActive) {
             plexRemotePlaybackManager.next()
             return

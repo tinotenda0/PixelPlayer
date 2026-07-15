@@ -93,6 +93,7 @@ class PlaybackDispatchStateHolder @Inject constructor(
     private val castStateHolder: CastStateHolder,
     private val castTransferStateHolder: CastTransferStateHolder,
     private val plexRemotePlaybackManager: com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager,
+    private val plexConnectClient: com.theveloper.pixelplay.data.plex.connect.PlexConnectClient,
     private val connectivityStateHolder: ConnectivityStateHolder,
     private val themeStateHolder: ThemeStateHolder,
     @param:ApplicationContext private val context: Context,
@@ -846,6 +847,39 @@ class PlaybackDispatchStateHolder @Inject constructor(
                     totalDuration = effectiveStartSong.duration.coerceAtLeast(0L)
                 )
             }
+        } else if (plexConnectClient.isRemoteActive && !effectiveStartSong.plexId.isNullOrBlank()) {
+            // A Connect device (web player, another PixelPlayer) is the active
+            // output: send the queue through the session broker.
+            clearPreparingSongIfMatching()
+            val remoteLoaded = plexConnectClient.playQueueRemote(
+                songs = songsToPlay,
+                startSong = effectiveStartSong
+            )
+            if (!remoteLoaded) {
+                Timber.tag(CAST_LOG_TAG).w(
+                    "Connect remote queue load failed (songId=%s queueSize=%d).",
+                    effectiveStartSong.id,
+                    songsToPlay.size
+                )
+                return
+            }
+
+            cb.updateUiState {
+                it.copy(
+                    currentPlaybackQueue = songsToPlay.toPlaybackQueue(),
+                    currentQueueSourceName = queueName
+                )
+            }
+            playbackStateHolder.updateStablePlayerState {
+                it.copy(
+                    currentSong = effectiveStartSong,
+                    currentMediaItemIndex = 0,
+                    isPlaying = true,
+                    playWhenReady = true,
+                    totalDuration = effectiveStartSong.duration.coerceAtLeast(0L)
+                )
+            }
+            cb.showSheet()
         } else if (plexRemotePlaybackManager.isActive && !effectiveStartSong.plexId.isNullOrBlank()) {
             // A Plexamp/Companion player is the active output: route the queue
             // there instead of the local engine, mirroring the Cast branch.
@@ -1043,6 +1077,14 @@ class PlaybackDispatchStateHolder @Inject constructor(
     }
 
     fun playPause() {
+        if (plexConnectClient.isRemoteActive) {
+            val playing = plexConnectClient.session.value?.state == "playing"
+            plexConnectClient.playPause()
+            playbackStateHolder.updateStablePlayerState {
+                it.copy(isPlaying = !playing, playWhenReady = !playing, isBuffering = false)
+            }
+            return
+        }
         if (plexRemotePlaybackManager.isActive) {
             val playing = plexRemotePlaybackManager.session.value?.state == "playing"
             plexRemotePlaybackManager.playPause()

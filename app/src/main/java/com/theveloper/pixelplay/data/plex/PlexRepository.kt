@@ -774,6 +774,15 @@ class PlexRepository @Inject constructor(
         }
     }
 
+    /** Album-art path (PMS transcoder input) for a track, when mirrored locally. */
+    suspend fun getThumbPathForRatingKey(ratingKey: String): String? {
+        return try {
+            dao.getSongByPlexId(ratingKey)?.thumbPath
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /**
      * Start playing a queue of tracks from this account's server on a remote
      * player: creates a play queue on the server, then points the player at
