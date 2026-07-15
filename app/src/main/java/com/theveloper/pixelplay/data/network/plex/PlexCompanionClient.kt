@@ -24,12 +24,12 @@ import javax.inject.Singleton
  */
 @Singleton
 class PlexCompanionClient @Inject constructor(
-    baseOkHttpClient: OkHttpClient
+    baseOkHttpClient: OkHttpClient,
+    private val identity: PlexClientIdentity
 ) {
     companion object {
         private const val TAG = "PlexCompanion"
-        private const val CLIENT_IDENTIFIER = "PixelPlayer-Android"
-        private const val CLIENT_NAME = "PixelPlayer"
+        private const val CLIENT_NAME = PlexClientIdentity.PRODUCT
     }
 
     private val httpClient: OkHttpClient = baseOkHttpClient.newBuilder()
@@ -48,8 +48,8 @@ class PlexCompanionClient @Inject constructor(
         targetClientIdentifier: String,
         token: String?
     ): Request.Builder {
-        header("X-Plex-Client-Identifier", CLIENT_IDENTIFIER)
-        header("X-Plex-Device-Name", CLIENT_NAME)
+        header("X-Plex-Client-Identifier", identity.clientId)
+        header("X-Plex-Device-Name", identity.deviceName)
         header("X-Plex-Product", CLIENT_NAME)
         header("X-Plex-Target-Client-Identifier", targetClientIdentifier)
         token?.let { header("X-Plex-Token", it) }

@@ -55,7 +55,8 @@ fun PlexSongEntity.toSong(): Song {
         year = year,
         trackNumber = trackNumber,
         dateAdded = dateAdded,
-        isFavorite = false
+        isFavorite = false,
+        plexId = plexId
     )
 }
 

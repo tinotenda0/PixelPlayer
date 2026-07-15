@@ -75,6 +75,12 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
     @Inject
     lateinit var advancedPerformanceDiagnosticsController: dagger.Lazy<AdvancedPerformanceDiagnosticsController>
 
+    @Inject
+    lateinit var plexRepository: dagger.Lazy<com.theveloper.pixelplay.data.plex.PlexRepository>
+
+    @Inject
+    lateinit var plexCompanionTarget: dagger.Lazy<com.theveloper.pixelplay.data.plex.companion.PlexCompanionTarget>
+
     private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // AÑADE EL COMPANION OBJECT
@@ -131,6 +137,18 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
             }.getOrNull()
             if (savedLimit != null) {
                 AlbumArtCacheManager.configuredCacheLimitMb = savedLimit.toLong()
+            }
+        }
+
+        // Advertise this install as a Plex Companion player whenever a Plex
+        // account is active, so Plexamp & co. can cast to PixelPlayer.
+        startupScope.launch {
+            plexRepository.get().activeAccountFlow.collect { account ->
+                if (account != null) {
+                    plexCompanionTarget.get().start()
+                } else {
+                    plexCompanionTarget.get().stop()
+                }
             }
         }
     }

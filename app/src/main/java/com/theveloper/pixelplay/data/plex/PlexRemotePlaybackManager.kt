@@ -185,7 +185,9 @@ class PlexRemotePlaybackManager @Inject constructor(
         pollJob = scope.launch {
             while (isActive) {
                 repository.getRemoteTimeline(device).onSuccess { timeline ->
-                    if (timeline != null) {
+                    // A poll can complete right as disconnect() clears the
+                    // session — never resurrect a snapshot for a dead session.
+                    if (timeline != null && _activeDevice.value == device) {
                         _session.value = Snapshot(
                             state = timeline.state,
                             positionMs = timeline.timeMs,

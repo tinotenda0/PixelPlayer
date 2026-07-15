@@ -782,6 +782,10 @@ class PlayerViewModel @Inject constructor(
 
     fun disconnectPlexRemote() {
         plexRemotePlaybackManager.disconnect()
+        // The remote keeps playing (Plexamp semantics), but this phone is its
+        // own player again — drop the last remote snapshot and show the local
+        // controller's real (paused) state.
+        mediaControllerSyncStateHolder.resyncFromLocalController()
     }
 
     fun setPlexRemoteVolume(volume: Int) {

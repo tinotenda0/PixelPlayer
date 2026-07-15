@@ -660,6 +660,45 @@ class PlexRepository @Inject constructor(
         }
     }
 
+    val activePlexTvToken: String?
+        get() = _activeAccountFlow.value?.plexTvToken
+
+    val activeServerToken: String?
+        get() = _activeAccountFlow.value?.serverToken
+
+    /** The active server's stable machine identifier (cached after first fetch). */
+    suspend fun serverMachineId(): String? = getServerMachineId()
+
+    /**
+     * Resolves a server play queue into playable [Song]s, in queue order.
+     * Tracks already in the local mirror come from the DAO; anything else is
+     * built from the play-queue metadata so unsynced tracks still play.
+     */
+    suspend fun getPlayQueueSongs(playQueueId: Long): List<Song> {
+        val items = api.getPlayQueue(playQueueId).getOrElse { return emptyList() }
+        return items.mapNotNull { item ->
+            val ratingKey = item.optString("ratingKey").takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
+            dao.getSongByPlexId(ratingKey)?.toSong() ?: Song(
+                id = "plex_companion_$ratingKey",
+                title = item.optString("title", "Unknown"),
+                artist = item.optString("grandparentTitle", "Unknown"),
+                artistId = -1L,
+                album = item.optString("parentTitle", "Unknown"),
+                albumId = -1L,
+                path = "",
+                contentUriString = "plex://$ratingKey",
+                albumArtUriString = "plex_cover://$ratingKey",
+                duration = item.optLong("duration", 0L),
+                dateAdded = System.currentTimeMillis(),
+                mimeType = null,
+                bitrate = null,
+                sampleRate = null,
+                plexId = ratingKey
+            )
+        }
+    }
+
     /**
      * Remote-controllable players on the active account (other Plexamp
      * instances etc.), each resolved to its first reachable address.
@@ -674,7 +713,9 @@ class PlexRepository @Inject constructor(
 
         val players = coroutineScope {
             resources
-                .filter { it.clientIdentifier.isNotBlank() }
+                // Never list ourselves: this install is now a Companion player
+                // too and shows up in plex.tv resources like any Plexamp.
+                .filter { it.clientIdentifier.isNotBlank() && it.clientIdentifier != api.clientIdentifier }
                 .map { resource ->
                     async {
                         // Local, direct addresses first; Companion players don't

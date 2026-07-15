@@ -28,20 +28,21 @@ import javax.inject.Singleton
  */
 @Singleton
 class PlexApiService @Inject constructor(
-    baseOkHttpClient: OkHttpClient
+    baseOkHttpClient: OkHttpClient,
+    private val identity: PlexClientIdentity
 ) {
 
     companion object {
         private const val TAG = "PlexApi"
         private const val PLEX_TV_SIGNIN_URL = "https://plex.tv/api/v2/users/signin"
-        private const val CLIENT_NAME = "PixelPlayer"
-        private const val CLIENT_VERSION = "1.0"
-        private const val DEVICE_NAME = "Android"
-        private const val CLIENT_IDENTIFIER = "PixelPlayer-Android"
+        private const val CLIENT_NAME = PlexClientIdentity.PRODUCT
+        private const val CLIENT_VERSION = PlexClientIdentity.VERSION
 
         /** Plex type filter for track items in /library/sections/{id}/all */
         private const val PLEX_TYPE_TRACK = "10"
     }
+
+    val clientIdentifier: String get() = identity.clientId
 
     @Volatile
     private var credentials: PlexCredentials? = null
@@ -74,11 +75,15 @@ class PlexApiService @Inject constructor(
 
     private fun Request.Builder.withPlexHeaders(token: String? = null): Request.Builder {
         header("Accept", "application/json")
-        header("X-Plex-Client-Identifier", CLIENT_IDENTIFIER)
+        header("X-Plex-Client-Identifier", identity.clientId)
         header("X-Plex-Product", CLIENT_NAME)
         header("X-Plex-Version", CLIENT_VERSION)
-        header("X-Plex-Device", DEVICE_NAME)
-        header("X-Plex-Platform", "Android")
+        header("X-Plex-Device", PlexClientIdentity.PLATFORM)
+        header("X-Plex-Device-Name", identity.deviceName)
+        header("X-Plex-Platform", PlexClientIdentity.PLATFORM)
+        // Marks this install's plex.tv device record as a Companion player so
+        // controllers (Plexamp, Plex Web) list us as a playback target.
+        header("X-Plex-Provides", PlexClientIdentity.PROVIDES)
         token?.let { header("X-Plex-Token", it) }
         return this
     }
@@ -168,9 +173,9 @@ class PlexApiService @Inject constructor(
 
     /** Browser URL where the user approves this app. */
     fun buildAuthUrl(code: String): String {
-        return "https://app.plex.tv/auth#?clientID=$CLIENT_IDENTIFIER&code=$code" +
+        return "https://app.plex.tv/auth#?clientID=${identity.clientId}&code=$code" +
             "&context%5Bdevice%5D%5Bproduct%5D=$CLIENT_NAME" +
-            "&context%5Bdevice%5D%5Bdevice%5D=$DEVICE_NAME"
+            "&context%5Bdevice%5D%5Bdevice%5D=${PlexClientIdentity.PLATFORM}"
     }
 
     /** Poll an auth PIN. Success with null token = not approved yet. */
@@ -363,6 +368,49 @@ class PlexApiService @Inject constructor(
                 }
             } catch (e: Exception) {
                 Timber.e(e, "$TAG: Failed to create play queue")
+                Result.failure(e)
+            }
+        }
+    }
+
+    /**
+     * Items of an existing play queue, in play order. Used when a Companion
+     * controller points us at a queue via playMedia's containerKey.
+     */
+    suspend fun getPlayQueue(playQueueId: Long): Result<List<JSONObject>> {
+        return requestContainer("/playQueues/$playQueueId", mapOf("own" to "1"))
+            .map { it.metadataList() }
+    }
+
+    /**
+     * Publish this install's Companion endpoint(s) to plex.tv so controllers
+     * that discover us via /api/v2/resources know where to reach the player.
+     * Mirrors what the official clients do (PUT /devices/{clientIdentifier}
+     * with repeated Connection[][uri] params).
+     */
+    suspend fun publishCompanionConnections(token: String, uris: List<String>): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val urlBuilder = "https://plex.tv/devices/${identity.clientId}"
+                    .toHttpUrl().newBuilder()
+                uris.forEach { urlBuilder.addQueryParameter("Connection[][uri]", it) }
+
+                val request = Request.Builder()
+                    .url(urlBuilder.build())
+                    .withPlexHeaders(token = token)
+                    .put(FormBody.Builder().build())
+                    .build()
+
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        return@withContext Result.failure(
+                            Exception("HTTP ${response.code}: ${response.message}")
+                        )
+                    }
+                    Result.success(Unit)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "$TAG: Failed to publish Companion connections")
                 Result.failure(e)
             }
         }

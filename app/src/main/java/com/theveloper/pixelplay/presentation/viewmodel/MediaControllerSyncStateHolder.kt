@@ -488,6 +488,30 @@ class MediaControllerSyncStateHolder @Inject constructor(
     }
 
     /** One-time snapshot of the controller's current state when it first attaches. */
+    /**
+     * Re-derives the full player UI state from the local controller. Used when a
+     * remote session (Plex Companion) ends: the last remote snapshot must be
+     * discarded in favour of whatever the local player is actually doing —
+     * typically the paused local queue left behind when the session connected.
+     */
+    fun resyncFromLocalController() {
+        val controller = cb.getController()
+        if (controller == null || controller.currentMediaItem == null) {
+            playbackStateHolder.updateStablePlayerState {
+                it.copy(
+                    currentSong = null,
+                    isPlaying = false,
+                    playWhenReady = false,
+                    isBuffering = false
+                )
+            }
+            playbackStateHolder.clearCurrentPositionHints()
+            playbackStateHolder.setCurrentPosition(0L)
+            return
+        }
+        applyInitialControllerState(controller)
+    }
+
     private fun applyInitialControllerState(playerCtrl: MediaController) {
         cb.setTrackVolume(playerCtrl.volume)
         playbackStateHolder.updateStablePlayerState {
