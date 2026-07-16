@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -94,6 +95,16 @@ class PlexConnectClient @Inject constructor(
         .pingInterval(25, TimeUnit.SECONDS)
         .build()
 
+    /** Short-timeout client for /health probes during broker discovery. */
+    private val probeClient: OkHttpClient = baseOkHttpClient.newBuilder()
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(3, TimeUnit.SECONDS)
+        .callTimeout(4, TimeUnit.SECONDS)
+        .build()
+
+    @Volatile
+    private var lastGoodBrokerHost: String? = null
+
     private var scope: CoroutineScope? = null
     private var webSocket: WebSocket? = null
 
@@ -154,13 +165,20 @@ class PlexConnectClient @Inject constructor(
         var backoff = RECONNECT_MIN_MS
         while (scope?.isActive == true) {
             val token = repository.activePlexTvToken
-            val host = repository.serverUrl?.toHttpUrlOrNull()?.host
-            if (token == null || host == null) {
+            if (token == null) {
                 delay(30_000)
                 continue
             }
             if (_isConnected.value && connectedToken == token) {
                 delay(5_000)
+                continue
+            }
+
+            val host = discoverBrokerHost(token)
+            if (host == null) {
+                Timber.tag(TAG).d("No broker found on any candidate host")
+                delay(backoff)
+                backoff = (backoff * 2).coerceAtMost(RECONNECT_MAX_MS)
                 continue
             }
 
@@ -172,6 +190,7 @@ class PlexConnectClient @Inject constructor(
             // spawned sockets until the app OOMed.
             val connected = connectAndAwait(url, token)
             if (connected) {
+                lastGoodBrokerHost = host
                 backoff = RECONNECT_MIN_MS
                 // Hold until the socket drops before reconnecting.
                 while (scope?.isActive == true && _isConnected.value && connectedToken == token) {
@@ -181,6 +200,46 @@ class PlexConnectClient @Inject constructor(
             } else {
                 delay(backoff)
                 backoff = (backoff * 2).coerceAtMost(RECONNECT_MAX_MS)
+            }
+        }
+    }
+
+    /**
+     * Find the host running the broker. The stored server URL may be a
+     * tunnel/proxy hostname (Cloudflare etc.) that only forwards Plex's own
+     * port — the broker next to the PMS is only reachable on the server's
+     * direct LAN addresses, which plex.tv advertises in resources.
+     */
+    private suspend fun discoverBrokerHost(token: String): String? {
+        val candidates = buildList {
+            lastGoodBrokerHost?.let { add(it) }
+            repository.serverUrl?.toHttpUrlOrNull()?.host?.let { add(it) }
+            runCatching { repository.getServerLocalHosts() }
+                .getOrDefault(emptyList())
+                .forEach { add(it) }
+        }.distinct().take(8)
+
+        for (host in candidates) {
+            if (probeBroker(host)) {
+                if (host != lastGoodBrokerHost) {
+                    Timber.tag(TAG).i("Broker found at $host (candidates: $candidates)")
+                }
+                return host
+            }
+        }
+        return null
+    }
+
+    private suspend fun probeBroker(host: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("http://$host:$BROKER_PORT/health")
+                    .get()
+                    .build()
+                probeClient.newCall(request).execute().use { it.isSuccessful }
+            } catch (_: Exception) {
+                false
             }
         }
     }

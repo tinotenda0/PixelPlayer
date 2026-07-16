@@ -284,9 +284,11 @@ function handleCommand(s, senderId, msg) {
 
 const wss = new WebSocketServer({ noServer: true });
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   let session = null;
   let deviceId = null;
+  const peer = req?.socket?.remoteAddress || 'unknown';
+  console.log(`[connect] socket opened from ${peer}`);
   ws.isAlive = true;
   ws.on('pong', () => (ws.isAlive = true));
 
@@ -330,6 +332,7 @@ wss.on('connection', (ws) => {
         broadcast(session);
         console.log(`[connect] ${info.name} (${info.platform}) joined as ${user.name}`);
       } catch (e) {
+        console.log(`[connect] hello rejected from ${peer}: ${e.message}`);
         send(ws, { type: 'error', message: `Auth failed: ${e.message}` });
         ws.close();
       }

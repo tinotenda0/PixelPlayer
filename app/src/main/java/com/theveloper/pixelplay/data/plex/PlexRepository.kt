@@ -34,6 +34,7 @@ import com.theveloper.pixelplay.data.worker.PlexSyncWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -772,6 +773,22 @@ class PlexRepository @Inject constructor(
         } catch (_: Exception) {
             null
         }
+    }
+
+    /**
+     * Hosts where the active server can be reached on its own LAN, from
+     * plex.tv resources. The stored serverUrl may be a tunnel/proxy hostname
+     * that only forwards Plex's port — sidecar services (the Connect broker)
+     * are only reachable via these direct addresses.
+     */
+    suspend fun getServerLocalHosts(): List<String> {
+        val token = _activeAccountFlow.value?.plexTvToken ?: return emptyList()
+        val resources = api.getServers(token).getOrNull() ?: return emptyList()
+        return resources
+            .flatMap { it.connections }
+            .filter { it.isLocal && !it.isRelay }
+            .mapNotNull { it.uri.toHttpUrlOrNull()?.host }
+            .distinct()
     }
 
     /** Album-art path (PMS transcoder input) for a track, when mirrored locally. */
