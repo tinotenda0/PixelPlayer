@@ -1,12 +1,39 @@
 /* PixelPlayer Connect — web remote & player. */
 'use strict';
 
+// Surface script errors on the page — a silent failure here otherwise
+// renders as a blank screen (both views start hidden).
+window.addEventListener('error', (e) => {
+  let el = document.getElementById('js-error');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'js-error';
+    el.style.cssText =
+      'position:fixed;top:0;left:0;right:0;z-index:99;background:#7f1d1d;color:#fff;' +
+      'padding:10px 14px;font:13px/1.4 monospace;white-space:pre-wrap;';
+    document.body.appendChild(el);
+  }
+  el.textContent = 'Error: ' + (e.message || e.error || 'unknown');
+});
+
+// crypto.randomUUID is secure-context-only; this app is served over plain
+// HTTP on the LAN, so fall back to getRandomValues (available everywhere).
+function makeUuid() {
+  if (window.crypto?.randomUUID) return crypto.randomUUID();
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 // ─── State ─────────────────────────────────────────────────────────────────
 
 const store = {
   token: localStorage.getItem('ppc_token'),
   accountToken: null, // pre-home-switch token, kept during user picking
-  deviceId: localStorage.getItem('ppc_device') || crypto.randomUUID(),
+  deviceId: localStorage.getItem('ppc_device') || makeUuid(),
   serverUrl: null,
   user: null,
   session: null,
