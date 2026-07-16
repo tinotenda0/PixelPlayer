@@ -166,11 +166,18 @@ class PlexConnectClient @Inject constructor(
 
             val url = "ws://$host:$BROKER_PORT/ws"
             Timber.tag(TAG).d("Connecting to broker $url")
-            val opened = openSocket(url, token)
-            if (opened) {
+            // newWebSocket is async — connectAndAwait suspends until the
+            // handshake definitively succeeds or fails. Treating "call
+            // created" as "connected" here once caused a hot loop that
+            // spawned sockets until the app OOMed.
+            val connected = connectAndAwait(url, token)
+            if (connected) {
                 backoff = RECONNECT_MIN_MS
-                // Wait until the socket drops before reconnecting.
-                while (scope?.isActive == true && _isConnected.value) delay(2_000)
+                // Hold until the socket drops before reconnecting.
+                while (scope?.isActive == true && _isConnected.value && connectedToken == token) {
+                    delay(2_000)
+                }
+                delay(1_000) // small settle so a flapping socket can't spin us
             } else {
                 delay(backoff)
                 backoff = (backoff * 2).coerceAtMost(RECONNECT_MAX_MS)
@@ -178,51 +185,72 @@ class PlexConnectClient @Inject constructor(
         }
     }
 
-    private fun openSocket(url: String, token: String): Boolean {
-        return try {
+    /** Opens the socket and suspends until onOpen or a failure (or timeout). */
+    private suspend fun connectAndAwait(url: String, token: String): Boolean {
+        webSocket?.cancel()
+        val opened = kotlinx.coroutines.CompletableDeferred<Boolean>()
+        val ws: WebSocket
+        try {
             val request = Request.Builder().url(url).build()
-            webSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
-                override fun onOpen(ws: WebSocket, response: okhttp3.Response) {
+            ws = httpClient.newWebSocket(request, object : WebSocketListener() {
+                override fun onOpen(socket: WebSocket, response: okhttp3.Response) {
                     connectedToken = token
                     _isConnected.value = true
-                    ws.send(
-                        JSONObject()
-                            .put("type", "hello")
-                            .put("token", token)
-                            .put(
-                                "device",
-                                JSONObject()
-                                    .put("id", identity.clientId)
-                                    .put("name", identity.deviceName)
-                                    .put("platform", "android")
-                                    .put("product", PlexClientIdentity.PRODUCT)
-                                    .put("capabilities", JSONArray(listOf("controller", "player")))
-                            )
-                            .toString()
-                    )
+                    socket.send(helloMessage(token))
+                    opened.complete(true)
                 }
 
-                override fun onMessage(ws: WebSocket, text: String) {
+                override fun onMessage(socket: WebSocket, text: String) {
                     handleMessage(text)
                 }
 
-                override fun onFailure(ws: WebSocket, t: Throwable, response: okhttp3.Response?) {
+                override fun onFailure(socket: WebSocket, t: Throwable, response: okhttp3.Response?) {
                     Timber.tag(TAG).d("Broker socket failure: ${t.message}")
-                    _isConnected.value = false
-                    _session.value = null
+                    // Only the current socket may clear shared state — a stale
+                    // listener firing late must not clobber a fresh connection.
+                    if (webSocket === socket) {
+                        _isConnected.value = false
+                        _session.value = null
+                    }
+                    opened.complete(false)
                 }
 
-                override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-                    _isConnected.value = false
-                    _session.value = null
+                override fun onClosed(socket: WebSocket, code: Int, reason: String) {
+                    if (webSocket === socket) {
+                        _isConnected.value = false
+                        _session.value = null
+                    }
+                    opened.complete(false)
                 }
             })
-            true
+            webSocket = ws
         } catch (e: Exception) {
             Timber.tag(TAG).w(e, "Could not open broker socket")
-            false
+            return false
         }
+
+        val ok = kotlinx.coroutines.withTimeoutOrNull(10_000) { opened.await() } ?: false
+        if (!ok) {
+            ws.cancel()
+            if (webSocket === ws) _isConnected.value = false
+        }
+        return ok
     }
+
+    private fun helloMessage(token: String): String =
+        JSONObject()
+            .put("type", "hello")
+            .put("token", token)
+            .put(
+                "device",
+                JSONObject()
+                    .put("id", identity.clientId)
+                    .put("name", identity.deviceName)
+                    .put("platform", "android")
+                    .put("product", PlexClientIdentity.PRODUCT)
+                    .put("capabilities", JSONArray(listOf("controller", "player")))
+            )
+            .toString()
 
     // ─── Incoming messages ─────────────────────────────────────────────────
 
@@ -230,7 +258,7 @@ class PlexConnectClient @Inject constructor(
         val msg = runCatching { JSONObject(text) }.getOrNull() ?: return
         when (msg.optString("type")) {
             "welcome" -> {
-                Timber.tag(TAG).i("Connected to broker as ${msg.optJSONObject("user")?.optString("friendlyName") ?: "user"}")
+                Timber.tag(TAG).i("Connected to broker as ${msg.optJSONObject("user")?.optString("name") ?: "user"}")
                 msg.optJSONObject("session")?.let { _session.value = parseSession(it) }
             }
             "session" -> msg.optJSONObject("session")?.let { _session.value = parseSession(it) }
