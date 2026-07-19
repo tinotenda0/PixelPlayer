@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PixelPlayer Cast</title>
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --text: #f4f5fa;
+      --muted: #a6abbd;
+      --accent: #c9b8ff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+    body {
+      font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", system-ui, sans-serif;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* CAF's default audio UI — kept in the DOM so playback works, hidden so
+       our own design shows instead. */
+    cast-media-player { display: none; }
+
+    /* Ambient background = blurred, scaled album art + scrim. */
+    #bg {
+      position: fixed; inset: -8%;
+      background-size: cover; background-position: center;
+      filter: blur(64px) saturate(1.4) brightness(0.55);
+      transform: scale(1.15);
+      transition: background-image 0.6s ease, opacity 0.6s ease;
+    }
+    #scrim {
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(120% 90% at 50% 10%, transparent 30%, rgba(0,0,0,0.55) 100%),
+        linear-gradient(180deg, rgba(0,0,0,0.25), rgba(0,0,0,0.65));
+    }
+
+    #stage {
+      position: relative; z-index: 2;
+      height: 100%; width: 100%;
+      display: flex; align-items: center; justify-content: center;
+      gap: 6vw;
+      padding: 8vh 9vw;
+    }
+
+    #art-wrap {
+      flex: 0 0 auto;
+      width: min(46vh, 40vw);
+      aspect-ratio: 1;
+      border-radius: 3vh;
+      overflow: hidden;
+      box-shadow: 0 4vh 12vh rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+      background: #17161d;
+      position: relative;
+    }
+    #art {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transition: opacity 0.5s ease;
+    }
+    #art-fallback {
+      position: absolute; inset: 0;
+      display: grid; place-items: center;
+      font-size: 20vh; color: #3a3b45;
+    }
+
+    #meta { flex: 1 1 auto; max-width: 46vw; }
+    #title {
+      font-size: clamp(28px, 5.2vh, 68px);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      overflow: hidden; text-overflow: ellipsis;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    }
+    #artist {
+      margin-top: 1.4vh;
+      font-size: clamp(18px, 2.9vh, 34px);
+      color: var(--muted);
+      font-weight: 500;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #album {
+      margin-top: 0.6vh;
+      font-size: clamp(14px, 2.1vh, 22px);
+      color: rgba(166,171,189,0.6);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    #progress-row {
+      margin-top: 5vh;
+      display: flex; align-items: center; gap: 2vh;
+    }
+    #bar {
+      flex: 1; height: 0.7vh; border-radius: 1vh;
+      background: rgba(255,255,255,0.14); overflow: hidden;
+    }
+    #fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--accent), #e7deff);
+      border-radius: 1vh;
+      transition: width 0.25s linear;
+    }
+    .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: clamp(13px, 1.9vh, 20px); min-width: 6ch; }
+    .time.total { text-align: right; }
+
+    #brand {
+      position: fixed; z-index: 3;
+      left: 5vw; bottom: 5vh;
+      display: flex; align-items: center; gap: 1.4vh;
+      color: rgba(255,255,255,0.72);
+      font-weight: 700; letter-spacing: 0.02em;
+      font-size: clamp(14px, 2vh, 22px);
+    }
+    #brand .dot {
+      width: 1.6vh; height: 1.6vh; border-radius: 50%;
+      background: var(--accent); box-shadow: 0 0 2vh var(--accent);
+    }
+
+    #playstate {
+      position: fixed; z-index: 3;
+      right: 5vw; bottom: 5vh;
+      color: var(--muted); font-size: clamp(13px, 1.9vh, 20px);
+      display: flex; align-items: center; gap: 1vh;
+      opacity: 0.85;
+    }
+    #playstate .glyph { font-size: 1.2em; }
+
+    /* Idle / splash */
+    #idle {
+      position: fixed; inset: 0; z-index: 4;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 3vh; background: var(--bg);
+      transition: opacity 0.5s ease;
+    }
+    #idle .logo { font-size: 14vh; }
+    #idle .name { font-size: clamp(24px, 4vh, 48px); font-weight: 800; letter-spacing: -0.01em; }
+    #idle .hint { color: var(--muted); font-size: clamp(15px, 2.2vh, 24px); }
+    .hidden { opacity: 0 !important; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="scrim"></div>
+
+  <cast-media-player></cast-media-player>
+
+  <div id="stage">
+    <div id="art-wrap">
+      <div id="art-fallback">♪</div>
+      <img id="art" alt="" style="opacity:0">
+    </div>
+    <div id="meta">
+      <div id="title">Nothing playing</div>
+      <div id="artist"></div>
+      <div id="album"></div>
+      <div id="progress-row">
+        <span class="time cur" id="cur">0:00</span>
+        <div id="bar"><div id="fill"></div></div>
+        <span class="time total" id="total">0:00</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="brand"><span class="dot"></span>PixelPlayer</div>
+  <div id="playstate"><span class="glyph" id="ps-glyph">▶</span><span id="ps-text">Playing</span></div>
+
+  <div id="idle">
+    <div class="logo">🎧</div>
+    <div class="name">PixelPlayer</div>
+    <div class="hint">Ready to cast</div>
+  </div>
+
+  <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      const $ = (id) => document.getElementById(id);
+      const fmt = (s) => {
+        if (!s || s < 0 || !isFinite(s)) s = 0;
+        s = Math.round(s);
+        return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+      };
+
+      const context = cast.framework.CastReceiverContext.getInstance();
+      const player = context.getPlayerManager();
+
+      let lastArtUrl = null;
+
+      function applyMetadata() {
+        const info = player.getMediaInformation();
+        const md = info && info.metadata;
+        if (!md) return;
+        $('idle').classList.add('hidden');
+
+        $('title').textContent = md.title || 'Unknown title';
+        $('artist').textContent = md.artist || md.subtitle || '';
+        $('album').textContent = md.albumName || '';
+
+        const img = (md.images && md.images.length) ? md.images[0].url : null;
+        if (img && img !== lastArtUrl) {
+          lastArtUrl = img;
+          const artEl = $('art');
+          const pre = new Image();
+          pre.onload = () => {
+            artEl.src = img;
+            artEl.style.opacity = '1';
+            $('art-fallback').style.opacity = '0';
+            $('bg').style.backgroundImage = 'url("' + img + '")';
+          };
+          pre.onerror = () => {
+            artEl.style.opacity = '0';
+            $('art-fallback').style.opacity = '1';
+          };
+          pre.src = img;
+        } else if (!img) {
+          $('art').style.opacity = '0';
+          $('art-fallback').style.opacity = '1';
+          $('bg').style.backgroundImage = 'none';
+        }
+      }
+
+      function setPlayState(state) {
+        const playing = state === cast.framework.messages.PlayerState.PLAYING;
+        const buffering = state === cast.framework.messages.PlayerState.BUFFERING;
+        $('ps-glyph').textContent = buffering ? '…' : (playing ? '▶' : '❚❚');
+        $('ps-text').textContent = buffering ? 'Buffering' : (playing ? 'Playing' : 'Paused');
+        if (state === cast.framework.messages.PlayerState.IDLE) {
+          $('idle').classList.remove('hidden');
+          lastArtUrl = null;
+        }
+      }
+
+      player.addEventListener(cast.framework.events.EventType.PLAYER_LOAD_COMPLETE, applyMetadata);
+      player.addEventListener(cast.framework.events.EventType.MEDIA_STATUS, (e) => {
+        applyMetadata();
+        if (e && e.mediaStatus) setPlayState(e.mediaStatus.playerState);
+      });
+
+      // Progress loop.
+      function tick() {
+        const dur = player.getDurationSec();
+        const cur = player.getCurrentTimeSec();
+        if (dur && isFinite(dur) && dur > 0) {
+          $('fill').style.width = Math.min(100, (cur / dur) * 100) + '%';
+          $('total').textContent = fmt(dur);
+        } else {
+          $('total').textContent = '--:--';
+        }
+        $('cur').textContent = fmt(cur);
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+
+      // Keep the receiver alive for audio (no video idle timeout surprises).
+      const options = new cast.framework.CastReceiverOptions();
+      options.disableIdleTimeout = false;
+      context.start(options);
+    })();
+  </script>
+</body>
+</html>

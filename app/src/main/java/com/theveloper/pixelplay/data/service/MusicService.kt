@@ -288,6 +288,14 @@ class MusicService : MediaLibraryService() {
             "node",
             "remote_device",
         )
+        // Android Auto (phone projection) and Android Automotive OS caller
+        // packages — always accepted so the media browser appears in the car.
+        private val ANDROID_AUTO_CONTROLLER_PREFIXES = listOf(
+            "com.google.android.projection.gearhead",
+            "com.google.android.gms.car",
+            "com.google.android.apps.automotive",
+            "com.android.car",
+        )
         private const val AUTO_CONTEXT_RECENT = "recent"
         private const val AUTO_CONTEXT_FAVORITES = "favorites"
         private const val AUTO_CONTEXT_ALL_SONGS = "all_songs"
@@ -994,6 +1002,12 @@ class MusicService : MediaLibraryService() {
     private fun shouldRejectWearController(controller: MediaSession.ControllerInfo): Boolean {
         val controllerPackage = controller.packageName
         if (controllerPackage.startsWith(APP_PACKAGE_PREFIX)) {
+            return false
+        }
+        // Never reject Android Auto / Automotive — the broad connection-hint
+        // markers below (e.g. "companion") could otherwise catch a future Auto
+        // hint and hide the app from the car. Auto callers are always allowed.
+        if (ANDROID_AUTO_CONTROLLER_PREFIXES.any { controllerPackage.startsWith(it) }) {
             return false
         }
         val blockedByPackage = BLOCKED_WEAR_CONTROLLER_PREFIXES.any { prefix ->

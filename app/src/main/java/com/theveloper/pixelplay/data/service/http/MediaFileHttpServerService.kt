@@ -30,6 +30,7 @@ import androidx.media3.decoder.SimpleDecoderOutputBuffer
 import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.data.model.Song
+import com.theveloper.pixelplay.data.plex.PlexStreamProxy
 import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.service.cast.CastAudioMimeUtils
 import com.theveloper.pixelplay.data.service.cast.IsoBmffAudioCodecDetector
@@ -62,6 +63,8 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import timber.log.Timber
 import java.io.ByteArrayInputStream
 import java.io.EOFException
@@ -95,6 +98,12 @@ class MediaFileHttpServerService : Service() {
 
     @Inject
     lateinit var musicRepository: MusicRepository
+
+    @Inject
+    lateinit var plexStreamProxy: PlexStreamProxy
+
+    @Inject
+    lateinit var castHttpClient: OkHttpClient
 
     private var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
     @Volatile
@@ -412,6 +421,23 @@ class MediaFileHttpServerService : Service() {
                                 }
 
                                 try {
+                                    // Cloud (Plex) songs: the phone can't open plex:// locally, so
+                                    // relay the bytes from the provider's reachable stream URL.
+                                    // This branch is what makes casting a Plex library work at all.
+                                    val remoteUrl = resolveRemoteStreamUrl(song)
+                                    if (remoteUrl != null) {
+                                        val cloudContentType = resolveAudioContentType(
+                                            resolvePreferredAudioMimeType(song, song.contentUriString.toUri())
+                                        )
+                                        call.respondByProxyingRemote(
+                                            remoteUrl = remoteUrl,
+                                            rangeHeader = call.request.headers[HttpHeaders.Range],
+                                            fallbackContentType = cloudContentType,
+                                            songId = song.id
+                                        )
+                                        return@get
+                                    }
+
                                     val uri = song.contentUriString.toUri()
                                     val codecInfo = detectAudioCodecViaExtractor(song, uri)
                                     val isAlac = codecInfo?.codecMime == "audio/alac"
@@ -587,6 +613,19 @@ class MediaFileHttpServerService : Service() {
                                 }
 
                                 try {
+                                    val remoteUrl = resolveRemoteStreamUrl(song)
+                                    if (remoteUrl != null) {
+                                        val cloudContentType = resolveAudioContentType(
+                                            resolvePreferredAudioMimeType(song, song.contentUriString.toUri())
+                                        )
+                                        call.respondRemoteHead(
+                                            remoteUrl = remoteUrl,
+                                            fallbackContentType = cloudContentType,
+                                            songId = song.id
+                                        )
+                                        return@head
+                                    }
+
                                     val uri = song.contentUriString.toUri()
                                     val codecInfo = detectAudioCodecViaExtractor(song, uri)
                                     val isAlac = codecInfo?.codecMime == "audio/alac"
@@ -1028,6 +1067,156 @@ class MediaFileHttpServerService : Service() {
         }
 
         return false
+    }
+
+    /**
+     * For a cloud-backed song (Plex etc.), the direct network-reachable stream
+     * URL that the cast HTTP server can fetch and relay to the Chromecast.
+     * Local (content:// / file:// / on-disk) songs return null and take the
+     * normal local-file serving path. A Chromecast cannot reach the phone's
+     * loopback cloud proxies, so the bytes must flow through this LAN-bound
+     * cast server instead.
+     */
+    private suspend fun resolveRemoteStreamUrl(song: Song): String? {
+        val scheme = song.contentUriString.substringBefore(':', "").lowercase(Locale.ROOT)
+        return when (scheme) {
+            "plex" -> plexStreamProxy.resolveDirectStreamUrl(song.contentUriString)
+            // Other cloud providers can be wired here as needed; today the fork's
+            // cloud library is Plex, and only Plex casting is exercised.
+            else -> null
+        }
+    }
+
+    /**
+     * OkHttp client for relaying cloud media to the Chromecast. The shared app
+     * client has short read/write timeouts (fine for API calls) that would
+     * abort a long-lived cast stream: Cast applies backpressure (stops reading
+     * once its buffer fills), the upstream socket goes idle, and a short
+     * read-timeout would then throw mid-track. Streaming needs no such timeout.
+     */
+    private val castStreamClient: OkHttpClient by lazy {
+        castHttpClient.newBuilder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.MILLISECONDS)
+            .writeTimeout(0, TimeUnit.MILLISECONDS)
+            .callTimeout(0, TimeUnit.MILLISECONDS)
+            .build()
+    }
+
+    /**
+     * Relay a remote (cloud) audio stream to the Chromecast: fetch [remoteUrl]
+     * with the incoming Range forwarded upstream so seeks only pull the needed
+     * bytes, and mirror the upstream status/headers back to the cast device.
+     */
+    private suspend fun ApplicationCall.respondByProxyingRemote(
+        remoteUrl: String,
+        rangeHeader: String?,
+        fallbackContentType: ContentType,
+        songId: String
+    ) {
+        val requestBuilder = Request.Builder().url(remoteUrl).get()
+        rangeHeader?.let { requestBuilder.header(HttpHeaders.Range, it) }
+
+        val upstream = withContext(Dispatchers.IO) {
+            castStreamClient.newCall(requestBuilder.build()).execute()
+        }
+
+        // upstream.use guarantees the response/socket is closed on every exit
+        // path below — early return, exception, or after the stream completes.
+        upstream.use { resp ->
+            if (!resp.isSuccessful) {
+                val code = resp.code
+                Timber.tag(castHttpLogTag).w("Remote proxy upstream HTTP %d songId=%s", code, songId)
+                Timber.tag("PX_CAST_HTTP").w("remote_proxy upstream_http_$code songId=$songId")
+                respond(HttpStatusCode.fromValue(if (code in 100..599) code else 502), "Upstream error")
+                return
+            }
+
+            // Prefer the song-derived audio type (it matches the contentType in
+            // the Cast MediaInfo, which the receiver trusts for decoding) and only
+            // take the upstream type when it is a concrete audio/* — Plex sometimes
+            // returns application/octet-stream, which would confuse the receiver.
+            val upstreamContentType = resp.header(HttpHeaders.ContentType)
+                ?.let { runCatching { ContentType.parse(it) }.getOrNull() }
+                ?.takeIf { it.contentType.equals("audio", ignoreCase = true) }
+                ?: fallbackContentType
+
+            val rangeHonored = resp.code == 206
+            resp.header(HttpHeaders.ContentRange)?.let { response.header(HttpHeaders.ContentRange, it) }
+            resp.header(HttpHeaders.ContentLength)?.let { response.header(HttpHeaders.ContentLength, it) }
+            // Only advertise range support when this response actually honored it
+            // (or none was asked). A ranged request answered with a full 200 must
+            // NOT claim Accept-Ranges, or the receiver thinks a seek succeeded
+            // when it really restarted the track from byte 0.
+            if (rangeHeader == null || rangeHonored) {
+                response.header(HttpHeaders.AcceptRanges, "bytes")
+            } else {
+                Timber.tag(castHttpLogTag).w(
+                    "Remote proxy: upstream ignored Range (HTTP 200) songId=%s range=%s", songId, rangeHeader
+                )
+            }
+
+            val status = if (rangeHonored) HttpStatusCode.PartialContent else HttpStatusCode.OK
+            Timber.tag(castHttpLogTag).i(
+                "GET /song remote-proxy songId=%s range=%s upstream=%d type=%s",
+                songId, rangeHeader, resp.code, upstreamContentType
+            )
+            Timber.tag("PX_CAST_HTTP")
+                .i("GET /song remote_proxy songId=$songId range=$rangeHeader upstream=${resp.code} type=$upstreamContentType")
+
+            respondOutputStream(upstreamContentType, status) {
+                resp.body.byteStream().use { input ->
+                    input.copyTo(this)
+                }
+            }
+        }
+    }
+
+    /**
+     * HEAD for a cloud song. Probe with a 1-byte ranged GET rather than HEAD:
+     * it confirms range support and yields the total size from Content-Range
+     * (bytes 0-0/TOTAL), so HEAD advertises exactly what the real GET will do.
+     * A plain HEAD can fail or omit length on servers that dislike it, leaving
+     * HEAD and GET inconsistent and some receivers refusing to seek.
+     */
+    private suspend fun ApplicationCall.respondRemoteHead(
+        remoteUrl: String,
+        fallbackContentType: ContentType,
+        songId: String
+    ) {
+        val probe = runCatching {
+            withContext(Dispatchers.IO) {
+                castStreamClient.newCall(
+                    Request.Builder().url(remoteUrl).header(HttpHeaders.Range, "bytes=0-0").get().build()
+                ).execute()
+            }
+        }.getOrNull()
+
+        var contentType = fallbackContentType
+        var totalLength: Long? = null
+        probe?.use { resp ->
+            if (resp.isSuccessful) {
+                resp.header(HttpHeaders.ContentType)
+                    ?.let { runCatching { ContentType.parse(it) }.getOrNull() }
+                    ?.takeIf { it.contentType.equals("audio", ignoreCase = true) }
+                    ?.let { contentType = it }
+                // "Content-Range: bytes 0-0/12345" → total 12345.
+                totalLength = resp.header(HttpHeaders.ContentRange)
+                    ?.substringAfter('/', "")
+                    ?.toLongOrNull()
+                    ?: resp.header(HttpHeaders.ContentLength)?.toLongOrNull()?.takeIf { resp.code == 200 }
+            }
+        }
+
+        response.header(HttpHeaders.ContentType, contentType.toString())
+        totalLength?.takeIf { it > 0 }?.let {
+            response.header(HttpHeaders.AcceptRanges, "bytes")
+            response.header(HttpHeaders.ContentLength, it.toString())
+        }
+        Timber.tag(castHttpLogTag).d(
+            "HEAD /song remote songId=%s type=%s size=%s", songId, contentType, totalLength
+        )
+        respond(HttpStatusCode.OK)
     }
 
     private fun resolveAudioStreamSource(song: Song, uri: Uri): AudioStreamSource? {

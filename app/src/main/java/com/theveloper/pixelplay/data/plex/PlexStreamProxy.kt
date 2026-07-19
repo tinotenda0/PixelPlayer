@@ -48,6 +48,26 @@ class PlexStreamProxy @Inject constructor(
 
     fun resolvePlexUri(uriString: String): String? = resolveUri(uriString)
 
+    /**
+     * The direct, network-reachable Plex stream URL for a `plex://` uri
+     * (the PMS `/library/parts/...` URL, not the loopback proxy). Used by the
+     * Cast HTTP server to fetch cloud bytes it can then serve to a Chromecast —
+     * the on-device proxy binds to 127.0.0.1 and is unreachable by cast devices.
+     * Reuses this proxy's 30-minute stream-URL cache.
+     */
+    suspend fun resolveDirectStreamUrl(uriString: String): String? {
+        val uri = Uri.parse(uriString)
+        if (uri.scheme != "plex") return null
+        val ratingKey = uri.host ?: uri.path?.removePrefix("/") ?: return null
+        if (!CloudStreamSecurity.validatePlexRatingKey(ratingKey)) return null
+        return try {
+            getOrFetchStreamUrl(ratingKey)
+        } catch (e: Exception) {
+            Timber.w(e, "resolveDirectStreamUrl failed for $ratingKey")
+            null
+        }
+    }
+
     suspend fun warmUpStreamUrl(uriString: String) {
         val uri = Uri.parse(uriString)
         if (uri.scheme != "plex") return

@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PixelPlayer</string>
+    <!--
+      Google Cast receiver application id shown on the TV.
+      Empty = Google's Default Media Receiver (generic styling).
+      To brand the cast-to-TV screen, register a Styled or Custom receiver in
+      the Google Cast Developer Console (cast.google.com/publish) and paste the
+      generated app id here — no other code change needed.
+    -->
+    <string name="cast_receiver_application_id" translatable="false"></string>
     <string name="app_tagline">Music Player</string>
     <string name="app_name_change_title">App Name Change</string>
     <string name="app_name_change_message">We have changed our app\'s name from PixelPlay to PixelPlayer due to a trademark-related issue. Keep playing!</string>
