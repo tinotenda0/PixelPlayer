@@ -182,6 +182,9 @@ fun CastBottomSheet(
     val plexRemoteDevice by playerViewModel.plexRemoteDevice.collectAsStateWithLifecycle()
     val plexRemoteSession by playerViewModel.plexRemoteSession.collectAsStateWithLifecycle()
     val plexConnectSession by playerViewModel.plexConnectSession.collectAsStateWithLifecycle()
+    val rokuDevices by playerViewModel.rokuDevices.collectAsStateWithLifecycle()
+    val activeRokuHost by playerViewModel.activeRokuHost.collectAsStateWithLifecycle()
+    val rokuConnecting by playerViewModel.rokuConnecting.collectAsStateWithLifecycle()
     val trackVolume by playerViewModel.trackVolume.collectAsStateWithLifecycle()
     val isPlaying = playerViewModel.stablePlayerState.collectAsStateWithLifecycle().value.isPlaying
     val context = LocalContext.current
@@ -217,10 +220,12 @@ fun CastBottomSheet(
             playerViewModel.refreshLocalConnectionInfo(refreshBluetoothDevices = true)
         }
         playerViewModel.loadPlexRemotePlayers()
+        playerViewModel.loadRokuDevices()
     }
 
     val activeRoute = selectedRoute?.takeUnless { it.isDefault }
     val isPlexRemote = plexRemoteDevice != null
+    val isRokuActive = activeRokuHost != null
     val connectSelfId = playerViewModel.plexConnectDeviceId
     val connectActiveDevice = plexConnectSession?.devices?.firstOrNull { it.isActive }
     val isConnectRemote = connectActiveDevice != null && connectActiveDevice.id != connectSelfId
@@ -295,8 +300,36 @@ fun CastBottomSheet(
             )
         }
 
-        // Plexamp / Plex Companion players on the account.
-        plexRemotePlayers.forEach { player ->
+        // Roku TVs (cast Plex to the Roku's Plex app via ECP + Companion).
+        rokuDevices.forEach { roku ->
+            val isActive = activeRokuHost == roku.host
+            add(
+                CastDeviceUi(
+                    id = "roku_${roku.host}",
+                    name = roku.name,
+                    deviceType = MediaRouter.RouteInfo.DEVICE_TYPE_TV,
+                    playbackType = MediaRouter.RouteInfo.PLAYBACK_TYPE_REMOTE,
+                    connectionState = if (isActive) {
+                        MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTED
+                    } else {
+                        MediaRouter.RouteInfo.CONNECTION_STATE_DISCONNECTED
+                    },
+                    volumeHandling = MediaRouter.RouteInfo.PLAYBACK_VOLUME_VARIABLE,
+                    volume = if (isActive) plexRemoteSession?.volume ?: 0 else 0,
+                    volumeMax = 100,
+                    isSelected = isActive
+                )
+            )
+        }
+
+        // Plexamp / Plex Companion players on the account. Skip any whose
+        // address is a discovered Roku — it's already listed above as a Roku.
+        val rokuHosts = rokuDevices.map { it.host }.toSet()
+        plexRemotePlayers
+            .filterNot { player ->
+                runCatching { java.net.URI(player.uri).host }.getOrNull() in rokuHosts
+            }
+            .forEach { player ->
             val isActivePlexDevice = plexRemoteDevice?.clientIdentifier == player.clientIdentifier
             add(
                 CastDeviceUi(
@@ -343,7 +376,23 @@ fun CastBottomSheet(
         }
     }
 
-    val activeDevice = if (isConnectRemote) {
+    val activeDevice = if (isRokuActive) {
+        // Roku playback runs over Plex Companion, so plexRemoteDevice is set.
+        val rokuName = rokuDevices.firstOrNull { it.host == activeRokuHost }?.name
+            ?: plexRemoteDevice?.name
+            ?: "Roku"
+        ActiveDeviceUi(
+            id = "roku_$activeRokuHost",
+            title = rokuName,
+            subtitle = stringResource(R.string.cast_roku_subtitle),
+            isRemote = true,
+            icon = Icons.Rounded.Tv,
+            isConnecting = rokuConnecting,
+            volume = (plexRemoteSession?.volume ?: 50).toFloat(),
+            volumeRange = 0f..100f,
+            connectionLabel = if (rokuConnecting) stringResource(R.string.cast_connecting) else stringResource(R.string.cast_connected)
+        )
+    } else if (isConnectRemote) {
         val device = checkNotNull(connectActiveDevice)
         ActiveDeviceUi(
             id = "connect_${device.id}",
@@ -457,6 +506,11 @@ fun CastBottomSheet(
                                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     context.startActivity(intent)
                                 }
+                                id.startsWith("roku_") -> {
+                                    val host = id.removePrefix("roku_")
+                                    rokuDevices.firstOrNull { it.host == host }
+                                        ?.let { playerViewModel.connectRoku(it) }
+                                }
                                 id.startsWith("connect_") -> {
                                     // Spotify-style transfer through the broker.
                                     playerViewModel.transferPlaybackTo(id.removePrefix("connect_"))
@@ -474,7 +528,9 @@ fun CastBottomSheet(
                             }
                         },
                         onDisconnect = {
-                            if (isConnectRemote) {
+                            if (isRokuActive) {
+                                playerViewModel.disconnectRoku()
+                            } else if (isConnectRemote) {
                                 playerViewModel.playConnectSessionHere()
                             } else if (isPlexRemote) {
                                 playerViewModel.disconnectPlexRemote()
@@ -505,7 +561,7 @@ fun CastBottomSheet(
                             playerViewModel.refreshCastRoutes()
                             playerViewModel.refreshLocalConnectionInfo(refreshBluetoothDevices = true)
                         },
-                        startWithControls = isRemoteSession || isPlexRemote || isConnectRemote
+                        startWithControls = isRemoteSession || isPlexRemote || isConnectRemote || isRokuActive
                     )
                 }
             }

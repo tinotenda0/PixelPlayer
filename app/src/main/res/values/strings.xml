@@ -9,6 +9,9 @@
       generated app id here — no other code change needed.
     -->
     <string name="cast_receiver_application_id" translatable="false"></string>
+    <string name="roku_needs_plex">Install the free Plex channel on your Roku to cast to it.</string>
+    <string name="roku_plex_not_found">Couldn\'t reach Plex on the Roku. Make sure it\'s installed and signed in to the same account.</string>
+    <string name="cast_roku_subtitle">Roku · via Plex</string>
     <string name="app_tagline">Music Player</string>
     <string name="app_name_change_title">App Name Change</string>
     <string name="app_name_change_message">We have changed our app\'s name from PixelPlay to PixelPlayer due to a trademark-related issue. Keep playing!</string>

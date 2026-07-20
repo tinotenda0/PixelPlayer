@@ -198,6 +198,7 @@ class PlayerViewModel @Inject constructor(
     private val castRouteStateHolder: CastRouteStateHolder,
     private val plexRemotePlaybackManager: com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager,
     private val plexConnectClient: com.theveloper.pixelplay.data.plex.connect.PlexConnectClient,
+    private val rokuEcpClient: com.theveloper.pixelplay.data.network.roku.RokuEcpClient,
     private val plexRepository: com.theveloper.pixelplay.data.plex.PlexRepository,
     private val queueStateHolder: QueueStateHolder,
     private val queueUndoStateHolder: QueueUndoStateHolder,
@@ -792,6 +793,102 @@ class PlayerViewModel @Inject constructor(
     fun setPlexRemoteVolume(volume: Int) {
         plexRemotePlaybackManager.setVolume(volume)
     }
+
+    // ─── Roku TV (cast Plex to the Roku's Plex app) ──────────────────────
+    // Roku doesn't support Google Cast; we launch the Plex channel on the TV
+    // via Roku ECP, then control it through Plex Companion like any player.
+
+    private val _rokuDevices =
+        MutableStateFlow<List<com.theveloper.pixelplay.data.network.roku.RokuDevice>>(emptyList())
+    val rokuDevices: StateFlow<List<com.theveloper.pixelplay.data.network.roku.RokuDevice>> =
+        _rokuDevices.asStateFlow()
+
+    private val _rokuConnecting = MutableStateFlow(false)
+    val rokuConnecting: StateFlow<Boolean> = _rokuConnecting.asStateFlow()
+
+    /** The Roku currently bound as the active Plex Companion output, if any. */
+    private val _activeRokuHost = MutableStateFlow<String?>(null)
+    val activeRokuHost: StateFlow<String?> = _activeRokuHost.asStateFlow()
+
+    fun loadRokuDevices() {
+        viewModelScope.launch {
+            _rokuDevices.value = rokuEcpClient.discover()
+        }
+    }
+
+    /**
+     * Cast to a Roku: launch Plex on the TV, wait for it to appear as a Plex
+     * Companion player, then bind it as the active output (transferring the
+     * current Plex queue + position). Playback then routes through the same
+     * Companion path used for Plexamp.
+     */
+    fun connectRoku(device: com.theveloper.pixelplay.data.network.roku.RokuDevice) {
+        if (!device.hasPlex) {
+            sendToast(context.getString(R.string.roku_needs_plex))
+            return
+        }
+        viewModelScope.launch {
+            _rokuConnecting.value = true
+            try {
+                if (castStateHolder.castSession.value != null) disconnect()
+                // If a Connect device is the active output, pull the session
+                // back here first so it doesn't take precedence over the Roku.
+                if (plexConnectClient.isRemoteActive) {
+                    plexConnectClient.transfer(plexConnectClient.deviceId)
+                }
+
+                rokuEcpClient.launchPlex(device)
+                val player = awaitRokuPlexPlayer(device.host)
+                if (player == null) {
+                    sendToast(context.getString(R.string.roku_plex_not_found))
+                    return@launch
+                }
+
+                val currentSong = playbackStateHolder.stablePlayerState.value.currentSong
+                val currentPosition = playbackStateHolder.currentPosition.value
+                val queue = playerUiState.value.currentPlaybackQueue.toList()
+
+                mediaController?.pause()
+                plexRemotePlaybackManager.connect(player)
+                _activeRokuHost.value = device.host
+
+                if (currentSong?.plexId != null && queue.isNotEmpty()) {
+                    plexRemotePlaybackManager.playQueue(
+                        songs = queue,
+                        startSong = currentSong,
+                        startPositionMs = currentPosition
+                    )
+                }
+            } finally {
+                _rokuConnecting.value = false
+            }
+        }
+    }
+
+    fun disconnectRoku() {
+        _activeRokuHost.value = null
+        disconnectPlexRemote()
+    }
+
+    /** Poll plex.tv until the Roku's Plex app registers as a Companion player. */
+    private suspend fun awaitRokuPlexPlayer(
+        host: String
+    ): com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice? {
+        repeat(12) { // ~18s at 1.5s cadence — a cold Plex channel launch is slow
+            val players = plexRepository.getRemotePlayers().getOrDefault(emptyList())
+            players.firstOrNull { hostOf(it.uri) == host }?.let { return it }
+            // Fallback: a Roku-branded player that appeared after we launched it.
+            players.firstOrNull {
+                it.product.contains("roku", ignoreCase = true) ||
+                    it.name.contains("roku", ignoreCase = true)
+            }?.let { return it }
+            delay(1500)
+        }
+        return null
+    }
+
+    private fun hostOf(uri: String): String? =
+        runCatching { java.net.URI(uri).host }.getOrNull()
 
     // ─── PixelPlayer Connect (broker sessions across devices) ────────────
 
