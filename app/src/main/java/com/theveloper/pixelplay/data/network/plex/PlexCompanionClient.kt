@@ -210,7 +210,8 @@ class PlexCompanionClient @Inject constructor(
                     ratingKey = parser.getAttributeValue(null, "ratingKey")?.takeIf { it.isNotBlank() },
                     machineIdentifier = parser.getAttributeValue(null, "machineIdentifier")
                         ?.takeIf { it.isNotBlank() },
-                    volume = parser.getAttributeValue(null, "volume")?.toIntOrNull()
+                    volume = parser.getAttributeValue(null, "volume")?.toIntOrNull(),
+                    playQueueId = parser.getAttributeValue(null, "playQueueID")?.toLongOrNull()
                 )
             }
             event = parser.next()

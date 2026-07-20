@@ -76,7 +76,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -182,7 +184,9 @@ fun CastBottomSheet(
     val plexRemoteDevice by playerViewModel.plexRemoteDevice.collectAsStateWithLifecycle()
     val plexRemoteSession by playerViewModel.plexRemoteSession.collectAsStateWithLifecycle()
     val plexConnectSession by playerViewModel.plexConnectSession.collectAsStateWithLifecycle()
+    val plexNowPlaying by playerViewModel.plexNowPlaying.collectAsStateWithLifecycle()
     val rokuDevices by playerViewModel.rokuDevices.collectAsStateWithLifecycle()
+    var plexChoiceDevice by remember { mutableStateOf<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice?>(null) }
     val activeRokuHost by playerViewModel.activeRokuHost.collectAsStateWithLifecycle()
     val rokuConnecting by playerViewModel.rokuConnecting.collectAsStateWithLifecycle()
     val trackVolume by playerViewModel.trackVolume.collectAsStateWithLifecycle()
@@ -345,7 +349,8 @@ fun CastBottomSheet(
                     volumeHandling = MediaRouter.RouteInfo.PLAYBACK_VOLUME_VARIABLE,
                     volume = if (isActivePlexDevice) plexRemoteSession?.volume ?: 0 else 0,
                     volumeMax = 100,
-                    isSelected = isActivePlexDevice
+                    isSelected = isActivePlexDevice,
+                    nowPlayingTitle = plexNowPlaying[player.clientIdentifier]
                 )
             )
         }
@@ -473,6 +478,31 @@ fun CastBottomSheet(
         onDispose { onExpansionChanged(0f) }
     }
 
+    plexChoiceDevice?.let { device ->
+        val nowPlaying = plexNowPlaying[device.clientIdentifier]
+        AlertDialog(
+            onDismissRequest = { plexChoiceDevice = null },
+            title = { Text(device.name) },
+            text = {
+                Text(
+                    if (nowPlaying != null) "Playing: $nowPlaying" else "Choose how to connect."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    playerViewModel.joinPlexRemote(device)
+                    plexChoiceDevice = null
+                }) { Text("Join — control what's playing") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    playerViewModel.castToPlexRemote(device)
+                    plexChoiceDevice = null
+                }) { Text("Cast — play my queue") }
+            }
+        )
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -518,7 +548,16 @@ fun CastBottomSheet(
                                 id.startsWith("plex_") -> {
                                     plexRemotePlayers
                                         .firstOrNull { "plex_${it.clientIdentifier}" == id }
-                                        ?.let { playerViewModel.connectPlexRemote(it) }
+                                        ?.let { player ->
+                                            // If the device is already playing, let the
+                                            // user choose Join (control it) vs Cast
+                                            // (replace it); otherwise only Cast makes sense.
+                                            if (plexNowPlaying.containsKey(player.clientIdentifier)) {
+                                                plexChoiceDevice = player
+                                            } else {
+                                                playerViewModel.castToPlexRemote(player)
+                                            }
+                                        }
                                 }
                                 else -> routes.firstOrNull { it.id == id }?.let {
                                     // Cast and Plex remote sessions are mutually exclusive.
@@ -580,7 +619,9 @@ private data class CastDeviceUi(
     val volumeMax: Int,
     val isSelected: Boolean,
     val batteryPercent: Int? = null,
-    val isBluetooth: Boolean = false
+    val isBluetooth: Boolean = false,
+    /** Title the (Plex) device is currently playing, shown under its name. */
+    val nowPlayingTitle: String? = null
 )
 
 private data class ActiveDeviceUi(
@@ -1782,6 +1823,17 @@ private fun CastDeviceRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                device.nowPlayingTitle?.let { nowPlaying ->
+                    Text(
+                        text = "♪ $nowPlaying",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = onContainer.copy(alpha = 0.75f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 

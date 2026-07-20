@@ -106,6 +106,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -745,24 +747,44 @@ class PlayerViewModel @Inject constructor(
     val plexRemotePlayers: StateFlow<List<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice>> =
         _plexRemotePlayers.asStateFlow()
 
+    /** clientIdentifier → title the device is currently playing (picker decoration). */
+    private val _plexNowPlaying = MutableStateFlow<Map<String, String>>(emptyMap())
+    val plexNowPlaying: StateFlow<Map<String, String>> = _plexNowPlaying.asStateFlow()
+
     fun loadPlexRemotePlayers() {
         viewModelScope.launch {
             plexRepository.getRemotePlayers().onSuccess { players ->
                 _plexRemotePlayers.value = players
+                loadPlexNowPlaying(players)
             }
         }
     }
 
-    /**
-     * Make a Plexamp/Companion player the active output. Pauses local
-     * playback and, when the current song lives on the Plex server, transfers
-     * the queue and position over — like moving a session between Plexamps.
-     */
-    fun connectPlexRemote(device: com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice) {
-        // Never run two remote sessions at once.
-        if (castStateHolder.castSession.value != null) {
-            disconnect()
+    /** One-shot: what each reachable Plex device is currently playing. */
+    private fun loadPlexNowPlaying(
+        players: List<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice>
+    ) {
+        viewModelScope.launch {
+            val titles = players.map { device ->
+                async {
+                    val timeline = plexRepository.getRemoteTimeline(device).getOrNull()
+                    val ratingKey = timeline?.ratingKey?.takeIf {
+                        timeline.state != "stopped"
+                    }
+                    val title = ratingKey?.let { plexRepository.getSongByRatingKey(it)?.title }
+                    device.clientIdentifier to title
+                }
+            }.awaitAll().mapNotNull { (id, title) -> title?.let { id to it } }.toMap()
+            _plexNowPlaying.value = titles
         }
+    }
+
+    /**
+     * CAST: make a Plex/Companion player the active output and replace what it
+     * is playing with the phone's current queue (transfers song + position).
+     */
+    fun castToPlexRemote(device: com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice) {
+        if (castStateHolder.castSession.value != null) disconnect()
 
         val currentSong = playbackStateHolder.stablePlayerState.value.currentSong
         val currentPosition = playbackStateHolder.currentPosition.value
@@ -781,6 +803,22 @@ class PlayerViewModel @Inject constructor(
             }
         }
     }
+
+    /**
+     * JOIN: attach to the device's EXISTING playback and use the phone purely
+     * as a remote — do not replace what it is playing. The manager mirrors the
+     * device's song/position/queue; transport controls route to it.
+     */
+    fun joinPlexRemote(device: com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice) {
+        if (castStateHolder.castSession.value != null) disconnect()
+        mediaController?.pause()
+        plexRemotePlaybackManager.connect(device)
+        // No playQueue() — the manager's poll loads the device's current queue.
+    }
+
+    /** Back-compat: default connect action is Cast (replace). */
+    fun connectPlexRemote(device: com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice) =
+        castToPlexRemote(device)
 
     fun disconnectPlexRemote() {
         plexRemotePlaybackManager.disconnect()

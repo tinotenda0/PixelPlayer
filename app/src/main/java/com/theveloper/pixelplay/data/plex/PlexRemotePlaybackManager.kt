@@ -30,7 +30,8 @@ class PlexRemotePlaybackManager @Inject constructor(
         val positionMs: Long,
         val durationMs: Long,
         val ratingKey: String?,
-        val volume: Int?
+        val volume: Int?,
+        val playQueueId: Long? = null
     )
 
     companion object {
@@ -55,13 +56,24 @@ class PlexRemotePlaybackManager @Inject constructor(
     var remoteQueue: List<Song> = emptyList()
         private set
 
+    // The device play queue whose songs are currently loaded into remoteQueue,
+    // so we only re-fetch when the device actually switches queue.
+    @Volatile
+    private var loadedPlayQueueId: Long? = null
+
     val isActive: Boolean
         get() = _activeDevice.value != null
 
+    /**
+     * Start observing [device]. In join mode the caller does NOT push a queue,
+     * so the phone just mirrors and remote-controls the device's existing
+     * playback; in cast mode the caller follows with [playQueue].
+     */
     fun connect(device: PlexPlayerDevice) {
         Timber.tag(TAG).i("Connecting to remote player ${device.name}")
         _activeDevice.value = device
         _session.value = null
+        loadedPlayQueueId = null
         startPolling(device)
     }
 
@@ -73,6 +85,7 @@ class PlexRemotePlaybackManager @Inject constructor(
         _activeDevice.value = null
         _session.value = null
         remoteQueue = emptyList()
+        loadedPlayQueueId = null
     }
 
     /**
@@ -193,8 +206,20 @@ class PlexRemotePlaybackManager @Inject constructor(
                             positionMs = timeline.timeMs,
                             durationMs = timeline.durationMs,
                             ratingKey = timeline.ratingKey,
-                            volume = timeline.volume ?: _session.value?.volume
+                            volume = timeline.volume ?: _session.value?.volume,
+                            playQueueId = timeline.playQueueId ?: _session.value?.playQueueId
                         )
+                        // Keep remoteQueue in sync with whatever queue the device
+                        // is actually playing — essential for join mode (we didn't
+                        // push it) and keeps track resolution accurate in cast mode.
+                        val pqId = timeline.playQueueId
+                        if (pqId != null && pqId != loadedPlayQueueId) {
+                            loadedPlayQueueId = pqId
+                            val songs = repository.getPlayQueueSongs(pqId)
+                            if (songs.isNotEmpty() && _activeDevice.value == device) {
+                                remoteQueue = songs
+                            }
+                        }
                     }
                 }
                 delay(POLL_INTERVAL_MS)

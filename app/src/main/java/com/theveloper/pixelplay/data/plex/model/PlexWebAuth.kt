@@ -41,7 +41,9 @@ data class PlexRemoteTimeline(
     val durationMs: Long,
     val ratingKey: String?,
     val machineIdentifier: String?,
-    val volume: Int?            // 0-100 when reported
+    val volume: Int?,           // 0-100 when reported
+    /** The device's current server play queue id, if it has one. */
+    val playQueueId: Long? = null
 )
 
 /** A signed-in Plex identity bound to one server. */
