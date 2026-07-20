@@ -819,7 +819,8 @@ class PlexRepository @Inject constructor(
 
         val playQueueId = api.createPlayQueue(
             metadataIds = ratingKeys.joinToString(","),
-            machineIdentifier = machineId
+            machineIdentifier = machineId,
+            startRatingKey = startRatingKey
         ).getOrElse {
             return Result.failure(it)
         }

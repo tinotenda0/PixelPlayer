@@ -335,18 +335,28 @@ class PlexApiService @Inject constructor(
      * pointed at it via Companion playMedia. [metadataIds] is one ratingKey or
      * a comma-separated list (queue order).
      */
-    suspend fun createPlayQueue(metadataIds: String, machineIdentifier: String): Result<Long> {
+    suspend fun createPlayQueue(
+        metadataIds: String,
+        machineIdentifier: String,
+        startRatingKey: String? = null
+    ): Result<Long> {
         return withContext(Dispatchers.IO) {
             try {
                 val cred = credentials ?: throw IllegalStateException("No credentials configured")
                 val uri = "server://$machineIdentifier/com.plexapp.plugins.library/library/metadata/$metadataIds"
-                val url = "${cred.normalizedServerUrl}/playQueues".toHttpUrl().newBuilder()
+                val urlBuilder = "${cred.normalizedServerUrl}/playQueues".toHttpUrl().newBuilder()
                     .addQueryParameter("type", "audio")
                     .addQueryParameter("uri", uri)
                     .addQueryParameter("shuffle", "0")
                     .addQueryParameter("repeat", "0")
                     .addQueryParameter("continuous", "0")
-                    .build()
+                // Without `key`, the server sets the queue's selected item to the
+                // FIRST track, and Companion players (Plexamp/Roku) start there —
+                // ignoring playMedia's key. Naming the start item fixes that.
+                if (startRatingKey != null) {
+                    urlBuilder.addQueryParameter("key", "/library/metadata/$startRatingKey")
+                }
+                val url = urlBuilder.build()
 
                 val request = Request.Builder()
                     .url(url)

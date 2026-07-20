@@ -1145,12 +1145,23 @@ fun SearchResultsList(
         }
     }
 
-    val sectionOrder = listOf(
-        SearchFilterType.SONGS,
-        SearchFilterType.ALBUMS,
-        SearchFilterType.ARTISTS,
-        SearchFilterType.PLAYLISTS
-    )
+    // Order sections by the rank of their best (earliest) member so the
+    // relevance ranking survives grouping: when an artist ranks #1 (e.g.
+    // "daft" → Daft Punk), the Artists section renders above Songs instead
+    // of always being pinned below it.
+    val sectionOrder = remember(results) {
+        val firstIndexByType = LinkedHashMap<SearchFilterType, Int>()
+        results.forEachIndexed { index, item ->
+            val type = when (item) {
+                is SearchResultItem.SongItem -> SearchFilterType.SONGS
+                is SearchResultItem.AlbumItem -> SearchFilterType.ALBUMS
+                is SearchResultItem.ArtistItem -> SearchFilterType.ARTISTS
+                is SearchResultItem.PlaylistItem -> SearchFilterType.PLAYLISTS
+            }
+            firstIndexByType.putIfAbsent(type, index)
+        }
+        firstIndexByType.entries.sortedBy { it.value }.map { it.key }
+    }
 
     val imePadding = WindowInsets.ime.getBottom(localDensity).dp
     val systemBarPaddingBottom = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() + 94.dp

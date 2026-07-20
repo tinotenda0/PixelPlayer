@@ -1088,9 +1088,12 @@ interface MusicDao {
         }
 
         val despaced = query.lowercase().filterNot { it == ' ' || it == '\'' }
-        // Only run the extra scan when it can find something the LIKE can't
-        // (i.e. the query actually had spaces/apostrophes to strip).
-        val needsDespaced = despaced.isNotEmpty() && despaced != query.trim().lowercase()
+        // Run the space/punctuation-insensitive scan whenever the query has
+        // letters/digits. It matches the query (stripped) against titles that
+        // are ALSO stripped, so "lowkey" finds "Low Key" — the query itself has
+        // no space to strip; the target does. (A guard keyed on the query
+        // having spaces would skip exactly this case.)
+        val needsDespaced = despaced.isNotEmpty()
 
         fun merge(vararg lists: List<SongEntity>): List<SongEntity> {
             val seen = LinkedHashMap<Long, SongEntity>()

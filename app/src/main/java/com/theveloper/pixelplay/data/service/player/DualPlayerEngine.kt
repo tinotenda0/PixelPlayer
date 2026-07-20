@@ -1201,6 +1201,13 @@ class DualPlayerEngine @Inject constructor(
                         TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED
                     }
                 )
+                // Require gapless-capable offload. Without this, some HALs
+                // (e.g. Pixel 7 / Tensor) stay offloaded but drop audio on the
+                // gapless hand-off to the next track in the same player — the
+                // UI shows the next song "playing" in dead silence. Requiring
+                // gapless support makes ExoPlayer fall back to the normal
+                // renderer on those devices while keeping offload where it works.
+                .setIsGaplessSupportRequired(true)
                 .build()
             trackSelectionParameters = trackSelectionParameters.buildUpon()
                 .setAudioOffloadPreferences(offloadPreferences)

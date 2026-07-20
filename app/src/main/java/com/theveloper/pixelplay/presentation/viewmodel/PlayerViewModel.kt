@@ -930,6 +930,7 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             plexRemotePlaybackManager.session.collect { snapshot ->
                 if (plexRemotePlaybackManager.activeDevice.value == null || snapshot == null) {
+                    lastRemoteLyricsSongId = null
                     return@collect
                 }
                 val song = plexRemotePlaybackManager.resolveSongForRatingKey(snapshot.ratingKey)
@@ -943,9 +944,24 @@ class PlayerViewModel @Inject constructor(
                     )
                 }
                 playbackStateHolder.setCurrentPosition(snapshot.positionMs)
+
+                // The MediaController transition listener that loads lyrics for local
+                // playback (MediaControllerSyncStateHolder.onMediaItemTransition) is
+                // bypassed while a remote session controls playback, so the remote
+                // mirror must load lyrics itself as the remote queue advances —
+                // otherwise every song after the first keeps the first song's lyrics.
+                if (song != null && song.id != lastRemoteLyricsSongId) {
+                    lastRemoteLyricsSongId = song.id
+                    lyricsStateHolder.loadLyricsForSong(song, lyricsSourcePreference.value)
+                }
             }
         }
     }
+
+    // Tracks the song whose lyrics were last loaded for the Plex remote mirror,
+    // so each queue advance re-triggers a load exactly once. Reset when the
+    // remote session ends so a later reconnect reloads correctly.
+    private var lastRemoteLyricsSongId: String? = null
 
     val castRoutes: StateFlow<List<MediaRouter.RouteInfo>> = castStateHolder.castRoutes
     val selectedRoute: StateFlow<MediaRouter.RouteInfo?> = castStateHolder.selectedRoute
