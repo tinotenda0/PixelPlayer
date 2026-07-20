@@ -99,7 +99,8 @@ class MusicRepositoryImpl @Inject constructor(
     private val songRepository: SongRepository,
     private val favoritesDao: FavoritesDao,
     private val artistImageRepository: ArtistImageRepository,
-    private val folderTreeBuilder: FolderTreeBuilder
+    private val folderTreeBuilder: FolderTreeBuilder,
+    private val engagementDao: com.theveloper.pixelplay.data.database.EngagementDao
 ) : MusicRepository {
 
     companion object {
@@ -642,6 +643,20 @@ class MusicRepositoryImpl @Inject constructor(
                 SearchFilterType.PLAYLISTS -> playlistsFlow.map { playlists -> playlists.map { SearchResultItem.PlaylistItem(it) } }
             }
         }.flowOn(Dispatchers.Default)
+    }
+
+    override suspend fun getSearchPlayStats(
+        songIds: List<String>
+    ): Map<String, com.theveloper.pixelplay.data.search.SearchRanker.PlayStat> {
+        if (songIds.isEmpty()) return emptyMap()
+        return withContext(Dispatchers.IO) {
+            engagementDao.getEngagementsForIds(songIds).associate { e ->
+                e.songId to com.theveloper.pixelplay.data.search.SearchRanker.PlayStat(
+                    playCount = e.playCount,
+                    lastPlayedTimestamp = e.lastPlayedTimestamp
+                )
+            }
+        }
     }
 
     override suspend fun addSearchHistoryItem(query: String) {

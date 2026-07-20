@@ -241,6 +241,9 @@ interface MusicRepository {
     suspend fun searchPlaylists(query: String): List<Playlist> // Mantener suspend, ya que no hay Flow aún
     fun searchAll(query: String, filterType: SearchFilterType): Flow<List<SearchResultItem>>
 
+    /** Play counts + last-played for the given song ids, for search ranking. */
+    suspend fun getSearchPlayStats(songIds: List<String>): Map<String, com.theveloper.pixelplay.data.search.SearchRanker.PlayStat>
+
     // Search History
     suspend fun addSearchHistoryItem(query: String)
     suspend fun getRecentSearchHistory(limit: Int): List<SearchHistoryItem>

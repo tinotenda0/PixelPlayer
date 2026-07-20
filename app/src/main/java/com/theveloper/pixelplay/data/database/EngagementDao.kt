@@ -23,6 +23,9 @@ interface EngagementDao {
     @Query("SELECT * FROM song_engagements WHERE song_id = :songId")
     suspend fun getEngagement(songId: String): SongEngagementEntity?
 
+    @Query("SELECT * FROM song_engagements WHERE song_id IN (:songIds)")
+    suspend fun getEngagementsForIds(songIds: List<String>): List<SongEngagementEntity>
+
     @Query("SELECT * FROM song_engagements")
     suspend fun getAllEngagements(): List<SongEngagementEntity>
 

@@ -1035,6 +1035,29 @@ interface MusicDao {
         limit: Int
     ): Flow<List<SongEntity>>
 
+    /**
+     * Space/punctuation-insensitive fallback so "lowkey" finds "Low Key" and
+     * "acdc" finds "AC/DC". Compares the query stripped of spaces/apostrophes
+     * against the title (and artist, unless titleOnly) similarly stripped.
+     */
+    @Query("""
+        SELECT * FROM songs
+        WHERE (:applyDirectoryFilter = 0 OR id < 0 OR parent_directory_path IN (:allowedParentDirs))
+        AND (
+            REPLACE(REPLACE(LOWER(title), ' ', ''), '''', '') LIKE '%' || :despaced || '%'
+            OR (:titleOnly = 0 AND REPLACE(REPLACE(LOWER(artist_name), ' ', ''), '''', '') LIKE '%' || :despaced || '%')
+        )
+        ORDER BY title ASC
+        LIMIT :limit
+    """)
+    fun searchSongsLimitedDespaced(
+        despaced: String,
+        titleOnly: Boolean,
+        allowedParentDirs: List<String>,
+        applyDirectoryFilter: Boolean,
+        limit: Int
+    ): Flow<List<SongEntity>>
+
     fun searchSongsLimited(
         query: String,
         allowedParentDirs: List<String>,
@@ -1063,11 +1086,29 @@ interface MusicDao {
                 limit = limit
             )
         }
-        return ftsFlow.combine(likeFlow) { ftsResults, likeResults ->
-            val seen = LinkedHashMap<Long, SongEntity>(ftsResults.size + likeResults.size)
-            ftsResults.forEach { seen.putIfAbsent(it.id, it) }
-            likeResults.forEach { seen.putIfAbsent(it.id, it) }
-            seen.values.toList().take(limit)
+
+        val despaced = query.lowercase().filterNot { it == ' ' || it == '\'' }
+        // Only run the extra scan when it can find something the LIKE can't
+        // (i.e. the query actually had spaces/apostrophes to strip).
+        val needsDespaced = despaced.isNotEmpty() && despaced != query.trim().lowercase()
+
+        fun merge(vararg lists: List<SongEntity>): List<SongEntity> {
+            val seen = LinkedHashMap<Long, SongEntity>()
+            lists.forEach { list -> list.forEach { seen.putIfAbsent(it.id, it) } }
+            return seen.values.toList().take(limit)
+        }
+
+        return if (needsDespaced) {
+            val despacedFlow = searchSongsLimitedDespaced(
+                despaced = despaced,
+                titleOnly = titleOnly,
+                allowedParentDirs = allowedParentDirs,
+                applyDirectoryFilter = applyDirectoryFilter,
+                limit = limit
+            )
+            combine(ftsFlow, likeFlow, despacedFlow) { fts, like, dsp -> merge(fts, like, dsp) }
+        } else {
+            ftsFlow.combine(likeFlow) { fts, like -> merge(fts, like) }
         }
     }
 

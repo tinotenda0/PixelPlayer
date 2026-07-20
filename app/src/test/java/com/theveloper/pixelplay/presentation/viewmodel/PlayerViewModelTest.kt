@@ -81,6 +81,10 @@ class PlayerViewModelTest {
     private val mockLyricsStateHolder: LyricsStateHolder = mockk(relaxed = true)
     private val mockCastStateHolder: CastStateHolder = mockk(relaxed = true)
     private val mockCastRouteStateHolder: CastRouteStateHolder = mockk(relaxed = true)
+    private val mockPlexRemotePlaybackManager: com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager = mockk(relaxed = true)
+    private val mockPlexConnectClient: com.theveloper.pixelplay.data.plex.connect.PlexConnectClient = mockk(relaxed = true)
+    private val mockRokuEcpClient: com.theveloper.pixelplay.data.network.roku.RokuEcpClient = mockk(relaxed = true)
+    private val mockPlexRepository: com.theveloper.pixelplay.data.plex.PlexRepository = mockk(relaxed = true)
     private val mockQueueStateHolder: QueueStateHolder = mockk(relaxed = true)
     private val mockQueueUndoStateHolder: QueueUndoStateHolder = mockk(relaxed = true)
     private val mockPlaylistDismissUndoStateHolder: PlaylistDismissUndoStateHolder = mockk(relaxed = true)
@@ -186,6 +190,11 @@ class PlayerViewModelTest {
         every { mockCastStateHolder.startDiscovery() } just runs // Added missing mock
         every { mockCastStateHolder.selectedRoute } returns MutableStateFlow<androidx.mediarouter.media.MediaRouter.RouteInfo?>(null) // Added missing mock
 
+        // Plex remote / Connect / Roku flows collected by the ViewModel init.
+        every { mockPlexRemotePlaybackManager.activeDevice } returns MutableStateFlow<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice?>(null)
+        every { mockPlexRemotePlaybackManager.session } returns MutableStateFlow<com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager.Snapshot?>(null)
+        every { mockPlexConnectClient.session } returns MutableStateFlow<com.theveloper.pixelplay.data.plex.connect.PlexConnectClient.ConnectSession?>(null)
+
         // Connectivity mocks removed as properties differ from expectations
         every { mockConnectivityStateHolder.initialize() } just runs
         every { mockConnectivityStateHolder.offlinePlaybackBlocked } returns MutableSharedFlow()
@@ -261,6 +270,8 @@ class PlayerViewModelTest {
             mockLibraryStateHolder,
             mockCastStateHolder,
             mockCastTransferStateHolder,
+            mockPlexRemotePlaybackManager,
+            mockPlexConnectClient,
             mockConnectivityStateHolder,
             mockThemeStateHolder,
             mockContext
@@ -275,6 +286,8 @@ class PlayerViewModelTest {
             mockPlaybackStateHolder,
             mockLibraryStateHolder,
             mockCastStateHolder,
+            mockPlexRemotePlaybackManager,
+            mockPlexConnectClient,
             mockConnectivityStateHolder,
             mockThemeStateHolder,
             mockLyricsStateHolder,
@@ -296,6 +309,10 @@ class PlayerViewModelTest {
             mockLyricsStateHolder,
             mockCastStateHolder,
             mockCastRouteStateHolder,
+            mockPlexRemotePlaybackManager,
+            mockPlexConnectClient,
+            mockRokuEcpClient,
+            mockPlexRepository,
             mockQueueStateHolder,
             mockQueueUndoStateHolder,
             mockPlaylistDismissUndoStateHolder,

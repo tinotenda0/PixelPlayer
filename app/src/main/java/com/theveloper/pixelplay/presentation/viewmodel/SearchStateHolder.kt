@@ -4,6 +4,7 @@ import com.theveloper.pixelplay.data.model.SearchFilterType
 import com.theveloper.pixelplay.data.model.SearchHistoryItem
 import com.theveloper.pixelplay.data.model.SearchResultItem
 import com.theveloper.pixelplay.data.repository.MusicRepository
+import com.theveloper.pixelplay.data.search.SearchRanker
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -93,23 +94,25 @@ class SearchStateHolder @Inject constructor(
                     try {
                         val currentFilter = _selectedSearchFilter.value
                         musicRepository.searchAll(normalizedQuery, currentFilter).collect { resultsList ->
-                            // Sort: prioritize Song/Album matches over Artist/Playlist matches
-                            val sortedResults = resultsList.sortedWith(
-                                compareBy { result ->
-                                    when (result) {
-                                        is SearchResultItem.SongItem -> 0
-                                        is SearchResultItem.AlbumItem -> 1
-                                        is SearchResultItem.ArtistItem -> 2
-                                        is SearchResultItem.PlaylistItem -> 3
-                                    }
-                                }
-                            )
+                            // Relevance ranking: entities whose own name matches beat
+                            // incidental matches (artist "Daft Punk" over a song merely
+                            // by Daft Punk), played songs rank first among equal matches,
+                            // and spacing/typos are tolerated. See SearchRanker.
+                            val songIds = resultsList.mapNotNull {
+                                (it as? SearchResultItem.SongItem)?.song?.id
+                            }
+                            val playStats = if (songIds.isEmpty()) {
+                                emptyMap()
+                            } else {
+                                musicRepository.getSearchPlayStats(songIds)
+                            }
+                            val ranked = SearchRanker.rank(normalizedQuery, resultsList, playStats)
 
                             if (request.requestId != latestSearchRequestId.get()) {
                                 return@collect
                             }
 
-                            val immutableResults = sortedResults.toImmutableList()
+                            val immutableResults = ranked.toImmutableList()
                             if (_searchResults.value != immutableResults) {
                                 _searchResults.value = immutableResults
                             }
