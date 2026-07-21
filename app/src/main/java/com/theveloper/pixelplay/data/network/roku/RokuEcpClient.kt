@@ -136,8 +136,17 @@ class RokuEcpClient @Inject constructor(
             ?: firstXmlValue(info, "default-device-name")
             ?: firstXmlValue(info, "model-name")
             ?: "Roku"
-        val hasPlex = getText("http://$host:8060/query/apps")
-            ?.contains("id=\"$PLEX_CHANNEL_ID\"") == true
+        // Detect the Plex channel generously: by the store id OR by name (ids
+        // can differ by region/build), and if the apps query fails entirely,
+        // assume installed — the launch attempt is the real test, and a false
+        // "install Plex" refusal on a TV that has it is far worse.
+        val apps = getText("http://$host:8060/query/apps")
+        val hasPlex = when {
+            apps == null -> true
+            apps.contains("id=\"$PLEX_CHANNEL_ID\"") -> true
+            else -> Regex("<app[^>]*>[^<]*plex[^<]*</app>", RegexOption.IGNORE_CASE)
+                .containsMatchIn(apps)
+        }
         return RokuDevice(name = name.trim(), host = host, hasPlex = hasPlex)
     }
 

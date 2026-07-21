@@ -116,7 +116,8 @@ class LyricsRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val lrcLibApiService: LrcLibApiService,
     private val lyricsDao: com.theveloper.pixelplay.data.database.LyricsDao,
-    private val okHttpClient: OkHttpClient
+    private val okHttpClient: OkHttpClient,
+    private val neteaseRepositoryProvider: dagger.Lazy<com.theveloper.pixelplay.data.netease.NeteaseRepository>
 ) : LyricsRepository {
 
 
@@ -482,6 +483,71 @@ class LyricsRepositoryImpl @Inject constructor(
             return@withContext cachedJson
         }
 
+        // Race the (slow — often 6-12s) LRCLIB lookup against NetEase's lyric
+        // API (typically <1s). First VALID result wins; the loser is cancelled.
+        return@withContext coroutineScope {
+            val lrclib = async { fetchFromLrcLib(song) }
+            val netease = async { fetchFromNeteaseSearch(song) }
+            // Track WHICH deferred won — deciding by isCompleted races when
+            // both finish close together and can return the loser's null
+            // while discarding the winner's valid lyrics.
+            val (firstResult, winner) = kotlinx.coroutines.selects.select<Pair<Lyrics?, kotlinx.coroutines.Deferred<Lyrics?>>> {
+                lrclib.onAwait { it to lrclib }
+                netease.onAwait { it to netease }
+            }
+            val other = if (winner === lrclib) netease else lrclib
+            if (firstResult != null && firstResult.isValid()) {
+                other.cancel()
+                firstResult
+            } else {
+                // The first finisher had nothing — wait for the other.
+                other.await()
+            }
+        }
+    }
+
+    /**
+     * NetEase lyric lookup: direct by id for NetEase tracks, otherwise search
+     * by "artist title" and accept a candidate whose title matches and whose
+     * duration is within 10s — a strong-enough signal to avoid wrong lyrics.
+     */
+    private suspend fun fetchFromNeteaseSearch(song: Song): Lyrics? {
+        return try {
+            val netease = neteaseRepositoryProvider.get()
+            val songId = song.neteaseId ?: run {
+                val query = "${song.displayArtist} ${song.title}".trim()
+                val candidates = netease.searchOnline(query, limit = 5).getOrNull() ?: return null
+                fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+                val targetTitle = norm(song.title)
+                // A degenerate title ("?", "!!!") matches everything — bail.
+                if (targetTitle.isEmpty()) return null
+                val targetArtist = norm(song.primaryArtist.name)
+                candidates.firstOrNull { c ->
+                    val ct = norm(c.title)
+                    val exactTitle = ct == targetTitle
+                    val partialTitle = !exactTitle &&
+                        (ct.contains(targetTitle) || targetTitle.contains(ct))
+                    // Only trust the duration check when BOTH sides know it.
+                    val durKnown = song.duration > 0L && c.duration > 0L
+                    val durOk = durKnown && kotlin.math.abs(c.duration - song.duration) <= 10_000
+                    val artistOk = targetArtist.isNotEmpty() &&
+                        (norm(c.displayArtist).contains(targetArtist) ||
+                            targetArtist.contains(norm(c.artist)))
+                    // Exact title needs one corroborating signal; a partial
+                    // title match needs both — wrong lyrics are worse than none.
+                    (exactTitle && (durOk || artistOk)) || (partialTitle && durOk && artistOk)
+                }?.neteaseId ?: return null
+            }
+            val lrc = netease.getLyrics(songId).getOrNull() ?: return null
+            val parsed = LyricsUtils.parseLyrics(lrc).copy(areFromRemote = true)
+            parsed.takeIf { it.isValid() }
+        } catch (e: Exception) {
+            Log.d(TAG, "NetEase lyrics lookup failed: ${e.message}")
+            null
+        }
+    }
+
+    private suspend fun fetchFromLrcLib(song: Song): Lyrics? = withContext(Dispatchers.IO) {
         // Apply rate limiting
         val currentTime = System.currentTimeMillis()
         val delayNeeded = calculateApiDelay("lrclib", currentTime)

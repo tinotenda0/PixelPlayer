@@ -21,6 +21,7 @@ data class PlayerUiState(
     // val albums: ImmutableList<Album> = persistentListOf(), // REMOVED
     // val artists: ImmutableList<Artist> = persistentListOf(), // REMOVED
     val searchResults: ImmutableList<SearchResultItem> = persistentListOf(),
+    val isLiveSearching: Boolean = false,
     val musicFolders: ImmutableList<MusicFolder> = persistentListOf(),
     val showAiPlaylistSheet: Boolean = false,
     val isGeneratingAiPlaylist: Boolean = false,

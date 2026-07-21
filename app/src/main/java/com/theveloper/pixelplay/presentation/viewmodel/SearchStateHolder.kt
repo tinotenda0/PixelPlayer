@@ -80,6 +80,10 @@ class SearchStateHolder @Inject constructor(
     private val _searchHistory = MutableStateFlow<ImmutableList<SearchHistoryItem>>(persistentListOf())
     val searchHistory = _searchHistory.asStateFlow()
 
+    /** True while the live gateway (on-demand YouTube) search is in flight. */
+    private val _isLiveSearching = MutableStateFlow(false)
+    val isLiveSearching = _isLiveSearching.asStateFlow()
+
     private val searchRequests = MutableSharedFlow<SearchRequest>(
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -123,11 +127,16 @@ class SearchStateHolder @Inject constructor(
                         // they arrive. Failures (not logged in, offline) → empty.
                         val liveSongsFlow = flow {
                             emit(emptyList<com.theveloper.pixelplay.data.model.Song>())
-                            val live = runCatching {
-                                navidromeRepository.searchSongs(normalizedQuery, limit = 40)
-                                    .getOrDefault(emptyList())
-                            }.getOrDefault(emptyList())
-                            if (live.isNotEmpty()) emit(live)
+                            _isLiveSearching.value = true
+                            try {
+                                val live = runCatching {
+                                    navidromeRepository.searchSongs(normalizedQuery, limit = 40)
+                                        .getOrDefault(emptyList())
+                                }.getOrDefault(emptyList())
+                                if (live.isNotEmpty()) emit(live)
+                            } finally {
+                                _isLiveSearching.value = false
+                            }
                         }
 
                         musicRepository.searchAll(normalizedQuery, currentFilter)

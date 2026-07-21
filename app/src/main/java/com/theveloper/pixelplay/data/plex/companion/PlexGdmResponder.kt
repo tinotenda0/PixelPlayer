@@ -57,12 +57,21 @@ class PlexGdmResponder @Inject constructor(
     fun start(scope: CoroutineScope, companionPort: Int) {
         if (listenJob?.isActive == true) return
         listenJob = scope.launch(Dispatchers.IO) {
+            // Each run OWNS its socket and lock as locals. The shared fields
+            // exist only so stop() can close the live socket to interrupt a
+            // blocking receive(); the finally below cleans up its OWN
+            // resources and compare-and-clears the fields — an old run
+            // draining after a quick stop()/start() cycle must never close
+            // the replacement's socket or release its multicast lock.
+            var localLock: WifiManager.MulticastLock? = null
+            var localSock: MulticastSocket? = null
             try {
                 val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-                multicastLock = wifi?.createMulticastLock("PixelPlayerPlexGDM")?.apply {
+                localLock = wifi?.createMulticastLock("PixelPlayerPlexGDM")?.apply {
                     setReferenceCounted(false)
                     acquire()
                 }
+                multicastLock = localLock
 
                 val sock = MulticastSocket(CLIENT_SEARCH_PORT).apply {
                     reuseAddress = true
@@ -70,8 +79,11 @@ class PlexGdmResponder @Inject constructor(
                         InetSocketAddress(InetAddress.getByName(MULTICAST_ADDRESS), CLIENT_SEARCH_PORT),
                         null
                     )
-                    soTimeout = 1000
+                    // Wake sparingly; discovery latency of a few seconds is fine
+                    // and this loop otherwise ticks the CPU all day.
+                    soTimeout = 5000
                 }
+                localSock = sock
                 socket = sock
 
                 val descriptor = clientDescriptor(companionPort)
@@ -99,7 +111,19 @@ class PlexGdmResponder @Inject constructor(
                     Timber.tag(TAG).w(e, "GDM responder stopped unexpectedly")
                 }
             } finally {
-                shutdownSocket(companionPort)
+                localSock?.let { sock ->
+                    runCatching {
+                        sendTo(sock, "BYE * HTTP/1.0\n${clientDescriptor(companionPort)}", PMS_REGISTER_PORT)
+                    }
+                    runCatching { sock.close() }
+                }
+                localLock?.let { runCatching { if (it.isHeld) it.release() } }
+                // Only clear the shared fields if they still refer to THIS
+                // run's resources — a newer run may have replaced them.
+                synchronized(this@PlexGdmResponder) {
+                    if (socket === localSock) socket = null
+                    if (multicastLock === localLock) multicastLock = null
+                }
             }
         }
     }
@@ -107,6 +131,11 @@ class PlexGdmResponder @Inject constructor(
     fun stop() {
         listenJob?.cancel()
         listenJob = null
+        // Close the live socket so a blocking receive() unblocks immediately
+        // instead of draining out its full soTimeout.
+        synchronized(this) {
+            socket?.let { runCatching { it.close() } }
+        }
     }
 
     private fun sendTo(sock: DatagramSocket, message: String, port: Int) {
@@ -114,15 +143,5 @@ class PlexGdmResponder @Inject constructor(
             val bytes = message.toByteArray()
             sock.send(DatagramPacket(bytes, bytes.size, InetAddress.getByName(MULTICAST_ADDRESS), port))
         }.onFailure { Timber.tag(TAG).w(it, "GDM send failed") }
-    }
-
-    private fun shutdownSocket(companionPort: Int) {
-        socket?.let { sock ->
-            runCatching { sendTo(sock, "BYE * HTTP/1.0\n${clientDescriptor(companionPort)}", PMS_REGISTER_PORT) }
-            runCatching { sock.close() }
-        }
-        socket = null
-        multicastLock?.let { runCatching { if (it.isHeld) it.release() } }
-        multicastLock = null
     }
 }

@@ -171,6 +171,13 @@ private data class AiUiSnapshot(
     val aiError: String?,
 )
 
+private data class SearchUiSnapshot(
+    val results: kotlinx.collections.immutable.ImmutableList<com.theveloper.pixelplay.data.model.SearchResultItem>,
+    val filter: com.theveloper.pixelplay.data.model.SearchFilterType,
+    val history: kotlinx.collections.immutable.ImmutableList<com.theveloper.pixelplay.data.model.SearchHistoryItem>,
+    val liveSearching: Boolean,
+)
+
 private data class SortOptionsSnapshot(
     val songSort: SortOption,
     val albumSort: SortOption,
@@ -934,6 +941,12 @@ class PlayerViewModel @Inject constructor(
         plexConnectClient.session
 
     val plexConnectDeviceId: String get() = plexConnectClient.deviceId
+
+    /**
+     * Intent-aware: true only when THIS phone chose the currently-active
+     * remote output. A family member's device being active does not count.
+     */
+    fun isConnectRemoteIntended(): Boolean = plexConnectClient.isRemoteActive
 
     fun transferPlaybackTo(deviceId: String) = plexConnectClient.transfer(deviceId)
 
@@ -2035,14 +2048,16 @@ class PlayerViewModel @Inject constructor(
                 searchStateHolder.searchResults,
                 searchStateHolder.selectedSearchFilter,
                 searchStateHolder.searchHistory,
-            ) { results, filter, history ->
-                Triple(results, filter, history)
-            }.collect { (results, filter, history) ->
+                searchStateHolder.isLiveSearching,
+            ) { results, filter, history, liveSearching ->
+                SearchUiSnapshot(results, filter, history, liveSearching)
+            }.collect { snap ->
                 _playerUiState.update {
                     it.copy(
-                        searchResults = results,
-                        selectedSearchFilter = filter,
-                        searchHistory = history,
+                        searchResults = snap.results,
+                        selectedSearchFilter = snap.filter,
+                        searchHistory = snap.history,
+                        isLiveSearching = snap.liveSearching,
                     )
                 }
             }

@@ -49,6 +49,7 @@ class PlexConnectClient @Inject constructor(
         private const val TAG = "PlexConnect"
         private const val BROKER_PORT = 32599
         private const val REPORT_TICK_MS = 1_500L
+        private const val IDLE_REPORT_TICK_MS = 10_000L
         private const val RECONNECT_MIN_MS = 5_000L
         private const val RECONNECT_MAX_MS = 60_000L
     }
@@ -125,11 +126,22 @@ class PlexConnectClient @Inject constructor(
 
     val deviceId: String get() = identity.clientId
 
-    /** True while another device is this user's active output. */
+    /**
+     * The exact device THIS phone deliberately routed its playback to, or
+     * null. Another device merely being the session's active output (e.g. a
+     * family member's phone playing under the same Plex user) must NOT hijack
+     * local playback routing — and a stale intent must not re-arm for a
+     * different device, so the specific target id is recorded, not a boolean.
+     */
+    @Volatile
+    private var intendedRemoteDeviceId: String? = null
+
+    /** True while the device this phone chose is the session's active output. */
     val isRemoteActive: Boolean
         get() {
+            val intended = intendedRemoteDeviceId ?: return false
             val s = _session.value ?: return false
-            return s.activeDeviceId != null && s.activeDeviceId != identity.clientId
+            return s.activeDeviceId != null && s.activeDeviceId == intended
         }
 
     /** Devices that can play, excluding this phone. */
@@ -318,13 +330,22 @@ class PlexConnectClient @Inject constructor(
         when (msg.optString("type")) {
             "welcome" -> {
                 Timber.tag(TAG).i("Connected to broker as ${msg.optJSONObject("user")?.optString("name") ?: "user"}")
-                msg.optJSONObject("session")?.let { _session.value = parseSession(it) }
+                msg.optJSONObject("session")?.let { applySession(parseSession(it)) }
             }
-            "session" -> msg.optJSONObject("session")?.let { _session.value = parseSession(it) }
+            "session" -> msg.optJSONObject("session")?.let { applySession(parseSession(it)) }
             "adopt" -> scope?.launch { handleAdopt(msg) }
             "command" -> scope?.launch { handleCommand(msg) }
             "error" -> Timber.tag(TAG).w("Broker error: ${msg.optString("message")}")
         }
+    }
+
+    private fun applySession(session: ConnectSession) {
+        // If this phone (re)became the active output — e.g. a local play
+        // claimed the session — any old remote-output intent is obsolete.
+        if (session.activeDeviceId == identity.clientId) {
+            intendedRemoteDeviceId = null
+        }
+        _session.value = session
     }
 
     private fun parseSession(json: JSONObject): ConnectSession {
@@ -369,6 +390,8 @@ class PlexConnectClient @Inject constructor(
 
         val songs = tracks.map { songForTrack(it) }
         Timber.tag(TAG).i("Adopting session: ${songs.size} tracks @ index $index")
+        // This phone is becoming the output — local playback routing again.
+        intendedRemoteDeviceId = null
         val started = bridge.playQueue(
             songs = songs,
             startIndex = index,
@@ -417,6 +440,17 @@ class PlexConnectClient @Inject constructor(
 
     private suspend fun reportLoop() {
         while (scope?.isActive == true) {
+            // Polling the bridge binds a MediaController and hops to the main
+            // thread. When nothing is playing and we're not the session's
+            // active output, tick slowly — the fast cadence only matters while
+            // this phone is actually producing (or claiming) audio.
+            val playbackActive =
+                com.theveloper.pixelplay.data.service.PlaybackActivityTracker.isPlaybackActive
+            val selfActive = _session.value?.activeDeviceId == identity.clientId
+            if (!playbackActive && !selfActive) {
+                delay(IDLE_REPORT_TICK_MS)
+                continue
+            }
             delay(REPORT_TICK_MS)
             if (!_isConnected.value) continue
             runCatching { reportOnce() }
@@ -519,7 +553,12 @@ class PlexConnectClient @Inject constructor(
     fun playIndexRemote(index: Int) = sendCommand("playIndex") { put("index", index) }
 
     /** Move the running session to another device (or back to this phone). */
-    fun transfer(targetDeviceId: String) = sendCommand("transfer") { put("targetDeviceId", targetDeviceId) }
+    fun transfer(targetDeviceId: String) {
+        // This is the explicit user intent that authorizes remote routing —
+        // recorded per-device so it can never re-arm for a different one.
+        intendedRemoteDeviceId = targetDeviceId.takeIf { it != identity.clientId }
+        sendCommand("transfer") { put("targetDeviceId", targetDeviceId) }
+    }
 
     /** Start fresh content on the remote active output (song picks while connected). */
     suspend fun playQueueRemote(songs: List<Song>, startSong: Song, startPositionMs: Long = 0L): Boolean {

@@ -65,6 +65,7 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.DockedSearchBar
 import androidx.compose.material3.SearchBarDefaults
@@ -153,7 +154,8 @@ private const val MAX_ALBUM_MULTI_SELECTION = 6
 
 private data class SearchUiSlice(
     val selectedSearchFilter: SearchFilterType = SearchFilterType.ALL,
-    val searchResults: ImmutableList<SearchResultItem> = persistentListOf()
+    val searchResults: ImmutableList<SearchResultItem> = persistentListOf(),
+    val isLiveSearching: Boolean = false
 )
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -229,7 +231,8 @@ fun SearchScreen(
             .map { uiState ->
                 SearchUiSlice(
                     selectedSearchFilter = uiState.selectedSearchFilter,
-                    searchResults = uiState.searchResults
+                    searchResults = uiState.searchResults,
+                    isLiveSearching = uiState.isLiveSearching
                 )
             }
             .distinctUntilChanged()
@@ -571,10 +574,28 @@ fun SearchScreen(
                                 label = "search_results_fade"
                             ) { isEmpty ->
                                 if (isEmpty) {
-                                    EmptySearchResults(
-                                        searchQuery = searchQuery,
-                                        colorScheme = colorScheme
-                                    )
+                                    if (searchUiState.isLiveSearching && searchQuery.isNotBlank()) {
+                                        // Live (on-demand YouTube) search still running —
+                                        // show progress instead of a premature "no results".
+                                        Column(
+                                            modifier = Modifier.fillMaxSize(),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            CircularProgressIndicator()
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Text(
+                                                text = "Searching everywhere…",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    } else {
+                                        EmptySearchResults(
+                                            searchQuery = searchQuery,
+                                            colorScheme = colorScheme
+                                        )
+                                    }
                                 } else {
                                     SearchResultsList(
                                         results = searchResults,

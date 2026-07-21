@@ -75,6 +75,7 @@ class PlexCompanionTarget @Inject constructor(
         private val PORT_CANDIDATES = 32500..32510
 
         private const val TIMELINE_TICK_MS = 1_000L
+        private const val IDLE_TICK_MS = 10_000L
         private const val LONG_POLL_MAX_MS = 15_000L
         private const val SUBSCRIBER_MAX_FAILURES = 3
 
@@ -125,7 +126,7 @@ class PlexCompanionTarget @Inject constructor(
         val newScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = newScope
         newScope.launch {
-            val port = bindServer() ?: run {
+            val port = bindServer(newScope) ?: run {
                 Timber.tag(TAG).e("No Companion port available; target disabled")
                 return@launch
             }
@@ -153,7 +154,7 @@ class PlexCompanionTarget @Inject constructor(
 
     // ─── HTTP server ─────────────────────────────────────────────────────
 
-    private fun bindServer(): Int? {
+    private fun bindServer(owningScope: CoroutineScope): Int? {
         for (port in PORT_CANDIDATES) {
             val free = runCatching { ServerSocket(port).use { true } }.getOrDefault(false)
             if (!free) continue
@@ -165,7 +166,22 @@ class PlexCompanionTarget @Inject constructor(
                     }
                 }
                 created.start(wait = false)
-                server = created
+                // Publish under the same lock stop() uses: if stop() ran while
+                // we were binding, this run's scope is dead — shut the fresh
+                // server down instead of leaking it listening forever.
+                val published = synchronized(this) {
+                    if (scope === owningScope) {
+                        server = created
+                        true
+                    } else {
+                        false
+                    }
+                }
+                if (!published) {
+                    Timber.tag(TAG).i("Target stopped during bind; discarding server on $port")
+                    created.stop(200, 500)
+                    return null
+                }
                 port
             } catch (e: Exception) {
                 Timber.tag(TAG).w(e, "Failed to bind Companion server on $port")
@@ -343,6 +359,15 @@ class PlexCompanionTarget @Inject constructor(
 
     private suspend fun timelineLoop() {
         while (scope?.isActive == true) {
+            // Polling the bridge binds a MediaController (starting MusicService)
+            // and hops to the main thread — never do that once a second while
+            // idle. Only poll when a controller is subscribed or audio plays.
+            val playbackActive =
+                com.theveloper.pixelplay.data.service.PlaybackActivityTracker.isPlaybackActive
+            if (subscribers.isEmpty() && !playbackActive) {
+                delay(IDLE_TICK_MS)
+                continue
+            }
             pushTimelines(force = false)
             delay(TIMELINE_TICK_MS)
         }

@@ -232,7 +232,13 @@ fun CastBottomSheet(
     val isRokuActive = activeRokuHost != null
     val connectSelfId = playerViewModel.plexConnectDeviceId
     val connectActiveDevice = plexConnectSession?.devices?.firstOrNull { it.isActive }
-    val isConnectRemote = connectActiveDevice != null && connectActiveDevice.id != connectSelfId
+    // Intent-gated: only treat the session as "our remote output" when THIS
+    // phone chose that device. A family member's phone being the session's
+    // active player must not flip this sheet into remote mode (its controls
+    // would act on the local player while claiming the remote, and Disconnect
+    // would steal their session).
+    val isConnectRemote = connectActiveDevice != null && connectActiveDevice.id != connectSelfId &&
+        playerViewModel.isConnectRemoteIntended()
     val connectPlayers = plexConnectSession?.devices.orEmpty()
         .filter { it.id != connectSelfId && "player" in it.capabilities }
     val isRemoteSession = (isRemotePlaybackActive || isCastConnecting) && activeRoute != null
