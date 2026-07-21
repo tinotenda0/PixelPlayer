@@ -66,6 +66,25 @@ class NavidromeStreamProxy @Inject constructor(
     fun resolveNavidromeUri(uriString: String): String? = resolveUri(uriString)
 
     /**
+     * The direct, network-reachable Subsonic stream URL for a `navidrome://`
+     * uri — used by the Cast HTTP server to fetch cloud bytes it can relay to
+     * a Chromecast (which cannot reach this loopback proxy). Works for both
+     * library ids and on-demand "yt-" ids; reuses the 30-minute URL cache.
+     */
+    suspend fun resolveDirectStreamUrl(uriString: String): String? {
+        val uri = Uri.parse(uriString)
+        if (uri.scheme != "navidrome") return null
+        val songId = extractIdFromUri(uri) ?: return null
+        if (!CloudStreamSecurity.validateNavidromeSongId(songId)) return null
+        return try {
+            getOrFetchStreamUrl(songId)
+        } catch (e: Exception) {
+            Timber.w(e, "resolveDirectStreamUrl failed for $songId")
+            null
+        }
+    }
+
+    /**
      * Pre-fetches and caches the real stream URL for a song so the proxy can
      * serve it instantly when ExoPlayer makes its HTTP request.
      */

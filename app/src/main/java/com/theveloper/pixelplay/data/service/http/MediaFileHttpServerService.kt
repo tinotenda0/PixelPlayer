@@ -103,6 +103,15 @@ class MediaFileHttpServerService : Service() {
     lateinit var plexStreamProxy: PlexStreamProxy
 
     @Inject
+    lateinit var navidromeStreamProxy: com.theveloper.pixelplay.data.navidrome.NavidromeStreamProxy
+
+    @Inject
+    lateinit var navidromeRepository: com.theveloper.pixelplay.data.navidrome.NavidromeRepository
+
+    @Inject
+    lateinit var plexRepository: com.theveloper.pixelplay.data.plex.PlexRepository
+
+    @Inject
     lateinit var castHttpClient: OkHttpClient
 
     private var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
@@ -755,6 +764,13 @@ class MediaFileHttpServerService : Service() {
                                 }
 
                                 try {
+                                    // Cloud songs: proxy the provider's own art URL —
+                                    // ContentResolver cannot open cloud cover schemes.
+                                    val remoteArt = resolveRemoteArtUrl(song)
+                                    if (remoteArt != null && call.respondRemoteArt(remoteArt, song.id)) {
+                                        return@get
+                                    }
+
                                     val artSource = resolveArtStreamSource(song)
                                     Timber.tag(castHttpLogTag).i(
                                         "GET /art songId=%s source=%s length=%s type=%s",
@@ -1081,9 +1097,50 @@ class MediaFileHttpServerService : Service() {
         val scheme = song.contentUriString.substringBefore(':', "").lowercase(Locale.ROOT)
         return when (scheme) {
             "plex" -> plexStreamProxy.resolveDirectStreamUrl(song.contentUriString)
-            // Other cloud providers can be wired here as needed; today the fork's
-            // cloud library is Plex, and only Plex casting is exercised.
+            // Navidrome/Subsonic — including the gateway's on-demand "yt-" songs.
+            // This is the primary library now, so casting lives or dies here.
+            "navidrome" -> navidromeStreamProxy.resolveDirectStreamUrl(song.contentUriString)
             else -> null
+        }
+    }
+
+    /**
+     * Network-reachable cover-art URL for a cloud song. The cast /art endpoint
+     * otherwise tries ContentResolver, which cannot open navidrome_cover:// or
+     * plex_cover:// (no provider) — cloud songs showed no artwork on the TV.
+     */
+    private suspend fun resolveRemoteArtUrl(song: Song): String? {
+        val artUri = song.albumArtUriString?.takeIf { it.isNotBlank() } ?: return null
+        val scheme = artUri.substringBefore(':', "").lowercase(Locale.ROOT)
+        val id = artUri.substringAfter("://", "").trimEnd('/').takeIf { it.isNotBlank() } ?: return null
+        return when (scheme) {
+            "navidrome_cover" -> runCatching { navidromeRepository.getCoverArtUrl(id, 800) }.getOrNull()
+            "plex_cover" -> runCatching { plexRepository.getImageUrl(id) }.getOrNull()
+            else -> null
+        }
+    }
+
+    /** Fetch remote art and relay it to the cast device (image passthrough). */
+    private suspend fun ApplicationCall.respondRemoteArt(remoteUrl: String, songId: String): Boolean {
+        return try {
+            val upstream = withContext(Dispatchers.IO) {
+                castStreamClient.newCall(Request.Builder().url(remoteUrl).get().build()).execute()
+            }
+            upstream.use { resp ->
+                if (!resp.isSuccessful) return false
+                val type = resp.header(HttpHeaders.ContentType)
+                    ?.let { runCatching { ContentType.parse(it) }.getOrNull() }
+                    ?.takeIf { it.contentType.equals("image", ignoreCase = true) }
+                    ?: ContentType.Image.JPEG
+                Timber.tag(castHttpLogTag).d("GET /art remote songId=%s type=%s", songId, type)
+                respondOutputStream(type) {
+                    resp.body.byteStream().use { it.copyTo(this) }
+                }
+            }
+            true
+        } catch (e: Exception) {
+            Timber.tag(castHttpLogTag).d(e, "Remote art fetch failed songId=%s", songId)
+            false
         }
     }
 

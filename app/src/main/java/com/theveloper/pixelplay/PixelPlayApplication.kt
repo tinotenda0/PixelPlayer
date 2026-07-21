@@ -180,21 +180,24 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
                         if (!plexGateRunning || accountId != lastPlexGateAccountId) {
                             if (plexGateRunning) {
                                 plexCompanionTarget.get().stop()
-                                plexConnectClient.get().stop()
                             }
                             lastPlexGateAccountId = accountId
                             plexCompanionTarget.get().start()
-                            plexConnectClient.get().restart()
+                            // NOTE: PlexConnectClient (the Connect broker sessions)
+                            // is intentionally NOT started. With the library served
+                            // by Navidrome and multiple phones on one Plex user, the
+                            // shared-session claiming caused playback to jump
+                            // between devices. The code stays for a possible
+                            // opt-in later, but it no longer runs.
                             plexGateRunning = true
                         }
                     } else if (plexGateRunning && plexGateTeardownJob == null) {
                         // Grace period: a paused-in-background session must stay
-                        // remotely resumable (Plexamp/Connect can still reach us);
-                        // only tear down after it has clearly been abandoned.
+                        // remotely resumable (Plexamp can still reach us); only
+                        // tear down after it has clearly been abandoned.
                         plexGateTeardownJob = startupScope.launch {
                             kotlinx.coroutines.delay(plexGateTeardownGraceMs)
                             plexCompanionTarget.get().stop()
-                            plexConnectClient.get().stop()
                             plexGateRunning = false
                             plexGateTeardownJob = null
                         }

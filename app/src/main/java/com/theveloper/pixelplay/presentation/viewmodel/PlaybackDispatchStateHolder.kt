@@ -914,6 +914,13 @@ class PlaybackDispatchStateHolder @Inject constructor(
             }
             cb.showSheet()
         } else {
+            // A Plexamp/Companion session is active but this content isn't on
+            // the Plex server (e.g. Navidrome/on-demand songs) — Plexamp can
+            // only play Plex content, so we play locally. Say so instead of
+            // silently switching outputs on the user.
+            if (plexRemotePlaybackManager.isActive && effectiveStartSong.plexId.isNullOrBlank()) {
+                cb.sendToast(context.getString(R.string.plex_remote_non_plex_song))
+            }
             beginPreparingSong(effectiveStartSong)
             cb.updateUiState {
                 it.copy(
