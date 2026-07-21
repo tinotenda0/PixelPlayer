@@ -17,7 +17,9 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -38,7 +40,27 @@ import kotlinx.coroutines.FlowPreview
 @Singleton
 class SearchStateHolder @Inject constructor(
     private val musicRepository: MusicRepository,
+    private val navidromeRepository: com.theveloper.pixelplay.data.navidrome.NavidromeRepository,
 ) {
+
+    /**
+     * Merge live gateway song results (including on-demand "yt-" YouTube songs)
+     * into the local search results, de-duped by song id. Only for filters that
+     * show songs; other filters (albums/artists) are left untouched.
+     */
+    private fun mergeLiveSongs(
+        local: List<SearchResultItem>,
+        live: List<com.theveloper.pixelplay.data.model.Song>,
+        filter: SearchFilterType
+    ): List<SearchResultItem> {
+        if (live.isEmpty()) return local
+        if (filter != SearchFilterType.ALL && filter != SearchFilterType.SONGS) return local
+        val existing = local.mapNotNull { (it as? SearchResultItem.SongItem)?.song?.id }.toHashSet()
+        val liveItems = live
+            .filterNot { it.id in existing }
+            .map { SearchResultItem.SongItem(it) }
+        return local + liveItems
+    }
     private companion object {
         const val SEARCH_DEBOUNCE_MS = 300L
     }
@@ -93,30 +115,48 @@ class SearchStateHolder @Inject constructor(
 
                     try {
                         val currentFilter = _selectedSearchFilter.value
-                        musicRepository.searchAll(normalizedQuery, currentFilter).collect { resultsList ->
-                            // Relevance ranking: entities whose own name matches beat
-                            // incidental matches (artist "Daft Punk" over a song merely
-                            // by Daft Punk), played songs rank first among equal matches,
-                            // and spacing/typos are tolerated. See SearchRanker.
-                            val songIds = resultsList.mapNotNull {
-                                (it as? SearchResultItem.SongItem)?.song?.id
-                            }
-                            val playStats = if (songIds.isEmpty()) {
-                                emptyMap()
-                            } else {
-                                musicRepository.getSearchPlayStats(songIds)
-                            }
-                            val ranked = SearchRanker.rank(normalizedQuery, resultsList, playStats)
 
-                            if (request.requestId != latestSearchRequestId.get()) {
-                                return@collect
-                            }
-
-                            val immutableResults = ranked.toImmutableList()
-                            if (_searchResults.value != immutableResults) {
-                                _searchResults.value = immutableResults
-                            }
+                        // Live on-demand search against the Subsonic/Navidrome gateway
+                        // (which augments results with streamable "yt-" YouTube songs
+                        // that are NOT in the synced library). Emits empty first so
+                        // local results render instantly, then the live results when
+                        // they arrive. Failures (not logged in, offline) → empty.
+                        val liveSongsFlow = flow {
+                            emit(emptyList<com.theveloper.pixelplay.data.model.Song>())
+                            val live = runCatching {
+                                navidromeRepository.searchSongs(normalizedQuery, limit = 40)
+                                    .getOrDefault(emptyList())
+                            }.getOrDefault(emptyList())
+                            if (live.isNotEmpty()) emit(live)
                         }
+
+                        musicRepository.searchAll(normalizedQuery, currentFilter)
+                            .combine(liveSongsFlow) { local, live -> local to live }
+                            .collect { (resultsList, liveSongs) ->
+                                val merged = mergeLiveSongs(resultsList, liveSongs, _selectedSearchFilter.value)
+
+                                // Relevance ranking: entities whose own name matches beat
+                                // incidental matches, played songs rank first among equal
+                                // matches, and spacing/typos are tolerated. See SearchRanker.
+                                val songIds = merged.mapNotNull {
+                                    (it as? SearchResultItem.SongItem)?.song?.id
+                                }
+                                val playStats = if (songIds.isEmpty()) {
+                                    emptyMap()
+                                } else {
+                                    musicRepository.getSearchPlayStats(songIds)
+                                }
+                                val ranked = SearchRanker.rank(normalizedQuery, merged, playStats)
+
+                                if (request.requestId != latestSearchRequestId.get()) {
+                                    return@collect
+                                }
+
+                                val immutableResults = ranked.toImmutableList()
+                                if (_searchResults.value != immutableResults) {
+                                    _searchResults.value = immutableResults
+                                }
+                            }
                     } catch (_: CancellationException) {
                         // Superseded by a newer query; ignore.
                     } catch (e: Exception) {

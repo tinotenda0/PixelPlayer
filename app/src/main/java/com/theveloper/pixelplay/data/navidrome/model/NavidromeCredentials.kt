@@ -66,7 +66,12 @@ data class NavidromeCredentials(
      * Returns the normalized server URL (without trailing slash).
      */
     val normalizedServerUrl: String
-        get() = normalizedHttpUrlOrNull?.toString()?.trimEnd('/') ?: serverUrl.trim().trimEnd('/')
+        // The API layer appends "/rest/…" itself, so tolerate a base URL that
+        // already ends in "/rest" (some gateways document it that way) — strip
+        // it here to avoid a doubled "/rest/rest/" path.
+        get() = (normalizedHttpUrlOrNull?.toString()?.trimEnd('/') ?: serverUrl.trim().trimEnd('/'))
+            .removeSuffix("/rest")
+            .trimEnd('/')
 
     /**
      * Returns a validation error for connection setup, or null when the URL is acceptable.
