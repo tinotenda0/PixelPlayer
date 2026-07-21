@@ -53,9 +53,15 @@ class NavidromeStreamProxy @Inject constructor(
         }
     }
 
-    // Navidrome URIs may use host or path: navidrome://songId or navidrome:///songId
+    // Navidrome URIs may use host or path: navidrome://songId or navidrome:///songId.
+    // IMPORTANT: use the scheme-specific part, not uri.host — Android normalizes
+    // the host to lowercase, which corrupts case-sensitive ids. Subsonic library
+    // ids are lowercase so it never showed, but on-demand YouTube ids ("yt-<11
+    // char videoId>") are mixed-case, so uri.host turned them into a wrong (or
+    // non-existent) video and every stream failed.
     override fun extractIdFromUri(uri: Uri): String? =
-        uri.host ?: uri.path?.removePrefix("/")
+        uri.schemeSpecificPart?.trimStart('/')?.substringBefore('?')?.takeIf { it.isNotBlank() }
+            ?: uri.host
 
     fun resolveNavidromeUri(uriString: String): String? = resolveUri(uriString)
 
@@ -66,7 +72,7 @@ class NavidromeStreamProxy @Inject constructor(
     suspend fun warmUpStreamUrl(uriString: String) {
         val uri = Uri.parse(uriString)
         if (uri.scheme != "navidrome") return
-        val songId = uri.host ?: uri.path?.removePrefix("/") ?: return
+        val songId = extractIdFromUri(uri) ?: return
         if (!CloudStreamSecurity.validateNavidromeSongId(songId)) return
         try {
             getOrFetchStreamUrl(songId)
