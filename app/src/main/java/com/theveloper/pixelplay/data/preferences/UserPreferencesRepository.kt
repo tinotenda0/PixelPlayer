@@ -146,6 +146,8 @@ class UserPreferencesRepository @Inject constructor(
         val REPEAT_MODE = intPreferencesKey("repeat_mode")
         val IS_SHUFFLE_ON = booleanPreferencesKey("is_shuffle_on")
         val PERSISTENT_SHUFFLE_ENABLED = booleanPreferencesKey("persistent_shuffle_enabled")
+        val ENDLESS_PLAYBACK_ENABLED = booleanPreferencesKey("endless_playback_enabled")
+        val TASTE_ONBOARDING_DONE = booleanPreferencesKey("taste_onboarding_done")
         val DISABLE_CAST_AUTOPLAY = booleanPreferencesKey("disable_cast_autoplay")
         val RESUME_ON_HEADSET_RECONNECT = booleanPreferencesKey("resume_on_headset_reconnect")
         val SHOW_QUEUE_HISTORY = booleanPreferencesKey("show_queue_history")
@@ -327,6 +329,22 @@ class UserPreferencesRepository @Inject constructor(
 
     suspend fun setPersistentShuffleEnabled(enabled: Boolean) {
         dataStore.edit { it[PreferencesKeys.PERSISTENT_SHUFFLE_ENABLED] = enabled }
+    }
+
+    /** When on, the queue auto-extends with similar songs as it nears the end (radio). */
+    val endlessPlaybackEnabledFlow: Flow<Boolean> =
+        pref { it[PreferencesKeys.ENDLESS_PLAYBACK_ENABLED] ?: false }
+
+    suspend fun setEndlessPlaybackEnabled(enabled: Boolean) {
+        dataStore.edit { it[PreferencesKeys.ENDLESS_PLAYBACK_ENABLED] = enabled }
+    }
+
+    /** Whether the user has completed the pairwise taste-seeding onboarding. */
+    val tasteOnboardingDoneFlow: Flow<Boolean> =
+        pref { it[PreferencesKeys.TASTE_ONBOARDING_DONE] ?: false }
+
+    suspend fun setTasteOnboardingDone(done: Boolean) {
+        dataStore.edit { it[PreferencesKeys.TASTE_ONBOARDING_DONE] = done }
     }
 
     val isCrossfadeEnabledFlow: Flow<Boolean> =

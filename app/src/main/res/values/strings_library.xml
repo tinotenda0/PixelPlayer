@@ -133,6 +133,9 @@
     <string name="song_info_cd_remove_from_favorites">Remove from favorites</string>
     <string name="song_info_cd_remove_from_favorites_all">Remove all from favorites</string>
     <string name="song_info_share_chooser_title">Share song file via</string>
+    <string name="song_info_download">Download</string>
+    <string name="song_info_downloaded">Downloaded</string>
+    <string name="song_info_downloading">Downloading…</string>
     <string name="song_info_cd_share_song_file">Share song file</string>
     <string name="song_info_cd_share_all_as_zip">Share all as ZIP</string>
     <string name="song_info_error_share_song">Could not share song: %1$s</string>

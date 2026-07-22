@@ -192,6 +192,10 @@ class MusicService : MediaLibraryService() {
     private var keepPlayingInBackground = true
     private var isManualShuffleEnabled = false
     private var persistentShuffleEnabled = false
+    // Endless playback (radio): auto-extend the queue with similar songs near the end.
+    private var endlessPlaybackEnabled = false
+    private var isExtendingEndlessQueue = false
+    private var lastEndlessSeedId: String? = null
     // Holds the previous main-thread UncaughtExceptionHandler so we can restore it in onDestroy.
     private var previousMainThreadExceptionHandler: Thread.UncaughtExceptionHandler? = null
     // --- Counted Play State ---
@@ -535,6 +539,12 @@ class MusicService : MediaLibraryService() {
         serviceScope.launch {
             userPreferencesRepository.persistentShuffleEnabledFlow.collect { enabled ->
                 persistentShuffleEnabled = enabled
+            }
+        }
+
+        serviceScope.launch {
+            userPreferencesRepository.endlessPlaybackEnabledFlow.collect { enabled ->
+                endlessPlaybackEnabled = enabled
             }
         }
 
@@ -1272,6 +1282,64 @@ class MusicService : MediaLibraryService() {
         return getNavidromeId(mediaItem) != null
     }
 
+    /**
+     * Endless playback (radio): when the current track is a Subsonic/YouTube item and the
+     * queue is running low, fetch similar songs from the server and append them so the music
+     * never stops. No-op unless the "Endless playback" setting is on.
+     */
+    private fun maybeExtendEndlessQueue() {
+        if (!endlessPlaybackEnabled || isExtendingEndlessQueue) return
+        val player = mediaSession?.player ?: engine.masterPlayer
+        if (player.repeatMode != Player.REPEAT_MODE_OFF) return
+
+        val count = player.mediaItemCount
+        val index = player.currentMediaItemIndex
+        if (count == 0 || index == C.INDEX_UNSET) return
+        if (count >= 400) return // never grow the queue without bound
+        // Only extend when near the end. Under native shuffle the timeline index is NOT the
+        // play-order position, so rely on hasNextMediaItem() (which honours shuffle + repeat);
+        // in linear order use a small look-ahead so the append lands before the queue drains.
+        val nearEnd = if (player.shuffleModeEnabled) {
+            !player.hasNextMediaItem()
+        } else {
+            count - index - 1 <= 2
+        }
+        if (!nearEnd) return
+
+        val seedId = getNavidromeId(player.currentMediaItem) ?: return
+        if (seedId == lastEndlessSeedId) return // already extended off this seed
+
+        lastEndlessSeedId = seedId
+        isExtendingEndlessQueue = true
+
+        val existingIds = buildSet {
+            for (i in 0 until count) {
+                runCatching { player.getMediaItemAt(i) }.getOrNull()?.let { add(it.mediaId) }
+            }
+        }
+
+        appScope.launch(Dispatchers.IO) {
+            val songs = navidromeRepository.getSimilarSongs(seedId, count = 25)
+                .getOrNull().orEmpty()
+                .filter { it.id !in existingIds }
+            withContext(Dispatchers.Main) {
+                try {
+                    if (songs.isNotEmpty()) {
+                        player.addMediaItems(songs.map { MediaItemBuilder.build(it) })
+                        Timber.tag(TAG).d("Endless playback: appended ${songs.size} similar songs")
+                    }
+                } catch (e: Exception) {
+                    Timber.tag(TAG).w(e, "Endless playback: failed to append similar songs")
+                } finally {
+                    isExtendingEndlessQueue = false
+                    // Nothing appended (fetch failed or no fresh songs) — release the seed so the
+                    // next transition can retry instead of silently stalling forever.
+                    if (songs.isEmpty()) lastEndlessSeedId = null
+                }
+            }
+        }
+    }
+
     private fun reportNavidromePlayback(state: String, mediaItem: MediaItem? = engine.masterPlayer.currentMediaItem) {
         val player = engine.masterPlayer
         // Ensure we capture player state on main thread to avoid IllegalStateException
@@ -1591,6 +1659,7 @@ class MusicService : MediaLibraryService() {
             widgetUpdateManager.requestFullUpdate(false)
             mediaSession?.let { refreshMediaSessionUi(it) }
             schedulePlaybackSnapshotPersist()
+            maybeExtendEndlessQueue()
         }
 
         override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {

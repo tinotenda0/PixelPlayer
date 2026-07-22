@@ -254,11 +254,12 @@ class MainActivity : ComponentActivity() {
             var showCrashReportDialog by remember { mutableStateOf(false) }
             var crashLogData by remember { mutableStateOf<CrashLogData?>(null) }
             
-            // Permissions Logic
+            // Permissions Logic — local media is retired, so the only runtime permission that
+            // gates the app is the playback-notification permission on Android 13+.
             val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                listOf(Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
+                listOf(Manifest.permission.POST_NOTIFICATIONS)
             } else {
-                listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+                emptyList()
             }
             @OptIn(ExperimentalPermissionsApi::class)
             val permissionState = rememberMultiplePermissionsState(permissions = permissions)
@@ -644,7 +645,8 @@ class MainActivity : ComponentActivity() {
                 Screen.RecentlyPlayed.route,
                 Screen.DeviceCapabilities.route,
                 Screen.EasterEgg.route,
-                Screen.WordDelimiterConfig.route
+                Screen.WordDelimiterConfig.route,
+                Screen.TasteOnboarding.route
             )
         }
         val shouldHideNavigationBar by remember(currentRoute, isSearchBarActive) {

@@ -301,6 +301,83 @@ class NavidromeApiService @Inject constructor(
         return requestAndParse("getSong", mapOf("id" to id))
     }
 
+    /**
+     * Full artist object (metadata + its `album` / `topSong` arrays) for the artist detail screen.
+     */
+    suspend fun getArtistWithAlbums(id: String): Result<JSONObject> {
+        return requestAndParse("getArtist", mapOf("id" to id))
+            .map { it.optJSONObject("artist") ?: JSONObject() }
+    }
+
+    /**
+     * Full album object (metadata + its `song` array) for the album detail screen.
+     */
+    suspend fun getAlbumWithSongs(id: String): Result<JSONObject> {
+        return requestAndParse("getAlbum", mapOf("id" to id))
+            .map { it.optJSONObject("album") ?: JSONObject() }
+    }
+
+    // ─── Taste onboarding (custom XPS endpoints) ─────────────────────────
+
+    private fun extractTasteArtists(resp: JSONObject): List<JSONObject> {
+        val arr = resp.optJSONObject("tasteArtists")?.optJSONArray("artist")
+        return (0 until (arr?.length() ?: 0)).mapNotNull { arr?.optJSONObject(it) }
+    }
+
+    /** Starting pool of recognisable artists for the pairwise taste onboarding. */
+    suspend fun getTasteStart(): Result<List<JSONObject>> {
+        return requestAndParse("getTasteStart").map { extractTasteArtists(it) }
+    }
+
+    /** Artists related to [id] — branches the pairwise flow off each pick. */
+    suspend fun getRelatedArtists(id: String): Result<List<JSONObject>> {
+        return requestAndParse("getRelatedArtists", mapOf("id" to id)).map { extractTasteArtists(it) }
+    }
+
+    /** Persist the user's chosen taste-seed artists (repeatable `artist` params). */
+    suspend fun setSeeds(artistNames: List<String>): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val cred = credentials ?: return@withContext Result.failure(
+                    IllegalStateException("No credentials configured"))
+                val (token, salt) = generateAuthParams(cred.password)
+                val urlBuilder = "${cred.normalizedServerUrl}/rest/setSeeds.view".toHttpUrl().newBuilder()
+                    .addQueryParameter("u", cred.username)
+                    .addQueryParameter("t", token)
+                    .addQueryParameter("s", salt)
+                    .addQueryParameter("v", API_VERSION)
+                    .addQueryParameter("c", cred.clientId.ifBlank { DEFAULT_CLIENT_ID })
+                    .addQueryParameter("f", DEFAULT_FORMAT)
+                artistNames.forEach { urlBuilder.addQueryParameter("artist", it) }
+                val request = Request.Builder().url(urlBuilder.build())
+                    .header("User-Agent", "PixelPlayer/$API_VERSION").get().build()
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        return@use Result.failure(Exception("HTTP ${response.code}"))
+                    }
+                    // Subsonic reports failures (bad auth, unknown endpoint) as HTTP 200 with
+                    // status="failed", so the body must be parsed — isSuccessful alone would let a
+                    // failed save look like a success and silently drop the user's seeds.
+                    parseResponse(response.body.string()).map { }
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    /**
+     * Get songs similar to a given song — used for radio / endless playback.
+     * Uses getSimilarSongs2 (ID3). Returns the raw song JSON objects.
+     */
+    suspend fun getSimilarSongs2(id: String, count: Int = 20): Result<List<JSONObject>> {
+        val params = mapOf("id" to id, "count" to count.toString())
+        return requestAndParse("getSimilarSongs2", params).map { response ->
+            val songs = response.optJSONObject("similarSongs2")?.optJSONArray("song")
+            (0 until (songs?.length() ?: 0)).mapNotNull { songs?.optJSONObject(it) }
+        }
+    }
+
     // ─── Playlist API ────────────────────────────────────────────────────
 
     /**

@@ -27,14 +27,19 @@ sealed class Screen(val route: String) {
         fun createRoute(genreId: String) = "genre_detail/$genreId"
     }
     object DJSpace : Screen("dj_space")
+    object TasteOnboarding : Screen("taste_onboarding")
     // La ruta base es "album_detail". La ruta completa con el argumento se define en AppNavigation.
     object AlbumDetail : Screen("album_detail/{albumId}") {
         // Función de ayuda para construir la ruta de navegación con el ID del álbum.
         fun createRoute(albumId: Long) = "album_detail/$albumId"
+        // Gateway album id (e.g. "yt-album-<browseId>"); browse ids are path-safe.
+        fun createRoute(albumId: String) = "album_detail/$albumId"
     }
 
     object ArtistDetail : Screen("artist_detail/{artistId}") {
         fun createRoute(artistId: Long) = "artist_detail/$artistId"
+        // Gateway artist id (e.g. "yt-artist-<browseId>"); browse ids are path-safe.
+        fun createRoute(artistId: String) = "artist_detail/$artistId"
     }
 
     object EditTransition : Screen("edit_transition?playlistId={playlistId}") {

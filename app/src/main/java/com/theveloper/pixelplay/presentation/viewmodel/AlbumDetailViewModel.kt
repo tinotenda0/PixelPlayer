@@ -30,6 +30,7 @@ data class AlbumDetailUiState(
 class AlbumDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val musicRepository: MusicRepository,
+    private val navidromeRepository: com.theveloper.pixelplay.data.navidrome.NavidromeRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -40,13 +41,32 @@ class AlbumDetailViewModel @Inject constructor(
         val albumIdString: String? = savedStateHandle.get("albumId")
         if (albumIdString != null) {
             val albumId = albumIdString.toLongOrNull()
-            if (albumId != null) {
-                loadAlbumData(albumId)
-            } else {
-                _uiState.update { it.copy(error = context.getString(R.string.album_detail_invalid_id), isLoading = false) }
+            when {
+                albumId != null -> loadAlbumData(albumId)
+                albumIdString.startsWith("yt-") -> loadGatewayAlbum(albumIdString)
+                else -> _uiState.update { it.copy(error = context.getString(R.string.album_detail_invalid_id), isLoading = false) }
             }
         } else {
             _uiState.update { it.copy(error = context.getString(R.string.album_detail_id_not_found), isLoading = false) }
+        }
+    }
+
+    /**
+     * Load a gateway (Subsonic/YouTube) album on demand — its metadata + full track list — when
+     * the album id is a `yt-album-…` string rather than a local Room Long id.
+     */
+    private fun loadGatewayAlbum(gatewayId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            val pair = navidromeRepository.getAlbumDetail(gatewayId).getOrNull()
+            if (pair == null) {
+                _uiState.update {
+                    it.copy(error = context.getString(R.string.album_detail_not_found), isLoading = false)
+                }
+                return@launch
+            }
+            val (album, songs) = pair
+            _uiState.value = AlbumDetailUiState(album = album, songs = songs, isLoading = false)
         }
     }
 

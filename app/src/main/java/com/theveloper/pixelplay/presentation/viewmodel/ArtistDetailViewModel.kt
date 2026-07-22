@@ -55,6 +55,7 @@ class ArtistDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val musicRepository: MusicRepository,
     private val artistImageRepository: ArtistImageRepository,
+    private val navidromeRepository: com.theveloper.pixelplay.data.navidrome.NavidromeRepository,
     val themeStateHolder: ThemeStateHolder,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -79,10 +80,10 @@ class ArtistDetailViewModel @Inject constructor(
             .onEach { idString ->
                 if (idString != null) {
                     val artistId = idString.toLongOrNull()
-                    if (artistId != null) {
-                        loadArtistData(artistId)
-                    } else {
-                        _uiState.update { it.copy(error = context.getString(R.string.artist_detail_invalid_id), isLoading = false) }
+                    when {
+                        artistId != null -> loadArtistData(artistId)
+                        idString.startsWith("yt-") -> loadGatewayArtist(idString)
+                        else -> _uiState.update { it.copy(error = context.getString(R.string.artist_detail_invalid_id), isLoading = false) }
                     }
                 } else {
                     _uiState.update { it.copy(error = context.getString(R.string.artist_detail_id_not_found), isLoading = false) }
@@ -171,6 +172,48 @@ class ArtistDetailViewModel @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * Load a gateway (Subsonic/YouTube) artist on demand: their top songs grouped into album
+     * sections, plus the artist header image from the gateway. Used when the artist id is a
+     * `yt-artist-…` string rather than a local Room Long id.
+     */
+    private fun loadGatewayArtist(gatewayId: String) {
+        currentLoadJob?.cancel()
+        currentLoadJob = viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            val pair = navidromeRepository.getArtistDetail(gatewayId).getOrNull()
+            if (pair == null) {
+                _uiState.update {
+                    it.copy(error = context.getString(R.string.artist_detail_not_found), isLoading = false)
+                }
+                return@launch
+            }
+            val (artist, songs) = pair
+            if (songs.isEmpty()) {
+                // The gateway resolved the artist but returned no playable tracks (name-derived id,
+                // or an upstream lookup that failed). Surface that instead of an inert blank page.
+                _uiState.update {
+                    it.copy(artist = artist, songs = emptyList(), albumSections = emptyList(),
+                        error = context.getString(R.string.artist_detail_not_found), isLoading = false)
+                }
+                return@launch
+            }
+            val sections = buildAlbumSections(songs)
+            val effectiveUrl = artist.imageUrl
+            val scheme = if (!effectiveUrl.isNullOrBlank()) {
+                runCatching { themeStateHolder.getOrGenerateColorScheme(effectiveUrl) }.getOrNull()
+            } else null
+            _artistColorScheme.value = scheme
+            _uiState.value = ArtistDetailUiState(
+                artist = artist,
+                songs = songs,
+                albumSections = sections,
+                effectiveImageUrl = effectiveUrl,
+                isLoading = false
+            )
         }
     }
 

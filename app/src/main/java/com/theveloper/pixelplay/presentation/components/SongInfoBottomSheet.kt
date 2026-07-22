@@ -546,6 +546,15 @@ fun SongInfoBottomSheet(
                                             }
                                         )
 
+                                        if (songInfoViewModel.isDownloadable(song)) {
+                                            val downloadedIds by songInfoViewModel.downloadedNavidromeIds
+                                                .collectAsStateWithLifecycle()
+                                            DownloadActionRow(
+                                                isDownloaded = song.navidromeId in downloadedIds,
+                                                onClick = { songInfoViewModel.toggleDownload(song) }
+                                            )
+                                        }
+
                                         val shouldRenderWatchTransferRow =
                                             currentSongTransfer != null ||
                                                     shouldOfferWatchTransfer ||
@@ -1326,6 +1335,42 @@ private fun Row1Actions(
                 contentDescription = stringResource(R.string.song_info_cd_share_song_file)
             )
         }
+    }
+}
+
+@Composable
+private fun DownloadActionRow(
+    isDownloaded: Boolean,
+    onClick: () -> Unit
+) {
+    FilledTonalButton(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 66.dp),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = if (isDownloaded) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = if (isDownloaded) MaterialTheme.colorScheme.onPrimaryContainer
+            else MaterialTheme.colorScheme.onSecondaryContainer
+        ),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        shape = CircleShape,
+        onClick = onClick
+    ) {
+        Icon(
+            painter = painterResource(
+                if (isDownloaded) R.drawable.rounded_check_circle_24
+                else R.drawable.rounded_download_24
+            ),
+            contentDescription = null
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = stringResource(
+                if (isDownloaded) R.string.song_info_downloaded
+                else R.string.song_info_download
+            )
+        )
     }
 }
 

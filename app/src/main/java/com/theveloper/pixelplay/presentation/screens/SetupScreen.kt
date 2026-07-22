@@ -551,9 +551,10 @@ sealed class SetupPage {
 }
 
 private fun buildSetupPages(sdkInt: Int): List<SetupPage> {
+    // Local media browsing is retired — the MediaPermission and DirectorySelection steps
+    // are gone; the library is served by the XPS gateway (configured under Accounts).
     val pages = mutableListOf<SetupPage>(
-        SetupPage.Welcome,
-        SetupPage.MediaPermission
+        SetupPage.Welcome
     )
 
     if (sdkInt >= Build.VERSION_CODES.TIRAMISU) {
@@ -561,7 +562,6 @@ private fun buildSetupPages(sdkInt: Int): List<SetupPage> {
     }
 
     pages += SetupPage.BackupRestore
-    pages += SetupPage.DirectorySelection
     pages += SetupPage.ThemeSelection
     pages += SetupPage.LibraryLayout
     pages += SetupPage.NavBarLayout
@@ -610,14 +610,12 @@ private fun isPermissionGateSatisfied(
 }
 
 private fun allRequiredPermissionsGrantedNow(context: Context): Boolean {
-    val mediaGranted = hasMediaPermissionNow(context)
-    val notificationsGranted =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-    return mediaGranted && notificationsGranted
+    // Local media is retired — only the playback-notification permission is required (13+).
+    return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
 }
 
 private fun hasMediaPermissionNow(context: Context): Boolean {

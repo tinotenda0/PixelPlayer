@@ -36,10 +36,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PlexSongEntity::class,
         PlexPlaylistEntity::class,
         PlexDownloadEntity::class,
+        NavidromeDownloadEntity::class,
         AiCacheEntity::class,
         AiUsageEntity::class
     ],
-    version = 44,
+    version = 45,
     exportSchema = true
 )
 abstract class PixelPlayDatabase : RoomDatabase() {
@@ -59,6 +60,7 @@ abstract class PixelPlayDatabase : RoomDatabase() {
     abstract fun jellyfinDao(): JellyfinDao
     abstract fun plexDao(): PlexDao
     abstract fun plexDownloadDao(): PlexDownloadDao
+    abstract fun navidromeDownloadDao(): NavidromeDownloadDao
     abstract fun aiCacheDao(): AiCacheDao
     abstract fun aiUsageDao(): AiUsageDao
 
@@ -815,6 +817,22 @@ abstract class PixelPlayDatabase : RoomDatabase() {
         val MIGRATION_43_44 = object : Migration(43, 44) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE plex_songs ADD COLUMN thumb_path TEXT")
+            }
+        }
+
+        /** Offline downloads for Subsonic/YouTube tracks (Spotify-style pin). */
+        val MIGRATION_44_45 = object : Migration(44, 45) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `navidrome_downloads` (
+                        `navidrome_id` TEXT NOT NULL,
+                        `file_path` TEXT NOT NULL,
+                        `mime_type` TEXT,
+                        `size_bytes` INTEGER NOT NULL,
+                        `downloaded_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`navidrome_id`)
+                    )
+                """.trimIndent())
             }
         }
 

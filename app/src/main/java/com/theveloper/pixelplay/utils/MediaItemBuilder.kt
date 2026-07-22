@@ -75,6 +75,13 @@ object MediaItemBuilder {
         "android.resource",
         "http",
         "https",
+        // Cloud cover schemes: the in-app MediaSession uses CoilBitmapLoader, which resolves
+        // these via the registered Coil fetchers — so letting them survive into the metadata
+        // lets the system notification / lock screen show real art instead of the placeholder.
+        "navidrome_cover",
+        "plex_cover",
+        "jellyfin_cover",
+        "telegram_art",
     )
     private val SUPPORTED_EXTERNAL_ARTWORK_SCHEMES = setOf(
         "content",

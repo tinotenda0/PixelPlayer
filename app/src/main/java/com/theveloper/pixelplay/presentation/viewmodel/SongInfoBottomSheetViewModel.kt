@@ -47,8 +47,37 @@ class SongInfoBottomSheetViewModel @Inject constructor(
     private val wearPhoneTransferSender: WearPhoneTransferSender,
     private val transferStateStore: PhoneWatchTransferStateStore,
     private val musicDao: MusicDao,
+    private val navidromeDownloadManager: com.theveloper.pixelplay.data.navidrome.NavidromeDownloadManager,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
+
+    /** Ids of tracks pinned for offline playback (Subsonic/YouTube). */
+    val downloadedNavidromeIds: StateFlow<Set<String>> = navidromeDownloadManager.downloadedIds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), emptySet())
+
+    /** A song can be pinned for offline use if it comes from the Subsonic/YouTube gateway. */
+    fun isDownloadable(song: Song): Boolean = !song.navidromeId.isNullOrBlank()
+
+    fun isDownloaded(song: Song): Boolean =
+        song.navidromeId?.let { it in downloadedNavidromeIds.value } ?: false
+
+    /** Pin the track if not downloaded, otherwise remove the download. */
+    fun toggleDownload(song: Song) {
+        val id = song.navidromeId ?: return
+        viewModelScope.launch {
+            if (id in downloadedNavidromeIds.value) {
+                navidromeDownloadManager.removeDownload(id)
+            } else {
+                navidromeDownloadManager.pinSongs(listOf(id))
+            }
+        }
+    }
+
+    /** Pin every provided Subsonic/YouTube track (used for album/playlist downloads). */
+    fun downloadAll(songs: List<Song>) {
+        val ids = songs.mapNotNull { it.navidromeId }.filter { it.isNotBlank() }
+        if (ids.isNotEmpty()) navidromeDownloadManager.pinSongs(ids)
+    }
 
     data class SongLocationInfo(
         val label: String,

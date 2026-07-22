@@ -167,7 +167,8 @@ object AppModule {
             PixelPlayDatabase.MIGRATION_40_41,
             PixelPlayDatabase.MIGRATION_41_42,
             PixelPlayDatabase.MIGRATION_42_43,
-            PixelPlayDatabase.MIGRATION_43_44
+            PixelPlayDatabase.MIGRATION_43_44,
+            PixelPlayDatabase.MIGRATION_44_45
         )
             .addCallback(PixelPlayDatabase.createRuntimeArtifactsCallback())
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
@@ -275,6 +276,12 @@ object AppModule {
     @Provides
     fun providePlexDownloadDao(database: PixelPlayDatabase): com.theveloper.pixelplay.data.database.PlexDownloadDao {
         return database.plexDownloadDao()
+    }
+
+    @Singleton
+    @Provides
+    fun provideNavidromeDownloadDao(database: PixelPlayDatabase): com.theveloper.pixelplay.data.database.NavidromeDownloadDao {
+        return database.navidromeDownloadDao()
     }
 
     @Provides

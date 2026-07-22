@@ -51,9 +51,9 @@ data class SetupUiState(
 ) {
     val allPermissionsGranted: Boolean
         get() {
-            val mediaOk = mediaPermissionGranted
-            val notificationsOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) notificationsPermissionGranted else true
-            return mediaOk && notificationsOk
+            // Local media browsing is retired — the library is server-backed, so no storage
+            // permission is required. Only the playback-notification permission matters (13+).
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) notificationsPermissionGranted else true
         }
 }
 

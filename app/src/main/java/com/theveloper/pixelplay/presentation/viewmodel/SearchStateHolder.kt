@@ -1,8 +1,11 @@
 package com.theveloper.pixelplay.presentation.viewmodel
 
+import com.theveloper.pixelplay.data.model.Album
+import com.theveloper.pixelplay.data.model.Artist
 import com.theveloper.pixelplay.data.model.SearchFilterType
 import com.theveloper.pixelplay.data.model.SearchHistoryItem
 import com.theveloper.pixelplay.data.model.SearchResultItem
+import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.search.SearchRanker
 import kotlinx.collections.immutable.ImmutableList
@@ -12,6 +15,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,23 +48,51 @@ class SearchStateHolder @Inject constructor(
     private val navidromeRepository: com.theveloper.pixelplay.data.navidrome.NavidromeRepository,
 ) {
 
+    /** Live gateway search results (on-demand YouTube songs + artist + album results). */
+    private data class LiveResults(
+        val songs: List<Song> = emptyList(),
+        val artists: List<Artist> = emptyList(),
+        val albums: List<Album> = emptyList(),
+    ) {
+        val isEmpty: Boolean get() = songs.isEmpty() && artists.isEmpty() && albums.isEmpty()
+    }
+
     /**
-     * Merge live gateway song results (including on-demand "yt-" YouTube songs)
-     * into the local search results, de-duped by song id. Only for filters that
-     * show songs; other filters (albums/artists) are left untouched.
+     * Merge live gateway results into the local results, de-duped, honouring the active filter
+     * (songs for ALL/SONGS, artists for ALL/ARTISTS, albums for ALL/ALBUMS). This is what makes
+     * search surface artists and full albums, not just songs.
      */
-    private fun mergeLiveSongs(
+    private fun mergeLive(
         local: List<SearchResultItem>,
-        live: List<com.theveloper.pixelplay.data.model.Song>,
+        live: LiveResults,
         filter: SearchFilterType
     ): List<SearchResultItem> {
-        if (live.isEmpty()) return local
-        if (filter != SearchFilterType.ALL && filter != SearchFilterType.SONGS) return local
-        val existing = local.mapNotNull { (it as? SearchResultItem.SongItem)?.song?.id }.toHashSet()
-        val liveItems = live
-            .filterNot { it.id in existing }
-            .map { SearchResultItem.SongItem(it) }
-        return local + liveItems
+        if (live.isEmpty) return local
+        var out = local
+        if ((filter == SearchFilterType.ALL || filter == SearchFilterType.SONGS) && live.songs.isNotEmpty()) {
+            // De-dup on the GATEWAY id: a synced library row carries id="<unified Long>" while the
+            // same track from live search carries id="navidrome_<gatewayId>". Those id spaces are
+            // disjoint, so comparing Song.id would never match and every synced track would double up.
+            val seen = out.mapNotNull { (it as? SearchResultItem.SongItem)?.song }
+                .map { it.navidromeId ?: it.id }
+                .toHashSet()
+            out = out + live.songs
+                .filterNot { (it.navidromeId ?: it.id) in seen }
+                .map { SearchResultItem.SongItem(it) }
+        }
+        if ((filter == SearchFilterType.ALL || filter == SearchFilterType.ARTISTS) && live.artists.isNotEmpty()) {
+            val seen = out.mapNotNull { (it as? SearchResultItem.ArtistItem)?.artist?.name?.lowercase() }.toHashSet()
+            out = out + live.artists.filterNot { it.name.lowercase() in seen }.map { SearchResultItem.ArtistItem(it) }
+        }
+        if ((filter == SearchFilterType.ALL || filter == SearchFilterType.ALBUMS) && live.albums.isNotEmpty()) {
+            val seen = out.mapNotNull { r ->
+                (r as? SearchResultItem.AlbumItem)?.album?.let { "${it.title.lowercase()}|${it.artist.lowercase()}" }
+            }.toHashSet()
+            out = out + live.albums
+                .filterNot { "${it.title.lowercase()}|${it.artist.lowercase()}" in seen }
+                .map { SearchResultItem.AlbumItem(it) }
+        }
+        return out
     }
     private companion object {
         const val SEARCH_DEBOUNCE_MS = 300L
@@ -125,24 +158,41 @@ class SearchStateHolder @Inject constructor(
                         // that are NOT in the synced library). Emits empty first so
                         // local results render instantly, then the live results when
                         // they arrive. Failures (not logged in, offline) → empty.
-                        val liveSongsFlow = flow {
-                            emit(emptyList<com.theveloper.pixelplay.data.model.Song>())
+                        val liveFlow = flow {
+                            emit(LiveResults())
                             _isLiveSearching.value = true
                             try {
-                                val live = runCatching {
-                                    navidromeRepository.searchSongs(normalizedQuery, limit = 40)
-                                        .getOrDefault(emptyList())
-                                }.getOrDefault(emptyList())
-                                if (live.isNotEmpty()) emit(live)
+                                val live = coroutineScope {
+                                    val songs = async {
+                                        runCatching {
+                                            navidromeRepository.searchSongs(normalizedQuery, limit = 40)
+                                                .getOrDefault(emptyList())
+                                        }.getOrDefault(emptyList())
+                                    }
+                                    val artists = async {
+                                        runCatching {
+                                            navidromeRepository.searchArtists(normalizedQuery, limit = 10)
+                                                .getOrDefault(emptyList())
+                                        }.getOrDefault(emptyList())
+                                    }
+                                    val albums = async {
+                                        runCatching {
+                                            navidromeRepository.searchAlbums(normalizedQuery, limit = 20)
+                                                .getOrDefault(emptyList())
+                                        }.getOrDefault(emptyList())
+                                    }
+                                    LiveResults(songs.await(), artists.await(), albums.await())
+                                }
+                                if (!live.isEmpty) emit(live)
                             } finally {
                                 _isLiveSearching.value = false
                             }
                         }
 
                         musicRepository.searchAll(normalizedQuery, currentFilter)
-                            .combine(liveSongsFlow) { local, live -> local to live }
-                            .collect { (resultsList, liveSongs) ->
-                                val merged = mergeLiveSongs(resultsList, liveSongs, _selectedSearchFilter.value)
+                            .combine(liveFlow) { local, live -> local to live }
+                            .collect { (resultsList, liveResults) ->
+                                val merged = mergeLive(resultsList, liveResults, _selectedSearchFilter.value)
 
                                 // Relevance ranking: entities whose own name matches beat
                                 // incidental matches, played songs rank first among equal

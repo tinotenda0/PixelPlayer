@@ -209,6 +209,7 @@ class PlayerViewModel @Inject constructor(
     private val plexConnectClient: com.theveloper.pixelplay.data.plex.connect.PlexConnectClient,
     private val rokuEcpClient: com.theveloper.pixelplay.data.network.roku.RokuEcpClient,
     private val plexRepository: com.theveloper.pixelplay.data.plex.PlexRepository,
+    private val navidromeRepository: com.theveloper.pixelplay.data.navidrome.NavidromeRepository,
     private val queueStateHolder: QueueStateHolder,
     private val queueUndoStateHolder: QueueUndoStateHolder,
     private val playlistDismissUndoStateHolder: PlaylistDismissUndoStateHolder,
@@ -1353,13 +1354,45 @@ class PlayerViewModel @Inject constructor(
                 try {
                     Json.decodeFromString<List<String>>(orderJson)
                 } catch (e: Exception) {
-                    listOf("SONGS", "ALBUMS", "ARTIST", "PLAYLISTS", "FOLDERS", "LIKED")
+                    listOf("SONGS", "ALBUMS", "ARTIST", "PLAYLISTS", "LIKED")
                 }
             } else {
-                listOf("SONGS", "ALBUMS", "ARTIST", "PLAYLISTS", "FOLDERS", "LIKED")
+                listOf("SONGS", "ALBUMS", "ARTIST", "PLAYLISTS", "LIKED")
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("SONGS", "ALBUMS", "ARTIST", "PLAYLISTS", "FOLDERS", "LIKED"))
+        // Local on-device browsing is retired — the library is server-backed now, so the
+        // Folders tab is always hidden regardless of any persisted tab order.
+        .map { tabs -> tabs.filter { it != "FOLDERS" } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("SONGS", "ALBUMS", "ARTIST", "PLAYLISTS", "LIKED"))
+
+    /** A server-curated home row: a stable id, a title and its songs (Your Mix, Top Charts, radios). */
+    data class CuratedHomeRow(val id: String, val title: String, val songs: List<Song>)
+
+    private val _curatedHomeRows = MutableStateFlow<List<CuratedHomeRow>>(emptyList())
+    /** Server-curated rows that prepopulate the home screen (YouTube-Music style). */
+    val curatedHomeRows: StateFlow<List<CuratedHomeRow>> = _curatedHomeRows.asStateFlow()
+
+    /** True once the user is signed into the gateway but hasn't completed taste onboarding. */
+    val shouldShowTasteOnboarding: StateFlow<Boolean> = combine(
+        navidromeRepository.isLoggedInFlow,
+        userPreferencesRepository.tasteOnboardingDoneFlow
+    ) { loggedIn, done -> loggedIn && !done }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** Refresh the curated home rows from the gateway. Clears stale rows once logged out. */
+    fun loadCuratedHome() {
+        viewModelScope.launch {
+            if (!navidromeRepository.isLoggedIn) {
+                _curatedHomeRows.value = emptyList()
+                return@launch
+            }
+            val rows = navidromeRepository.fetchCuratedHomeRows()
+                .map { (id, title, songs) -> CuratedHomeRow(id, title, songs) }
+            // Only overwrite with a successful, non-empty fetch so a transient network blip
+            // doesn't wipe a populated home; logout is handled by the isLoggedIn guard above.
+            if (rows.isNotEmpty()) _curatedHomeRows.value = rows
+        }
+    }
 
     private val _loadedTabs = MutableStateFlow(emptySet<String>())
     private var lastBlockedDirectories: Set<String>? = null
@@ -2316,11 +2349,33 @@ class PlayerViewModel @Inject constructor(
 
     fun showAndPlaySong(song: Song) = playbackDispatchStateHolder.showAndPlaySong(song)
 
-    fun playAlbum(album: Album) =
-        queueStateHolder.playAlbum(album, playbackSourceCallbacks())
+    fun playAlbum(album: Album) {
+        val gatewayId = album.navidromeId
+        if (gatewayId != null) {
+            viewModelScope.launch {
+                val songs = navidromeRepository.getAlbumDetail(gatewayId).getOrNull()?.second.orEmpty()
+                if (songs.isNotEmpty()) {
+                    playSongs(songsToPlay = songs, startSong = songs.first(), queueName = album.title)
+                }
+            }
+        } else {
+            queueStateHolder.playAlbum(album, playbackSourceCallbacks())
+        }
+    }
 
-    fun playArtist(artist: Artist) =
-        queueStateHolder.playArtist(artist, playbackSourceCallbacks())
+    fun playArtist(artist: Artist) {
+        val gatewayId = artist.navidromeId
+        if (gatewayId != null) {
+            viewModelScope.launch {
+                val songs = navidromeRepository.getArtistDetail(gatewayId).getOrNull()?.second.orEmpty()
+                if (songs.isNotEmpty()) {
+                    playSongs(songsToPlay = songs, startSong = songs.first(), queueName = artist.name)
+                }
+            }
+        } else {
+            queueStateHolder.playArtist(artist, playbackSourceCallbacks())
+        }
+    }
 
     fun removeSongFromQueue(songId: String) {
         queueUndoStateHolder.removeSongFromQueue(

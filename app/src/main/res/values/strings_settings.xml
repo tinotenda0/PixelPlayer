@@ -294,6 +294,8 @@
     <string name="settings_hifi_mode_unsupported_subtitle">Not supported on this device (PCM_FLOAT AudioTrack unavailable).</string>
     <string name="settings_persistent_shuffle_title">Persistent Shuffle</string>
     <string name="settings_persistent_shuffle_subtitle">Remember shuffle setting even after closing the app.</string>
+    <string name="settings_endless_playback_title">Endless playback</string>
+    <string name="settings_endless_playback_subtitle">Keep the music going — automatically queue similar songs when the queue runs low.</string>
     <string name="settings_show_queue_history_title">Show queue history</string>
     <string name="settings_show_queue_history_subtitle">Show previously played songs in the queue.</string>
 

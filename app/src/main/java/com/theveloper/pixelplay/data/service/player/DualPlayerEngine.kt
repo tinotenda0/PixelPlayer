@@ -229,6 +229,7 @@ class DualPlayerEngine @Inject constructor(
     private val jellyfinStreamProxy: com.theveloper.pixelplay.data.jellyfin.JellyfinStreamProxy,
     private val plexStreamProxy: com.theveloper.pixelplay.data.plex.PlexStreamProxy,
     private val plexDownloadManager: com.theveloper.pixelplay.data.plex.PlexDownloadManager,
+    private val navidromeDownloadManager: com.theveloper.pixelplay.data.navidrome.NavidromeDownloadManager,
     private val gdriveStreamProxy: com.theveloper.pixelplay.data.gdrive.GDriveStreamProxy,
     private val telegramCacheManager: com.theveloper.pixelplay.data.telegram.TelegramCacheManager,
     private val connectivityStateHolder: com.theveloper.pixelplay.presentation.viewmodel.ConnectivityStateHolder
@@ -783,6 +784,28 @@ class DualPlayerEngine @Inject constructor(
     private var isReleased = false
     private val resolvedUriCache = LruCache<String, Uri>(100)
 
+    private var downloadCacheInvalidationJob: Job? = null
+
+    /**
+     * When the set of offline-downloaded tracks changes, drop cached navidrome:// resolutions so a
+     * track pinned (or removed) AFTER it was first streamed re-resolves to the local file (or back
+     * to streaming) instead of reusing a stale cached stream URL.
+     *
+     * Started from [initialize] rather than an init block: [release] cancels `scope`, and
+     * [initialize] allocates a fresh one, so an init-block collector would die on the first service
+     * teardown and never come back for the rest of the process.
+     */
+    private fun startDownloadCacheInvalidation() {
+        if (downloadCacheInvalidationJob?.isActive == true) return
+        downloadCacheInvalidationJob = scope.launch {
+            navidromeDownloadManager.downloadedIds.collect {
+                resolvedUriCache.snapshot().keys
+                    .filter { it.startsWith("navidrome://") }
+                    .forEach { resolvedUriCache.remove(it) }
+            }
+        }
+    }
+
     // Whether the OS classifies this as a low-RAM device. Used to cap the player's max
     // prefetch depth so hi-res/lossless buffering (and the second player during a crossfade)
     // can't balloon peak memory on constrained hardware. Cached: it never changes at runtime.
@@ -795,6 +818,7 @@ class DualPlayerEngine @Inject constructor(
         if (scope.coroutineContext[Job]?.isActive != true) {
             scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         }
+        startDownloadCacheInvalidation()
 
         if (::playerA.isInitialized) {
             removeMasterPlayerListeners(playerA)
@@ -1319,6 +1343,16 @@ class DualPlayerEngine @Inject constructor(
     }
 
     private suspend fun resolveNavidromeUriAsync(uriString: String): Uri? = withContext(Dispatchers.IO) {
+        // Pinned tracks play straight from local storage — instant and offline-capable.
+        // Extract the id the same way the proxy does (scheme-specific part, not host, so
+        // case-sensitive "yt-" on-demand ids survive).
+        val songId = Uri.parse(uriString).schemeSpecificPart?.trimStart('/')?.substringBefore('?')
+        if (!songId.isNullOrBlank()) {
+            navidromeDownloadManager.getLocalFilePath(songId)?.let { localPath ->
+                return@withContext Uri.fromFile(File(localPath))
+            }
+        }
+
         if (!navidromeStreamProxy.ensureReady(5_000L)) return@withContext null
         navidromeStreamProxy.warmUpStreamUrl(uriString)
         navidromeStreamProxy.resolveNavidromeUri(uriString)?.toUri()

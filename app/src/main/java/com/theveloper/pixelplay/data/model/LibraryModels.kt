@@ -14,7 +14,10 @@ data class Album(
     val dateAdded: Long,
     val albumArtUriString: String?,
     val songCount: Int,
-    val albumArtist: String? = null
+    val albumArtist: String? = null,
+    // Gateway (Subsonic/YouTube) album id, e.g. "yt-album-<browseId>". Set for on-demand
+    // results that aren't in the local library; used to fetch the album live + to navigate.
+    val navidromeId: String? = null
 ) : Parcelable {
     companion object {
         fun empty() = Album(
@@ -37,7 +40,10 @@ data class Artist(
     val name: String,
     val songCount: Int,
     val imageUrl: String? = null, // Deezer artist image URL (from API)
-    val customImageUri: String? = null // User-defined custom artist image (local file path)
+    val customImageUri: String? = null, // User-defined custom artist image (local file path)
+    // Gateway (Subsonic/YouTube) artist id, e.g. "yt-artist-<browseId>". Set for on-demand
+    // results that aren't in the local library; used to fetch the artist live + to navigate.
+    val navidromeId: String? = null
 ) : Parcelable {
     companion object {
         fun empty() = Artist(

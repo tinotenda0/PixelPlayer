@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -93,6 +94,7 @@ import com.theveloper.pixelplay.presentation.jellyfin.dashboard.JellyfinDashboar
 import com.theveloper.pixelplay.presentation.plex.dashboard.PlexDashboardViewModel
 import com.theveloper.pixelplay.presentation.navidrome.dashboard.NavidromeDashboardViewModel
 import com.theveloper.pixelplay.presentation.qqmusic.dashboard.QqMusicDashboardViewModel
+import com.theveloper.pixelplay.presentation.components.CuratedSection
 import com.theveloper.pixelplay.presentation.components.DailyMixSection
 import com.theveloper.pixelplay.presentation.components.HomeGradientTopBar
 import com.theveloper.pixelplay.presentation.components.HomeOptionsBottomSheet
@@ -147,6 +149,20 @@ fun HomeScreen(
     val statsViewModel: StatsViewModel = hiltViewModel()
     val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val dailyMixSongs by playerViewModel.dailyMixSongs.collectAsStateWithLifecycle()
+    val curatedHomeRows by playerViewModel.curatedHomeRows.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { playerViewModel.loadCuratedHome() }
+    // First-run taste onboarding: once signed in and not yet onboarded, guide the pairwise picker.
+    // Latched: shouldShowTasteOnboarding is a WhileSubscribed StateFlow, so after the picker pops
+    // it can still replay a stale `true` before the DataStore change propagates — without this
+    // one-shot guard that would bounce the user straight back into onboarding.
+    var tasteOnboardingRequested by rememberSaveable { mutableStateOf(false) }
+    val showTasteOnboarding by playerViewModel.shouldShowTasteOnboarding.collectAsStateWithLifecycle()
+    LaunchedEffect(showTasteOnboarding) {
+        if (showTasteOnboarding && !tasteOnboardingRequested) {
+            tasteOnboardingRequested = true
+            navController.navigateSafely(Screen.TasteOnboarding.route)
+        }
+    }
     val curatedYourMixSongs by playerViewModel.yourMixSongs.collectAsStateWithLifecycle()
     val homeMixPreviewSongs by playerViewModel.homeMixPreviewSongs.collectAsStateWithLifecycle()
     val playbackHistory by playerViewModel.playbackHistory.collectAsStateWithLifecycle()
@@ -454,6 +470,28 @@ fun HomeScreen(
                             playerViewModel = playerViewModel
                         )
                     }
+                }
+
+                // Server-curated rows (Your Mix, Discover, Top Charts, per-artist Radio…),
+                // prepopulated from the gateway like YouTube Music. Additive — only shown
+                // when the server returns curated content.
+                items(
+                    items = curatedHomeRows,
+                    key = { "curated_${it.id}" },
+                    contentType = { "curated_section" }
+                ) { row ->
+                    CuratedSection(
+                        title = row.title,
+                        songs = row.songs,
+                        currentSongId = currentSong?.id,
+                        onSongClick = { song ->
+                            playerViewModel.playSongs(
+                                songsToPlay = row.songs,
+                                startSong = song,
+                                queueName = row.title
+                            )
+                        }
+                    )
                 }
 
                 if (recentlyPlayedSongs.size >= RecentlyPlayedSectionMinSongsToShow) {

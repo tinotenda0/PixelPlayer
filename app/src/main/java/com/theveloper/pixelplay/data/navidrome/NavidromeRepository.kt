@@ -17,7 +17,11 @@ import com.theveloper.pixelplay.data.database.SongArtistCrossRef
 import com.theveloper.pixelplay.data.database.SongEntity
 import com.theveloper.pixelplay.data.database.SourceType
 import com.theveloper.pixelplay.data.database.toSong
+import com.theveloper.pixelplay.data.model.Album
+import com.theveloper.pixelplay.data.model.Artist
 import com.theveloper.pixelplay.data.model.Song
+import com.theveloper.pixelplay.data.navidrome.model.NavidromeAlbum
+import com.theveloper.pixelplay.data.navidrome.model.NavidromeArtist
 import com.theveloper.pixelplay.data.navidrome.model.NavidromeCredentials
 import com.theveloper.pixelplay.data.navidrome.model.NavidromeSong
 import com.theveloper.pixelplay.data.network.navidrome.NavidromeApiService
@@ -637,6 +641,173 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
+    /** Live artist search results, as app [Artist]s carrying their gateway id. */
+    suspend fun searchArtists(query: String, limit: Int = 10): Result<List<Artist>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) {
+            try {
+                val json = api.searchArtists(query, count = limit).getOrThrow()
+                Result.success(NavidromeResponseParser.parseArtists(json).map { it.toAppArtist() })
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: searchArtists failed"); Result.failure(e)
+            }
+        }
+    }
+
+    /** Live album search results, as app [Album]s carrying their gateway id. */
+    suspend fun searchAlbums(query: String, limit: Int = 20): Result<List<Album>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) {
+            try {
+                val json = api.searchAlbums(query, count = limit).getOrThrow()
+                Result.success(NavidromeResponseParser.parseAlbums(json).map { it.toAppAlbum() })
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: searchAlbums failed"); Result.failure(e)
+            }
+        }
+    }
+
+    /** Artist detail fetched live for a gateway `yt-artist-…` id: the artist + its top songs. */
+    suspend fun getArtistDetail(artistId: String): Result<Pair<Artist, List<Song>>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) {
+            try {
+                val obj = api.getArtistWithAlbums(artistId).getOrThrow()
+                val artist = NavidromeResponseParser.parseArtist(obj).toAppArtist()
+                val arr = obj.optJSONArray("topSong")
+                val jsons = (0 until (arr?.length() ?: 0)).mapNotNull { arr?.optJSONObject(it) }
+                val songs = NavidromeResponseParser.parseSongs(jsons).map { it.toSong() }
+                Result.success(artist to songs)
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: getArtistDetail failed"); Result.failure(e)
+            }
+        }
+    }
+
+    /** Album detail fetched live for a gateway `yt-album-…` id: the album + its tracks. */
+    suspend fun getAlbumDetail(albumId: String): Result<Pair<Album, List<Song>>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) {
+            try {
+                val obj = api.getAlbumWithSongs(albumId).getOrThrow()
+                val album = NavidromeResponseParser.parseAlbum(obj).toAppAlbum()
+                val arr = obj.optJSONArray("song")
+                val jsons = (0 until (arr?.length() ?: 0)).mapNotNull { arr?.optJSONObject(it) }
+                val songs = NavidromeResponseParser.parseSongs(jsons).map { it.toSong() }
+                Result.success(album to songs)
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: getAlbumDetail failed"); Result.failure(e)
+            }
+        }
+    }
+
+    // ── Taste onboarding ─────────────────────────────────────────────────────
+
+    /** Starting pool of artists for the pairwise "who do you prefer?" onboarding. */
+    suspend fun tasteStartArtists(): Result<List<Artist>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) {
+            try {
+                Result.success(NavidromeResponseParser.parseArtists(
+                    api.getTasteStart().getOrThrow()).map { it.toAppArtist() })
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: tasteStartArtists failed"); Result.failure(e)
+            }
+        }
+    }
+
+    /** Artists related to [artistId] — the next pair branches off the last pick. */
+    suspend fun relatedArtists(artistId: String): Result<List<Artist>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) {
+            try {
+                Result.success(NavidromeResponseParser.parseArtists(
+                    api.getRelatedArtists(artistId).getOrThrow()).map { it.toAppArtist() })
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: relatedArtists failed"); Result.failure(e)
+            }
+        }
+    }
+
+    /** Persist the chosen taste-seed artists (by name) so the server can curate the home. */
+    suspend fun setTasteSeeds(artistNames: List<String>): Result<Unit> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return api.setSeeds(artistNames)
+    }
+
+    /**
+     * Fetch songs similar to [songId] straight from the server (radio / endless playback).
+     */
+    suspend fun getSimilarSongs(songId: String, count: Int = 20): Result<List<Song>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) {
+            try {
+                val jsonObjects = api.getSimilarSongs2(songId, count).getOrThrow()
+                Result.success(NavidromeResponseParser.parseSongs(jsonObjects).map { it.toSong() })
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: getSimilarSongs failed")
+                Result.failure(e)
+            }
+        }
+    }
+
+    /**
+     * Fetch a playlist's songs live from the server. Used for server-curated home rows
+     * (Your Mix, Discover, Top Charts, per-artist Radio…) that aren't cached in the local DB.
+     */
+    suspend fun fetchRemotePlaylistSongs(playlistId: String): Result<List<Song>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) {
+            try {
+                val (_, songJson) = api.getPlaylist(playlistId).getOrThrow()
+                Result.success(NavidromeResponseParser.parseSongs(songJson).map { it.toSong() })
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: fetchRemotePlaylistSongs($playlistId) failed")
+                Result.failure(e)
+            }
+        }
+    }
+
+    /**
+     * Fetch all playlists live from the server (curated rows + user playlists), each as a
+     * raw JSON object. The curated rows carry ids like "cur-mix"/"cur-charts" and radio ids.
+     */
+    suspend fun fetchRemotePlaylists(): Result<List<JSONObject>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) { api.getPlaylists() }
+    }
+
+    /**
+     * Fetch albums of a given list type (e.g. "recent", "frequent", "newest") live.
+     */
+    suspend fun fetchRemoteAlbums(type: String, size: Int = 20): Result<List<JSONObject>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) { api.getAlbumList(type = type, size = size) }
+    }
+
+    /**
+     * The server-curated home rows (Your Mix, Discover, Recently Played, Top Charts, and any
+     * per-artist "… Radio"), as ordered (title -> songs) pairs. The gateway returns these as
+     * `cur-`-prefixed playlists ahead of the user's own playlists; empty rows are dropped.
+     */
+    suspend fun fetchCuratedHomeRows(): List<Triple<String, String, List<Song>>> {
+        if (!isLoggedIn) return emptyList()
+        return withContext(Dispatchers.IO) {
+            val playlists = api.getPlaylists().getOrNull().orEmpty()
+            val rows = mutableListOf<Triple<String, String, List<Song>>>()
+            for (pl in playlists) {
+                val id = pl.optString("id")
+                if (id.isBlank() || !id.startsWith("cur-")) continue // user playlists live in the Playlists tab
+                val name = pl.optString("name").ifBlank { "Mix" }
+                // De-dupe songs by id: a row may repeat a track, which would otherwise collide
+                // on the LazyRow item key and crash the carousel.
+                val songs = fetchRemotePlaylistSongs(id).getOrNull().orEmpty().distinctBy { it.id }
+                if (songs.isNotEmpty()) rows.add(Triple(id, name, songs))
+            }
+            rows
+        }
+    }
+
     // ─── Media URLs ────────────────────────────────────────────────────────
 
     /**
@@ -931,6 +1102,33 @@ class NavidromeRepository @Inject constructor(
 }
 
 // ─── Extension Functions ────────────────────────────────────────────────────
+
+/**
+ * Convert a gateway artist to the app [Artist], carrying its gateway id for navigation and
+ * resolving its image through the `navidrome_cover://` Coil scheme.
+ */
+fun NavidromeArtist.toAppArtist(): Artist = Artist(
+    id = id.hashCode().toLong(),
+    name = name,
+    songCount = albumCount,
+    imageUrl = artistImageUrl ?: coverArt?.let { "navidrome_cover://$it" },
+    navidromeId = id
+)
+
+/**
+ * Convert a gateway album to the app [Album], carrying its gateway id for navigation.
+ */
+fun NavidromeAlbum.toAppAlbum(): Album = Album(
+    id = id.hashCode().toLong(),
+    title = name,
+    artist = artist,
+    year = year,
+    dateAdded = 0L,
+    albumArtUriString = coverArt?.let { "navidrome_cover://$it" },
+    songCount = songCount,
+    albumArtist = artist,
+    navidromeId = id
+)
 
 /**
  * Convert a NavidromeSong to a Song model.

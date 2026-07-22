@@ -308,6 +308,11 @@ fun AppNavigation(
                     )
                 }
             }
+            composable(Screen.TasteOnboarding.route) {
+                com.theveloper.pixelplay.presentation.screens.TasteOnboardingScreen(
+                    onDone = { navController.popBackStack() }
+                )
+            }
             composable(
                 route = Screen.PlaylistDetail.route,
                 arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),

@@ -1271,7 +1271,9 @@ fun SearchResultsList(
                                 ) {
                                     {
                                         navController.navigateSafelyReplacing(
-                                            route = Screen.AlbumDetail.createRoute(item.album.id),
+                                            route = item.album.navidromeId
+                                                ?.let { Screen.AlbumDetail.createRoute(it) }
+                                                ?: Screen.AlbumDetail.createRoute(item.album.id),
                                             patternToPop = Screen.AlbumDetail.route
                                         )
                                         onItemSelected()
@@ -1306,7 +1308,9 @@ fun SearchResultsList(
                                 ) {
                                     {
                                         navController.navigateSafelyReplacing(
-                                            route = Screen.ArtistDetail.createRoute(item.artist.id),
+                                            route = item.artist.navidromeId
+                                                ?.let { Screen.ArtistDetail.createRoute(it) }
+                                                ?: Screen.ArtistDetail.createRoute(item.artist.id),
                                             patternToPop = Screen.ArtistDetail.route
                                         )
                                         onItemSelected()

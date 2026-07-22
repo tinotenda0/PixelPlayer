@@ -880,6 +880,13 @@ fun SettingsCategoryScreen(
                                     leadingIcon = { Icon(painterResource(R.drawable.rounded_shuffle_24), null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
                                 SwitchSettingItem(
+                                    title = stringResource(R.string.settings_endless_playback_title),
+                                    subtitle = stringResource(R.string.settings_endless_playback_subtitle),
+                                    checked = uiState.endlessPlaybackEnabled,
+                                    onCheckedChange = { settingsViewModel.setEndlessPlaybackEnabled(it) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_all_inclusive_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                SwitchSettingItem(
                                     title = stringResource(R.string.settings_show_queue_history_title),
                                     subtitle = stringResource(R.string.settings_show_queue_history_subtitle),
                                     checked = uiState.showQueueHistory,

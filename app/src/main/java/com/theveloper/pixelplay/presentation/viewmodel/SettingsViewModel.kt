@@ -76,6 +76,7 @@ data class SettingsUiState(
     val hiFiModeDeviceSupported: Boolean = true,
     val crossfadeDuration: Int = 2000,
     val persistentShuffleEnabled: Boolean = false,
+    val endlessPlaybackEnabled: Boolean = false,
     val folderBackGestureNavigation: Boolean = true,
     val lyricsSourcePreference: LyricsSourcePreference = LyricsSourcePreference.EMBEDDED_FIRST,
     val autoScanLrcFiles: Boolean = false,
@@ -163,6 +164,7 @@ private sealed interface SettingsUiUpdate {
         val hiFiModeEnabled: Boolean,
         val crossfadeDuration: Int,
         val persistentShuffleEnabled: Boolean,
+        val endlessPlaybackEnabled: Boolean,
         val folderBackGestureNavigation: Boolean,
         val lyricsSourcePreference: LyricsSourcePreference,
         val autoScanLrcFiles: Boolean,
@@ -691,7 +693,8 @@ class SettingsViewModel @Inject constructor(
                 userPreferencesRepository.animatedLyricsBlurEnabledFlow,
                 userPreferencesRepository.animatedLyricsBlurStrengthFlow,
                 userPreferencesRepository.disableBlurAllOverFlow,
-                userPreferencesRepository.showScrollbarFlow
+                userPreferencesRepository.showScrollbarFlow,
+                userPreferencesRepository.endlessPlaybackEnabledFlow
             ) { values ->
                 SettingsUiUpdate.Group2(
                     keepPlayingInBackground = values[0] as Boolean,
@@ -713,7 +716,8 @@ class SettingsViewModel @Inject constructor(
                     animatedLyricsBlurEnabled = values[16] as Boolean,
                     animatedLyricsBlurStrength = values[17] as Float,
                     disableBlurAllOver = values[18] as Boolean,
-                    showScrollbar = values[19] as Boolean
+                    showScrollbar = values[19] as Boolean,
+                    endlessPlaybackEnabled = values[20] as Boolean
                 )
             }.collect { update ->
                 _uiState.update { state ->
@@ -737,12 +741,13 @@ class SettingsViewModel @Inject constructor(
                         animatedLyricsBlurEnabled = update.animatedLyricsBlurEnabled,
                         animatedLyricsBlurStrength = update.animatedLyricsBlurStrength,
                         disableBlurAllOver = update.disableBlurAllOver,
-                        showScrollbar = update.showScrollbar
+                        showScrollbar = update.showScrollbar,
+                        endlessPlaybackEnabled = update.endlessPlaybackEnabled
                     )
                 }
             }
         }
-        
+
         // Group 3: Remaining individual collectors (loading state, tweaks)
         viewModelScope.launch {
             userPreferencesRepository.fullPlayerLoadingTweaksFlow.collect { tweaks ->
@@ -1041,6 +1046,12 @@ class SettingsViewModel @Inject constructor(
     fun setPersistentShuffleEnabled(enabled: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setPersistentShuffleEnabled(enabled)
+        }
+    }
+
+    fun setEndlessPlaybackEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setEndlessPlaybackEnabled(enabled)
         }
     }
 
