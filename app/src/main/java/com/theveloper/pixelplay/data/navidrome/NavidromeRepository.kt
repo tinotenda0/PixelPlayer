@@ -668,18 +668,96 @@ class NavidromeRepository @Inject constructor(
     }
 
     /** Artist detail fetched live for a gateway `yt-artist-…` id: the artist + its top songs. */
-    suspend fun getArtistDetail(artistId: String): Result<Pair<Artist, List<Song>>> {
+    suspend fun getArtistDetail(artistId: String): Result<GatewayArtistDetail> {
         if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
         return withContext(Dispatchers.IO) {
             try {
                 val obj = api.getArtistWithAlbums(artistId).getOrThrow()
                 val artist = NavidromeResponseParser.parseArtist(obj).toAppArtist()
-                val arr = obj.optJSONArray("topSong")
-                val jsons = (0 until (arr?.length() ?: 0)).mapNotNull { arr?.optJSONObject(it) }
-                val songs = NavidromeResponseParser.parseSongs(jsons).map { it.toSong() }
-                Result.success(artist to songs)
+
+                val songArr = obj.optJSONArray("topSong")
+                val songJsons = (0 until (songArr?.length() ?: 0)).mapNotNull { songArr?.optJSONObject(it) }
+                val topSongs = NavidromeResponseParser.parseSongs(songJsons).map { it.toSong() }
+
+                // The gateway already orders the discography newest-first; keep its order.
+                val albumArr = obj.optJSONArray("album")
+                val albums = (0 until (albumArr?.length() ?: 0))
+                    .mapNotNull { albumArr?.optJSONObject(it) }
+                    .mapNotNull { runCatching { NavidromeResponseParser.parseAlbum(it).toAppAlbum() }.getOrNull() }
+
+                Result.success(
+                    GatewayArtistDetail(
+                        artist = artist,
+                        topSongs = topSongs,
+                        albums = albums,
+                        description = obj.optString("description", "").takeIf { it.isNotBlank() },
+                        subscribers = obj.optString("subscribers", "").takeIf { it.isNotBlank() }
+                    )
+                )
             } catch (e: Exception) {
                 Timber.e(e, "$TAG: getArtistDetail failed"); Result.failure(e)
+            }
+        }
+    }
+
+    /** The gateway's genre names (real YouTube Music genres), or empty when unavailable. */
+    suspend fun getGatewayGenres(): List<String> {
+        if (!isLoggedIn) return emptyList()
+        return withContext(Dispatchers.IO) {
+            try {
+                val arr = api.getGenres().getOrThrow().optJSONArray("genre")
+                (0 until (arr?.length() ?: 0)).mapNotNull { i ->
+                    val entry = arr?.opt(i)
+                    // OpenSubsonic returns objects with the name in `value`; tolerate plain strings.
+                    when (entry) {
+                        is JSONObject -> entry.optString("value").takeIf { it.isNotBlank() }
+                            ?: entry.optString("name").takeIf { it.isNotBlank() }
+                        is String -> entry.takeIf { it.isNotBlank() }
+                        else -> null
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: getGatewayGenres failed"); emptyList()
+            }
+        }
+    }
+
+    /** Tracks for a gateway genre, resolved live upstream. */
+    suspend fun getGatewaySongsByGenre(genre: String, count: Int = 50): List<Song> {
+        if (!isLoggedIn) return emptyList()
+        return withContext(Dispatchers.IO) {
+            try {
+                val arr = api.getSongsByGenre(genre, count).getOrThrow().optJSONArray("song")
+                val jsons = (0 until (arr?.length() ?: 0)).mapNotNull { arr?.optJSONObject(it) }
+                NavidromeResponseParser.parseSongs(jsons).map { it.toSong() }
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: getGatewaySongsByGenre failed"); emptyList()
+            }
+        }
+    }
+
+    /**
+     * Blends [artistIds] into a playlist saved on the gateway, returning its id and track count.
+     */
+    suspend fun buildMix(name: String, artistIds: List<String>, count: Int = 40): Result<BuiltMix> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        if (artistIds.isEmpty()) return Result.failure(Exception("Pick at least one artist"))
+        return withContext(Dispatchers.IO) {
+            try {
+                val obj = api.buildMix(name, artistIds, count).getOrThrow()
+                // An empty id means the gateway resolved none of the artists.
+                val playlistId = obj.optString("id").takeIf { it.isNotBlank() }
+                    ?: return@withContext Result.failure(
+                        Exception("Couldn't find those artists upstream"))
+                Result.success(
+                    BuiltMix(
+                        playlistId = playlistId,
+                        name = obj.optString("name", name),
+                        songCount = obj.optInt("songCount", 0)
+                    )
+                )
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: buildMix failed"); Result.failure(e)
             }
         }
     }
@@ -1176,6 +1254,21 @@ data class YtmStatus(
 
 /** A Google account reachable from the captured cookie jar. */
 data class YtmAccount(val index: String, val name: String)
+
+/** A playlist the gateway generated from a set of artists. */
+data class BuiltMix(val playlistId: String, val name: String, val songCount: Int)
+
+/**
+ * A gateway artist page in one payload: popular tracks, the discography (already ordered
+ * newest-first by the gateway) and the biography, so the screen needs a single round trip.
+ */
+data class GatewayArtistDetail(
+    val artist: Artist,
+    val topSongs: List<Song>,
+    val albums: List<Album>,
+    val description: String?,
+    val subscribers: String?
+)
 
 /** Outcome of submitting cookies: "linked", "choose", "rejected", "incomplete", "error". */
 data class YtmLinkResult(

@@ -313,6 +313,7 @@ class PlayerViewModelTest {
             mockPlexConnectClient,
             mockRokuEcpClient,
             mockPlexRepository,
+            mockk(relaxed = true), // navidromeRepository
             mockQueueStateHolder,
             mockQueueUndoStateHolder,
             mockPlaylistDismissUndoStateHolder,

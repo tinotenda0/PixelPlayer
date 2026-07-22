@@ -1748,6 +1748,10 @@ fun LibraryScreen(
             showPlaylistCreationTypeDialog = false
             showCreatePlaylistDialog = true
         },
+        onArtistMixSelected = {
+            showPlaylistCreationTypeDialog = false
+            navController.navigateSafely(Screen.MixBuilder.route)
+        },
         onAiSelected = {
             if (hasActiveAiProviderApiKey) {
                 showPlaylistCreationTypeDialog = false

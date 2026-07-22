@@ -100,6 +100,7 @@ data class GenreDetailUiState(
 @HiltViewModel
 class GenreDetailViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
+    private val navidromeRepository: com.theveloper.pixelplay.data.navidrome.NavidromeRepository,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -152,7 +153,13 @@ class GenreDetailViewModel @Inject constructor(
                             darkColorHex = "#616161", onDarkColorHex = "#FFFFFF"
                         )
 
-                    val songs = musicRepository.getMusicByGenre(genre.name).first()
+                    // Local tags first; a streaming-only library has none, so fall back to the
+                    // gateway, which resolves the genre live upstream.
+                    val localSongs = musicRepository.getMusicByGenre(genre.name).first()
+                    val songs = localSongs.ifEmpty {
+                        runCatching { navidromeRepository.getGatewaySongsByGenre(genre.name) }
+                            .getOrDefault(emptyList())
+                    }
                     val artists = musicRepository.getArtists().first()
                     artistMap = artists.associate { it.name.trim().lowercase() to it.imageUrl }
 

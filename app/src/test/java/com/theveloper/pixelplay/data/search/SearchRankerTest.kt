@@ -117,4 +117,40 @@ class SearchRankerTest {
         assertEquals("lowkey", SearchRanker.normalize("Low-Key"))
         assertEquals("acdc", SearchRanker.normalize("AC/DC"))
     }
+
+    @Test
+    fun `upstream popularity order breaks ties that closeness alone would not`() {
+        // Both titles match "love" as a word prefix and are the same length, so closeness is
+        // identical. The gateway returned the popular one first; it must stay first.
+        val items = listOf(
+            song(id = "1", title = "Love Song", artist = "Popular Artist"),
+            song(id = "2", title = "Love Bomb", artist = "Obscure Artist")
+        )
+        val ranked = SearchRanker.rank("love", items, noPlays)
+        assertEquals("Love Song", (ranked.first() as SearchResultItem.SongItem).song.title)
+    }
+
+    @Test
+    fun `popularity does not override a stronger textual match`() {
+        // The exact match arrives second; match strength must still win over arrival order.
+        val items = listOf(
+            song(id = "1", title = "Loverboy", artist = "A"),
+            song(id = "2", title = "Love", artist = "B")
+        )
+        val ranked = SearchRanker.rank("love", items, noPlays)
+        assertEquals("Love", (ranked.first() as SearchResultItem.SongItem).song.title)
+    }
+
+    @Test
+    fun `an artist the user actually listens to outranks an equally-matching stranger`() {
+        val items = listOf(
+            artist("Kendrick Lightyear"),                                  // no history
+            artist("Kendrick Lamar"),                                      // heavy history
+            song(id = "s1", title = "HUMBLE", artist = "Kendrick Lamar")
+        )
+        val plays = mapOf("s1" to SearchRanker.PlayStat(playCount = 40, lastPlayedTimestamp = 0L))
+        val ranked = SearchRanker.rank("kendrick", items, plays)
+        val firstArtist = ranked.filterIsInstance<SearchResultItem.ArtistItem>().first()
+        assertEquals("Kendrick Lamar", firstArtist.artist.name)
+    }
 }

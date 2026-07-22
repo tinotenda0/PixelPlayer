@@ -2361,7 +2361,7 @@ class PlayerViewModel @Inject constructor(
         val gatewayId = artist.navidromeId
         if (gatewayId != null) {
             viewModelScope.launch {
-                val songs = navidromeRepository.getArtistDetail(gatewayId).getOrNull()?.second.orEmpty()
+                val songs = navidromeRepository.getArtistDetail(gatewayId).getOrNull()?.topSongs.orEmpty()
                 if (songs.isNotEmpty()) {
                     playSongs(songsToPlay = songs, startSong = songs.first(), queueName = artist.name)
                 }

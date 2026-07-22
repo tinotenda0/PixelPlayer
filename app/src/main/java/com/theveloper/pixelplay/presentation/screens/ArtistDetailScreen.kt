@@ -18,7 +18,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -67,6 +70,7 @@ import androidx.compose.ui.util.lerp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavController
+import com.theveloper.pixelplay.data.model.Album
 import com.theveloper.pixelplay.data.model.Artist
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.presentation.components.CollapsibleCommonTopBar
@@ -127,6 +131,8 @@ fun ArtistDetailScreen(
     val favoriteIds by playerViewModel.favoriteSongIds.collectAsStateWithLifecycle()
     val navBarCompactMode by playerViewModel.navBarCompactMode.collectAsStateWithLifecycle()
     var showSongInfoBottomSheet by remember { mutableStateOf(false) }
+    // Popular tracks are capped at 5 like Spotify, expandable to the full top-song list.
+    var showAllTopSongs by rememberSaveable(artistId) { mutableStateOf(false) }
     val selectedSongForInfo by playerViewModel.selectedSongForInfo.collectAsStateWithLifecycle()
     val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
@@ -308,6 +314,77 @@ fun ArtistDetailScreen(
                             bottom = MiniPlayerHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 8.dp
                         )
                     ) {
+                        // --- Spotify-style gateway artist page: Popular, Discography, About. ---
+                        if (uiState.topSongs.isNotEmpty()) {
+                            item(key = "popular_header", contentType = "artist_page_header") {
+                                ArtistSectionHeader(title = "Popular")
+                            }
+                            val shown =
+                                if (showAllTopSongs) uiState.topSongs else uiState.topSongs.take(5)
+                            itemsIndexed(
+                                items = shown,
+                                key = { i, song -> "popular_${song.id}_$i" },
+                                contentType = { _, _ -> "artist_section_song" }
+                            ) { songIndex, song ->
+                                ArtistAlbumSectionSongItem(
+                                    modifier = Modifier.animateItem(
+                                        fadeInSpec = tween(durationMillis = 180),
+                                        fadeOutSpec = tween(durationMillis = 120),
+                                        placementSpec = tween(durationMillis = 200)
+                                    ),
+                                    song = song,
+                                    songIndex = songIndex,
+                                    songCount = shown.size,
+                                    isCurrentSong = stablePlayerState.currentSong?.id == song.id,
+                                    isPlaying = stablePlayerState.isPlaying,
+                                    onSongClick = {
+                                        playerViewModel.showAndPlaySong(song, uiState.topSongs)
+                                    },
+                                    onMoreOptionsClick = {
+                                        playerViewModel.selectSongForInfo(song)
+                                        showSongInfoBottomSheet = true
+                                    }
+                                )
+                            }
+                            if (uiState.topSongs.size > 5) {
+                                item(key = "popular_show_all", contentType = "artist_page_action") {
+                                    ArtistShowAllButton(
+                                        expanded = showAllTopSongs,
+                                        onClick = { showAllTopSongs = !showAllTopSongs }
+                                    )
+                                }
+                            }
+                        }
+
+                        if (uiState.discography.isNotEmpty()) {
+                            item(key = "discography_header", contentType = "artist_page_header") {
+                                ArtistSectionHeader(title = "Discography", topPadding = 24.dp)
+                            }
+                            item(key = "discography_row", contentType = "artist_page_albums") {
+                                ArtistDiscographyRow(
+                                    albums = uiState.discography,
+                                    onAlbumClick = { album ->
+                                        val route = album.navidromeId
+                                            ?.let { Screen.AlbumDetail.createRoute(it) }
+                                            ?: Screen.AlbumDetail.createRoute(album.id)
+                                        navController.navigate(route)
+                                    }
+                                )
+                            }
+                        }
+
+                        if (!uiState.biography.isNullOrBlank()) {
+                            item(key = "about_header", contentType = "artist_page_header") {
+                                ArtistSectionHeader(title = "About", topPadding = 24.dp)
+                            }
+                            item(key = "about_body", contentType = "artist_page_about") {
+                                ArtistAboutCard(
+                                    biography = uiState.biography!!,
+                                    subscribers = uiState.subscribers
+                                )
+                            }
+                        }
+
                         albumSections.forEachIndexed { index, section ->
                             if (section.songs.isEmpty()) return@forEachIndexed
 
@@ -1195,5 +1272,147 @@ private fun MusicIconPattern(modifier: Modifier = Modifier) {
                 .size(45.dp)
                 .graphicsLayer { rotationZ = -8f }
         )
+    }
+}
+
+/** Section title for the Spotify-style artist page (Popular / Discography / About). */
+@Composable
+private fun ArtistSectionHeader(
+    title: String,
+    topPadding: Dp = 8.dp
+) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleLarge,
+        fontFamily = GoogleSansRounded,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(top = topPadding, bottom = 8.dp)
+    )
+}
+
+/** Expand/collapse control for the capped Popular list. */
+@Composable
+private fun ArtistShowAllButton(
+    expanded: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        FilledTonalButton(
+            onClick = onClick,
+            shape = AbsoluteSmoothCornerShape(24.dp, 60)
+        ) {
+            Text(
+                text = if (expanded) "Show less" else "Show all",
+                fontFamily = GoogleSansRounded,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+/**
+ * The artist's discography as a horizontally scrolling shelf, newest first (the gateway
+ * already orders it). Tapping an album opens its detail page.
+ */
+@Composable
+private fun ArtistDiscographyRow(
+    albums: List<Album>,
+    onAlbumClick: (Album) -> Unit
+) {
+    val context = LocalContext.current
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(vertical = 4.dp)
+    ) {
+        items(
+            items = albums,
+            key = { album -> album.navidromeId ?: album.id.toString() }
+        ) { album ->
+            Column(
+                modifier = Modifier
+                    .width(148.dp)
+                    .clip(AbsoluteSmoothCornerShape(18.dp, 60))
+                    .clickable { onAlbumClick(album) }
+                    .padding(bottom = 4.dp)
+            ) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(album.albumArtUriString)
+                        .size(Size(300, 300))
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = album.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(148.dp)
+                        .clip(AbsoluteSmoothCornerShape(18.dp, 60))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = album.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = GoogleSansRounded,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 2.dp)
+                )
+                if (album.year > 0) {
+                    Text(
+                        text = album.year.toString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = GoogleSansRounded,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 2.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Artist biography, collapsed to a few lines until tapped. */
+@Composable
+private fun ArtistAboutCard(
+    biography: String,
+    subscribers: String?
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = AbsoluteSmoothCornerShape(24.dp, 60),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(AbsoluteSmoothCornerShape(24.dp, 60))
+            .clickable { expanded = !expanded }
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            if (!subscribers.isNullOrBlank()) {
+                Text(
+                    text = "$subscribers subscribers",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontFamily = GoogleSansRounded,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+            Text(
+                text = biography,
+                style = MaterialTheme.typography.bodyMedium,
+                fontFamily = GoogleSansRounded,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = if (expanded) Int.MAX_VALUE else 4,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }

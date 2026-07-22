@@ -313,6 +313,11 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() }
                 )
             }
+            composable(Screen.MixBuilder.route) {
+                com.theveloper.pixelplay.presentation.screens.MixBuilderScreen(
+                    navController = navController
+                )
+            }
             composable(
                 route = Screen.PlaylistDetail.route,
                 arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),

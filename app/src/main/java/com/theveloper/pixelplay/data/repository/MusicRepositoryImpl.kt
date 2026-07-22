@@ -100,7 +100,9 @@ class MusicRepositoryImpl @Inject constructor(
     private val favoritesDao: FavoritesDao,
     private val artistImageRepository: ArtistImageRepository,
     private val folderTreeBuilder: FolderTreeBuilder,
-    private val engagementDao: com.theveloper.pixelplay.data.database.EngagementDao
+    private val engagementDao: com.theveloper.pixelplay.data.database.EngagementDao,
+    // Lazy: NavidromeRepository sits above this one in the graph, so resolve it on first use.
+    private val navidromeRepositoryProvider: Lazy<com.theveloper.pixelplay.data.navidrome.NavidromeRepository>
 ) : MusicRepository {
 
     companion object {
@@ -915,7 +917,28 @@ class MusicRepositoryImpl @Inject constructor(
                     }
                 )
             }.flatMapLatest { it }
+        }.map { localGenres ->
+            // Streaming-only libraries have no local tags to derive genres from, so the real list
+            // comes from the gateway. Local genres (if any) keep their place at the front.
+            val seen = localGenres.map { it.id }.toMutableSet()
+            localGenres + gatewayGenres().mapNotNull { name ->
+                val genre = buildGenre(name)
+                if (seen.add(genre.id)) genre else null
+            }
         }.conflate().flowOn(Dispatchers.IO)
+    }
+
+    // The gateway's genre list is stable; cache it for the session so re-collecting the Library
+    // tab doesn't re-hit the network on every emission.
+    @Volatile private var cachedGatewayGenres: List<String>? = null
+
+    private suspend fun gatewayGenres(): List<String> {
+        cachedGatewayGenres?.let { return it }
+        val fetched = runCatching { navidromeRepositoryProvider.get().getGatewayGenres() }
+            .getOrDefault(emptyList())
+        // Only cache a real answer, so a transient failure doesn't blank genres for the session.
+        if (fetched.isNotEmpty()) cachedGatewayGenres = fetched
+        return fetched
     }
 
     private fun buildGenre(genreName: String): Genre {

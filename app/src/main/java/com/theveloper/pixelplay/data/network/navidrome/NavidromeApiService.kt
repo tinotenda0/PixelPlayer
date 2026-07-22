@@ -202,6 +202,40 @@ class NavidromeApiService @Inject constructor(
         )
     }
 
+    /**
+     * Like [requestAndParse] but takes an ordered pair list, so the same key can appear more than
+     * once (Subsonic's convention for multi-valued arguments, e.g. repeated `artistId`).
+     */
+    private suspend fun requestAndParseRepeated(
+        endpoint: String,
+        params: List<Pair<String, String>>
+    ): Result<JSONObject> = withContext(Dispatchers.IO) {
+        try {
+            val cred = credentials ?: return@withContext Result.failure(
+                IllegalStateException("No credentials configured"))
+            val (token, salt) = generateAuthParams(cred.password)
+            val urlBuilder = "${cred.normalizedServerUrl}/rest/$endpoint.view".toHttpUrl().newBuilder()
+                .addQueryParameter("u", cred.username)
+                .addQueryParameter("t", token)
+                .addQueryParameter("s", salt)
+                .addQueryParameter("v", API_VERSION)
+                .addQueryParameter("c", cred.clientId.ifBlank { DEFAULT_CLIENT_ID })
+                .addQueryParameter("f", DEFAULT_FORMAT)
+            params.forEach { (k, v) -> urlBuilder.addQueryParameter(k, v) }
+            val request = Request.Builder().url(urlBuilder.build())
+                .header("User-Agent", "PixelPlayer/$API_VERSION").get().build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@use Result.failure(Exception("HTTP ${response.code}"))
+                }
+                // Subsonic reports failures as HTTP 200 + status="failed", so parse the body.
+                parseResponse(response.body.string())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // ─── System API ──────────────────────────────────────────────────────
 
     /**
@@ -317,6 +351,36 @@ class NavidromeApiService @Inject constructor(
     suspend fun getAlbumWithSongs(id: String): Result<JSONObject> {
         return requestAndParse("getAlbum", mapOf("id" to id))
             .map { it.optJSONObject("album") ?: JSONObject() }
+    }
+
+    /** The gateway's genre list (real YouTube Music moods/genres, not local tags). */
+    suspend fun getGenres(): Result<JSONObject> {
+        return requestAndParse("getGenres", emptyMap())
+            .map { it.optJSONObject("genres") ?: JSONObject() }
+    }
+
+    /** Tracks for one gateway genre, resolved live upstream. */
+    suspend fun getSongsByGenre(genre: String, count: Int = 50): Result<JSONObject> {
+        return requestAndParse(
+            "getSongsByGenre",
+            mapOf("genre" to genre, "count" to count.toString())
+        ).map { it.optJSONObject("songsByGenre") ?: JSONObject() }
+    }
+
+    /**
+     * Builds a playlist by blending the given artists and saves it on the gateway.
+     * [artistIds] are gateway artist ids (`yt-artist-<browseId>`).
+     */
+    suspend fun buildMix(name: String, artistIds: List<String>, count: Int = 40): Result<JSONObject> {
+        val params = mutableListOf<Pair<String, String>>(
+            "name" to name,
+            "count" to count.toString()
+        )
+        // Repeated `artistId` params, matching how setSeeds passes multi-valued arguments.
+        artistIds.forEach { params.add("artistId" to it) }
+        // The gateway answers with a standard Subsonic `playlist` object for the saved mix.
+        return requestAndParseRepeated("buildMix", params)
+            .map { it.optJSONObject("playlist") ?: JSONObject() }
     }
 
     // ─── Taste onboarding (custom XPS endpoints) ─────────────────────────

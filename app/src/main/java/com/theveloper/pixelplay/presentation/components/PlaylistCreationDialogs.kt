@@ -41,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
@@ -111,6 +112,7 @@ fun PlaylistCreationTypeDialog(
     onDismiss: () -> Unit,
     onManualSelected: () -> Unit,
     onAiSelected: () -> Unit,
+    onArtistMixSelected: () -> Unit = {},
     isAiEnabled: Boolean = true,
     onSetupAiClick: (() -> Unit)? = null
 ) {
@@ -178,6 +180,22 @@ fun PlaylistCreationTypeDialog(
                     enabled = true,
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+
+                CreationModeCard(
+                    title = "Artist mix",
+                    subtitle = "Blend a few artists into a playlist",
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Tune,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    },
+                    onClick = onArtistMixSelected,
+                    enabled = true,
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                 )
 
                 CreationModeCard(

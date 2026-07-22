@@ -8,6 +8,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theveloper.pixelplay.R
+import com.theveloper.pixelplay.data.model.Album
 import com.theveloper.pixelplay.data.model.Artist
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.repository.ArtistImageRepository
@@ -38,7 +39,13 @@ data class ArtistDetailUiState(
     val albumSections: List<ArtistAlbumSection> = emptyList(),
     val effectiveImageUrl: String? = null,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    // Gateway artists render a Spotify-style page instead of collapsible album sections:
+    // popular tracks first, then the discography, then the biography.
+    val topSongs: List<Song> = emptyList(),
+    val discography: List<Album> = emptyList(),
+    val biography: String? = null,
+    val subscribers: String? = null
 )
 
 @Immutable
@@ -184,24 +191,25 @@ class ArtistDetailViewModel @Inject constructor(
         currentLoadJob?.cancel()
         currentLoadJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            val pair = navidromeRepository.getArtistDetail(gatewayId).getOrNull()
-            if (pair == null) {
+            val detail = navidromeRepository.getArtistDetail(gatewayId).getOrNull()
+            if (detail == null) {
                 _uiState.update {
                     it.copy(error = context.getString(R.string.artist_detail_not_found), isLoading = false)
                 }
                 return@launch
             }
-            val (artist, songs) = pair
-            if (songs.isEmpty()) {
-                // The gateway resolved the artist but returned no playable tracks (name-derived id,
-                // or an upstream lookup that failed). Surface that instead of an inert blank page.
+            val artist = detail.artist
+            val songs = detail.topSongs
+            if (songs.isEmpty() && detail.albums.isEmpty()) {
+                // The gateway resolved the artist but returned neither tracks nor a discography
+                // (name-derived id, or an upstream lookup that failed). Surface that instead of
+                // an inert blank page.
                 _uiState.update {
                     it.copy(artist = artist, songs = emptyList(), albumSections = emptyList(),
                         error = context.getString(R.string.artist_detail_not_found), isLoading = false)
                 }
                 return@launch
             }
-            val sections = buildAlbumSections(songs)
             val effectiveUrl = artist.imageUrl
             val scheme = if (!effectiveUrl.isNullOrBlank()) {
                 runCatching { themeStateHolder.getOrGenerateColorScheme(effectiveUrl) }.getOrNull()
@@ -210,9 +218,15 @@ class ArtistDetailViewModel @Inject constructor(
             _uiState.value = ArtistDetailUiState(
                 artist = artist,
                 songs = songs,
-                albumSections = sections,
+                // Deliberately empty: gateway artists use the Spotify-style layout below rather
+                // than collapsible per-album sections built out of a handful of featured tracks.
+                albumSections = emptyList(),
                 effectiveImageUrl = effectiveUrl,
-                isLoading = false
+                isLoading = false,
+                topSongs = songs,
+                discography = detail.albums,
+                biography = detail.description,
+                subscribers = detail.subscribers
             )
         }
     }

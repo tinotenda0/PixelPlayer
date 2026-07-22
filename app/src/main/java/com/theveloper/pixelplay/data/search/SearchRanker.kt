@@ -39,6 +39,16 @@ object SearchRanker {
     private const val ALBUM_STRONG_BONUS = 100
     private const val PLAY_BONUS_CAP = 400      // < 1000, so it never crosses a tier
 
+    // Upstream (YouTube Music / the gateway) returns results popularity-ordered. Closeness alone
+    // would bury a hugely popular track under an obscure one whose title matches a character
+    // better, so arrival order is scored, not just used as a tiebreak.
+    private const val SOURCE_BONUS_MAX = 200
+    private const val SOURCE_BONUS_DEPTH = 20   // beyond this many results, popularity adds nothing
+
+    // Artists/albums the user actually listens to outrank ones they don't, the same way play
+    // history already lifts songs.
+    private const val AFFINITY_BONUS_CAP = 250
+
     private const val FUZZY_ACCEPT = 0.84       // min similarity to count as a fuzzy match
     private const val RECENCY_WINDOW_MS = 30L * 24 * 60 * 60 * 1000
 
@@ -55,9 +65,15 @@ object SearchRanker {
         // Normalized query words, for order-free multi-word matching.
         val qWords = tokenize(query).map { normalize(it) }.filter { it.isNotEmpty() }
 
+        // Per-artist listening affinity, aggregated from the play history of the songs on offer.
+        // Lets an artist or album result inherit "you listen to these people a lot".
+        val affinity = artistAffinity(items, playStats)
+
         return items
             .withIndex()
-            .map { (index, item) -> Triple(item, score(nq, qWords, item, playStats, nowMs), index) }
+            .map { (index, item) ->
+                Triple(item, score(nq, qWords, item, playStats, affinity, index, nowMs), index)
+            }
             // Tiebreak on the ORIGINAL order, not the name. Results arrive already ordered by
             // source relevance (the gateway returns best-match-first), and equal-scoring items are
             // common — an alphabetical tiebreak threw that relevance away and made results look
@@ -72,6 +88,8 @@ object SearchRanker {
         qWords: List<String>,
         item: SearchResultItem,
         playStats: Map<String, PlayStat>,
+        affinity: Map<String, Int>,
+        sourceIndex: Int,
         nowMs: Long
     ): Int {
         val primary = primaryName(item)
@@ -110,9 +128,58 @@ object SearchRanker {
             s += playBonus(playStats[item.song.id], nowMs)
         }
 
+        // Listening history for the people behind the result, so a familiar artist/album
+        // outranks a stranger that matches the text equally well.
+        s += affinityBonus(item, affinity)
+
+        // Upstream popularity: results arrive best/most-popular first.
+        s += sourceBonus(sourceIndex)
+
         // Micro-ordering within a tier by closeness (0..99).
         s += ((best?.quality ?: 0.0) * 99).toInt().coerceIn(0, 99)
         return s
+    }
+
+    /** Linear decay over the first [SOURCE_BONUS_DEPTH] results; 0 thereafter. */
+    private fun sourceBonus(index: Int): Int {
+        if (index >= SOURCE_BONUS_DEPTH) return 0
+        val remaining = (SOURCE_BONUS_DEPTH - index).toDouble() / SOURCE_BONUS_DEPTH
+        return (SOURCE_BONUS_MAX * remaining).toInt()
+    }
+
+    /**
+     * Total plays per normalized artist name, summed over whichever result songs the user has
+     * played before. Uses only the stats already fetched for this result set — no extra query.
+     */
+    private fun artistAffinity(
+        items: List<SearchResultItem>,
+        playStats: Map<String, PlayStat>
+    ): Map<String, Int> {
+        if (playStats.isEmpty()) return emptyMap()
+        val out = HashMap<String, Int>()
+        for (item in items) {
+            if (item !is SearchResultItem.SongItem) continue
+            val plays = playStats[item.song.id]?.playCount ?: continue
+            if (plays <= 0) continue
+            val key = normalize(item.song.displayArtist)
+            if (key.isEmpty()) continue
+            out[key] = (out[key] ?: 0) + plays
+        }
+        return out
+    }
+
+    private fun affinityBonus(item: SearchResultItem, affinity: Map<String, Int>): Int {
+        if (affinity.isEmpty()) return 0
+        val name = when (item) {
+            is SearchResultItem.ArtistItem -> item.artist.name
+            is SearchResultItem.AlbumItem -> item.album.artist
+            // Songs already get the far more specific per-track play bonus; adding the full
+            // artist bonus on top would let one heavily-played track drag its whole catalogue up.
+            else -> return 0
+        }
+        val plays = affinity[normalize(name)] ?: return 0
+        if (plays <= 0) return 0
+        return min(AFFINITY_BONUS_CAP, (80 * ln((plays + 1).toDouble())).toInt())
     }
 
     private fun playBonus(stat: PlayStat?, nowMs: Long): Int {

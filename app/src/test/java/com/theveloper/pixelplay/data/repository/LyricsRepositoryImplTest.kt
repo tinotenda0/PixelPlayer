@@ -41,7 +41,9 @@ class LyricsRepositoryImplTest {
             context = mockk<Context>(relaxed = true),
             lrcLibApiService = mockk<LrcLibApiService>(relaxed = true),
             lyricsDao = mockk<LyricsDao>(relaxed = true),
-            okHttpClient = mockk<OkHttpClient>(relaxed = true)
+            okHttpClient = mockk<OkHttpClient>(relaxed = true),
+            neteaseRepositoryProvider = dagger.Lazy { mockk(relaxed = true) },
+            navidromeRepositoryProvider = dagger.Lazy { mockk(relaxed = true) }
         )
         val song = Song(
             id = "12",
@@ -75,7 +77,9 @@ class LyricsRepositoryImplTest {
             context = mockk<Context>(relaxed = true),
             lrcLibApiService = apiService,
             lyricsDao = mockk<LyricsDao>(relaxed = true),
-            okHttpClient = mockk<OkHttpClient>(relaxed = true)
+            okHttpClient = mockk<OkHttpClient>(relaxed = true),
+            neteaseRepositoryProvider = dagger.Lazy { mockk(relaxed = true) },
+            navidromeRepositoryProvider = dagger.Lazy { mockk(relaxed = true) }
         )
         val song = Song(
             id = "45",
@@ -117,7 +121,9 @@ class LyricsRepositoryImplTest {
             context = mockk<Context>(relaxed = true),
             lrcLibApiService = apiService,
             lyricsDao = lyricsDao,
-            okHttpClient = mockk<OkHttpClient>(relaxed = true)
+            okHttpClient = mockk<OkHttpClient>(relaxed = true),
+            neteaseRepositoryProvider = dagger.Lazy { mockk(relaxed = true) },
+            navidromeRepositoryProvider = dagger.Lazy { mockk(relaxed = true) }
         )
         val song = Song(
             id = "77",
@@ -165,7 +171,9 @@ class LyricsRepositoryImplTest {
             context = testContext(),
             lrcLibApiService = apiService,
             lyricsDao = lyricsDao,
-            okHttpClient = mockk<OkHttpClient>(relaxed = true)
+            okHttpClient = mockk<OkHttpClient>(relaxed = true),
+            neteaseRepositoryProvider = dagger.Lazy { mockk(relaxed = true) },
+            navidromeRepositoryProvider = dagger.Lazy { mockk(relaxed = true) }
         )
         val song = testSong(
             id = "101",
@@ -197,7 +205,9 @@ class LyricsRepositoryImplTest {
             context = testContext(),
             lrcLibApiService = apiService,
             lyricsDao = lyricsDao,
-            okHttpClient = mockk<OkHttpClient>(relaxed = true)
+            okHttpClient = mockk<OkHttpClient>(relaxed = true),
+            neteaseRepositoryProvider = dagger.Lazy { mockk(relaxed = true) },
+            navidromeRepositoryProvider = dagger.Lazy { mockk(relaxed = true) }
         )
         val song = testSong(
             id = "102",
@@ -229,7 +239,9 @@ class LyricsRepositoryImplTest {
             context = testContext(),
             lrcLibApiService = apiService,
             lyricsDao = lyricsDao,
-            okHttpClient = mockk<OkHttpClient>(relaxed = true)
+            okHttpClient = mockk<OkHttpClient>(relaxed = true),
+            neteaseRepositoryProvider = dagger.Lazy { mockk(relaxed = true) },
+            navidromeRepositoryProvider = dagger.Lazy { mockk(relaxed = true) }
         )
         val song = testSong(
             id = "103",
@@ -262,7 +274,9 @@ class LyricsRepositoryImplTest {
             context = testContext(),
             lrcLibApiService = apiService,
             lyricsDao = lyricsDao,
-            okHttpClient = mockk<OkHttpClient>(relaxed = true)
+            okHttpClient = mockk<OkHttpClient>(relaxed = true),
+            neteaseRepositoryProvider = dagger.Lazy { mockk(relaxed = true) },
+            navidromeRepositoryProvider = dagger.Lazy { mockk(relaxed = true) }
         )
         val song = testSong(
             id = "104",
