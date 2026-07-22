@@ -313,6 +313,11 @@ fun AppNavigation(
                     onDone = { navController.popBackStack() }
                 )
             }
+            composable(Screen.YtMusicLink.route) {
+                com.theveloper.pixelplay.presentation.screens.YtMusicLinkScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
             composable(
                 route = Screen.PlaylistDetail.route,
                 arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),

@@ -886,6 +886,13 @@ fun SettingsCategoryScreen(
                                     onCheckedChange = { settingsViewModel.setEndlessPlaybackEnabled(it) },
                                     leadingIcon = { Icon(painterResource(R.drawable.rounded_all_inclusive_24), null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
+                                ActionSettingsItem(
+                                    title = stringResource(R.string.settings_ytmusic_link_title),
+                                    subtitle = stringResource(R.string.settings_ytmusic_link_subtitle),
+                                    icon = { Icon(painterResource(R.drawable.rounded_all_inclusive_24), null, tint = MaterialTheme.colorScheme.secondary) },
+                                    primaryActionLabel = stringResource(R.string.settings_ytmusic_link_action),
+                                    onPrimaryAction = { navController.navigate(Screen.YtMusicLink.route) }
+                                )
                                 SwitchSettingItem(
                                     title = stringResource(R.string.settings_show_queue_history_title),
                                     subtitle = stringResource(R.string.settings_show_queue_history_subtitle),

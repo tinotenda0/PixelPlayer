@@ -296,6 +296,9 @@
     <string name="settings_persistent_shuffle_subtitle">Remember shuffle setting even after closing the app.</string>
     <string name="settings_endless_playback_title">Endless playback</string>
     <string name="settings_endless_playback_subtitle">Keep the music going — automatically queue similar songs when the queue runs low.</string>
+    <string name="settings_ytmusic_link_title">YouTube Music account</string>
+    <string name="settings_ytmusic_link_subtitle">Link your account for your real recommendations, playlists and likes. Downloads stay anonymous.</string>
+    <string name="settings_ytmusic_link_action">Manage</string>
     <string name="settings_show_queue_history_title">Show queue history</string>
     <string name="settings_show_queue_history_subtitle">Show previously played songs in the queue.</string>
 

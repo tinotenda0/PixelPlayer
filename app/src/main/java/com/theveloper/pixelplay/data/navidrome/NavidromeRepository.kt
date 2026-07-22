@@ -701,6 +701,45 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
+    // ── YouTube Music account linking ────────────────────────────────────────
+
+    suspend fun ytmStatus(): YtmStatus {
+        if (!isLoggedIn) return YtmStatus(linked = false, configured = false)
+        return withContext(Dispatchers.IO) {
+            val o = api.getYtmStatus().getOrNull()
+            YtmStatus(
+                linked = o?.optBoolean("linked", false) ?: false,
+                configured = o?.optBoolean("configured", false) ?: false
+            )
+        }
+    }
+
+    suspend fun ytmStartLink(): YtmLink {
+        if (!isLoggedIn) return YtmLink("error")
+        return withContext(Dispatchers.IO) {
+            val o = api.startYtmLink().getOrNull() ?: return@withContext YtmLink("error")
+            YtmLink(
+                status = o.optString("status", "error"),
+                userCode = o.optString("userCode", ""),
+                verificationUrl = o.optString("verificationUrl", "https://google.com/device"),
+                intervalSeconds = o.optInt("interval", 5).coerceAtLeast(2)
+            )
+        }
+    }
+
+    /** "linked" | "pending" | "none" | "unconfigured" | "error". */
+    suspend fun ytmPollLink(): String {
+        if (!isLoggedIn) return "error"
+        return withContext(Dispatchers.IO) {
+            api.pollYtmLink().getOrNull()?.optString("status", "pending") ?: "pending"
+        }
+    }
+
+    suspend fun ytmUnlink(): Boolean {
+        if (!isLoggedIn) return false
+        return withContext(Dispatchers.IO) { api.unlinkYtm().isSuccess }
+    }
+
     // ── Taste onboarding ─────────────────────────────────────────────────────
 
     /** Starting pool of artists for the pairwise "who do you prefer?" onboarding. */
@@ -1100,6 +1139,17 @@ class NavidromeRepository @Inject constructor(
         syncUnifiedLibrarySongsFromNavidrome()
     }
 }
+
+/** Whether the signed-in gateway user has linked a YouTube Music account. */
+data class YtmStatus(val linked: Boolean, val configured: Boolean)
+
+/** A device-code linking attempt: show [userCode] and send the user to [verificationUrl]. */
+data class YtmLink(
+    val status: String,
+    val userCode: String = "",
+    val verificationUrl: String = "https://google.com/device",
+    val intervalSeconds: Int = 5
+)
 
 // ─── Extension Functions ────────────────────────────────────────────────────
 

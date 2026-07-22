@@ -324,6 +324,22 @@ class NavidromeApiService @Inject constructor(
         return (0 until (arr?.length() ?: 0)).mapNotNull { arr?.optJSONObject(it) }
     }
 
+    // ─── YouTube Music account linking (custom XPS endpoints) ────────────
+
+    private suspend fun ytmCall(endpoint: String): Result<JSONObject> =
+        requestAndParse(endpoint).map { it.optJSONObject("ytmusic") ?: JSONObject() }
+
+    /** Whether this user has linked a YouTube Music account (and whether linking is configured). */
+    suspend fun getYtmStatus(): Result<JSONObject> = ytmCall("getYtmStatus")
+
+    /** Begin device-code linking; returns the code the user enters at google.com/device. */
+    suspend fun startYtmLink(): Result<JSONObject> = ytmCall("startYtmLink")
+
+    /** Poll until the user approves the code. */
+    suspend fun pollYtmLink(): Result<JSONObject> = ytmCall("pollYtmLink")
+
+    suspend fun unlinkYtm(): Result<JSONObject> = ytmCall("unlinkYtm")
+
     /** Starting pool of recognisable artists for the pairwise taste onboarding. */
     suspend fun getTasteStart(): Result<List<JSONObject>> {
         return requestAndParse("getTasteStart").map { extractTasteArtists(it) }
