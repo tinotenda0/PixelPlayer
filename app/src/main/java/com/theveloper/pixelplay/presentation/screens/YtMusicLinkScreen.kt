@@ -1,9 +1,18 @@
 package com.theveloper.pixelplay.presentation.screens
 
+import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.webkit.CookieManager
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +67,17 @@ fun YtMusicLinkScreen(
 
     PixelPlayStatusBarStyle(color = MaterialTheme.colorScheme.surface)
 
+    // In-app Google sign-in: the user signs in on Google's own page, we read the resulting
+    // cookies and hand them to the gateway. No password ever passes through the app.
+    if (ui.phase == Phase.SIGNING_IN) {
+        BackHandler { viewModel.cancelSignIn() }
+        GoogleSignInWebView(
+            onCookiesCaptured = { viewModel.submitCookies(it) },
+            onCancel = { viewModel.cancelSignIn() }
+        )
+        return
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -93,11 +113,25 @@ fun YtMusicLinkScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
+            if (ui.message.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = ui.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
 
         Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
             when (ui.phase) {
                 Phase.LOADING -> LoadingIndicator(modifier = Modifier.size(48.dp))
+                Phase.VERIFYING -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    LoadingIndicator(modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Verifying with YouTube…", style = MaterialTheme.typography.bodyLarge)
+                }
                 Phase.AWAITING_APPROVAL -> {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Surface(
@@ -158,12 +192,12 @@ fun YtMusicLinkScreen(
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             when (ui.phase) {
                 Phase.NOT_LINKED, Phase.ERROR -> Button(
-                    onClick = { viewModel.startLink() },
+                    onClick = { viewModel.beginSignIn() },
                     enabled = !ui.busy,
                     shape = ShapeCache.smoothPill,
                     contentPadding = PaddingValues(horizontal = 32.dp, vertical = 16.dp),
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Link account", style = MaterialTheme.typography.titleMedium) }
+                ) { Text("Sign in with Google", style = MaterialTheme.typography.titleMedium) }
 
                 Phase.AWAITING_APPROVAL -> TextButton(onClick = { viewModel.cancelLink() }) {
                     Text("Cancel")
@@ -186,6 +220,80 @@ fun YtMusicLinkScreen(
         }
     }
 }
+
+/**
+ * Google's real sign-in page in a WebView. On success we read the music.youtube.com cookies from
+ * the native cookie store and hand them to the gateway.
+ *
+ * The desktop user-agent matters: Google refuses to sign in when it recognises an embedded
+ * WebView (the "this browser may not be secure" wall), so we present as desktop Chrome.
+ */
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun GoogleSignInWebView(
+    onCookiesCaptured: (String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var captured by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onCancel) { Text("Cancel") }
+            Text(
+                text = "Sign in to YouTube Music",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(onClick = {
+                // Manual fallback if auto-detection doesn't fire.
+                val cookie = CookieManager.getInstance().getCookie(YTM_URL).orEmpty()
+                if (cookie.isNotBlank() && !captured) {
+                    captured = true
+                    onCookiesCaptured(cookie)
+                }
+            }) { Text("Done") }
+        }
+
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                val cookieManager = CookieManager.getInstance()
+                cookieManager.setAcceptCookie(true)
+                WebView(ctx).apply {
+                    cookieManager.setAcceptThirdPartyCookies(this, true)
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.userAgentString = DESKTOP_USER_AGENT
+                    webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            if (captured) return
+                            val cookie = cookieManager.getCookie(YTM_URL).orEmpty()
+                            // SAPISID only appears once the account session is established; the
+                            // server re-verifies anyway, so a premature grab just gets rejected.
+                            if (cookie.contains("SAPISID")) {
+                                captured = true
+                                cookieManager.flush()
+                                onCookiesCaptured(cookie)
+                            }
+                        }
+                    }
+                    loadUrl(SIGN_IN_URL)
+                }
+            }
+        )
+    }
+}
+
+private const val YTM_URL = "https://music.youtube.com"
+private const val SIGN_IN_URL =
+    "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fmusic.youtube.com%2F"
+private const val DESKTOP_USER_AGENT =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 private fun copyToClipboard(context: Context, text: String) {
     if (text.isBlank()) return

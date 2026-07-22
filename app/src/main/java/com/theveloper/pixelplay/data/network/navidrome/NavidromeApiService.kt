@@ -4,8 +4,10 @@ import com.theveloper.pixelplay.data.navidrome.model.NavidromeCredentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import timber.log.Timber
 import java.security.MessageDigest
@@ -339,6 +341,32 @@ class NavidromeApiService @Inject constructor(
     suspend fun pollYtmLink(): Result<JSONObject> = ytmCall("pollYtmLink")
 
     suspend fun unlinkYtm(): Result<JSONObject> = ytmCall("unlinkYtm")
+
+    /**
+     * Hand the gateway a cookie jar captured by the in-app Google sign-in. Sent as a POST body
+     * because a YouTube cookie jar is far too long for a query string.
+     */
+    suspend fun setYtmCookies(cookie: String): Result<JSONObject> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = buildApiUrl("setYtmCookies")
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "PixelPlayer/$API_VERSION")
+                    .post(cookie.toRequestBody("text/plain; charset=utf-8".toMediaType()))
+                    .build()
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        return@use Result.failure(Exception("HTTP ${response.code}"))
+                    }
+                    parseResponse(response.body.string())
+                        .map { it.optJSONObject("ytmusic") ?: JSONObject() }
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
 
     /** Starting pool of recognisable artists for the pairwise taste onboarding. */
     suspend fun getTasteStart(): Result<List<JSONObject>> {

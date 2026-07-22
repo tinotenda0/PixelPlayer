@@ -735,6 +735,14 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
+    /** Submit cookies captured by the in-app sign-in. Returns "linked", "rejected", or "incomplete". */
+    suspend fun ytmSetCookies(cookie: String): String {
+        if (!isLoggedIn) return "error"
+        return withContext(Dispatchers.IO) {
+            api.setYtmCookies(cookie).getOrNull()?.optString("status", "error") ?: "error"
+        }
+    }
+
     suspend fun ytmUnlink(): Boolean {
         if (!isLoggedIn) return false
         return withContext(Dispatchers.IO) { api.unlinkYtm().isSuccess }

@@ -25,13 +25,16 @@ class YtMusicLinkViewModel @Inject constructor(
     private val navidromeRepository: NavidromeRepository
 ) : ViewModel() {
 
-    enum class Phase { LOADING, UNCONFIGURED, NOT_LINKED, AWAITING_APPROVAL, LINKED, ERROR }
+    enum class Phase {
+        LOADING, UNCONFIGURED, NOT_LINKED, AWAITING_APPROVAL, SIGNING_IN, VERIFYING, LINKED, ERROR
+    }
 
     data class UiState(
         val phase: Phase = Phase.LOADING,
         val userCode: String = "",
         val verificationUrl: String = "https://google.com/device",
-        val busy: Boolean = false
+        val busy: Boolean = false,
+        val message: String = ""
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -53,6 +56,42 @@ class YtMusicLinkViewModel @Inject constructor(
                         else -> Phase.NOT_LINKED
                     }
                 )
+            }
+        }
+    }
+
+    /** Open the in-app Google sign-in. */
+    fun beginSignIn() {
+        pollJob?.cancel()
+        _ui.update { it.copy(phase = Phase.SIGNING_IN, message = "") }
+    }
+
+    fun cancelSignIn() {
+        _ui.update { it.copy(phase = Phase.NOT_LINKED, message = "") }
+    }
+
+    /**
+     * Hand the gateway the cookies captured by the in-app sign-in. The server verifies them with a
+     * real authenticated call before storing, so "linked" here means it genuinely works.
+     */
+    fun submitCookies(cookie: String) {
+        if (_ui.value.phase == Phase.VERIFYING) return
+        _ui.update { it.copy(phase = Phase.VERIFYING, busy = true, message = "") }
+        viewModelScope.launch {
+            when (navidromeRepository.ytmSetCookies(cookie)) {
+                "linked" -> _ui.update { it.copy(phase = Phase.LINKED, busy = false) }
+                "incomplete" -> _ui.update {
+                    it.copy(phase = Phase.NOT_LINKED, busy = false,
+                        message = "Sign-in didn't complete — try again.")
+                }
+                "rejected" -> _ui.update {
+                    it.copy(phase = Phase.NOT_LINKED, busy = false,
+                        message = "YouTube rejected those credentials. Try signing in again.")
+                }
+                else -> _ui.update {
+                    it.copy(phase = Phase.ERROR, busy = false,
+                        message = "Couldn't reach the server.")
+                }
             }
         }
     }
