@@ -308,11 +308,6 @@ fun AppNavigation(
                     )
                 }
             }
-            composable(Screen.TasteOnboarding.route) {
-                com.theveloper.pixelplay.presentation.screens.TasteOnboardingScreen(
-                    onDone = { navController.popBackStack() }
-                )
-            }
             composable(Screen.YtMusicLink.route) {
                 com.theveloper.pixelplay.presentation.screens.YtMusicLinkScreen(
                     onBack = { navController.popBackStack() }

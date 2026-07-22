@@ -1372,12 +1372,6 @@ class PlayerViewModel @Inject constructor(
     /** Server-curated rows that prepopulate the home screen (YouTube-Music style). */
     val curatedHomeRows: StateFlow<List<CuratedHomeRow>> = _curatedHomeRows.asStateFlow()
 
-    /** True once the user is signed into the gateway but hasn't completed taste onboarding. */
-    val shouldShowTasteOnboarding: StateFlow<Boolean> = combine(
-        navidromeRepository.isLoggedInFlow,
-        userPreferencesRepository.tasteOnboardingDoneFlow
-    ) { loggedIn, done -> loggedIn && !done }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     /** Refresh the curated home rows from the gateway. Clears stale rows once logged out. */
     fun loadCuratedHome() {

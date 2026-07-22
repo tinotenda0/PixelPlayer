@@ -151,18 +151,6 @@ fun HomeScreen(
     val dailyMixSongs by playerViewModel.dailyMixSongs.collectAsStateWithLifecycle()
     val curatedHomeRows by playerViewModel.curatedHomeRows.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { playerViewModel.loadCuratedHome() }
-    // First-run taste onboarding: once signed in and not yet onboarded, guide the pairwise picker.
-    // Latched: shouldShowTasteOnboarding is a WhileSubscribed StateFlow, so after the picker pops
-    // it can still replay a stale `true` before the DataStore change propagates — without this
-    // one-shot guard that would bounce the user straight back into onboarding.
-    var tasteOnboardingRequested by rememberSaveable { mutableStateOf(false) }
-    val showTasteOnboarding by playerViewModel.shouldShowTasteOnboarding.collectAsStateWithLifecycle()
-    LaunchedEffect(showTasteOnboarding) {
-        if (showTasteOnboarding && !tasteOnboardingRequested) {
-            tasteOnboardingRequested = true
-            navController.navigateSafely(Screen.TasteOnboarding.route)
-        }
-    }
     val curatedYourMixSongs by playerViewModel.yourMixSongs.collectAsStateWithLifecycle()
     val homeMixPreviewSongs by playerViewModel.homeMixPreviewSongs.collectAsStateWithLifecycle()
     val playbackHistory by playerViewModel.playbackHistory.collectAsStateWithLifecycle()

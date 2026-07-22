@@ -27,7 +27,6 @@ sealed class Screen(val route: String) {
         fun createRoute(genreId: String) = "genre_detail/$genreId"
     }
     object DJSpace : Screen("dj_space")
-    object TasteOnboarding : Screen("taste_onboarding")
     object YtMusicLink : Screen("ytmusic_link")
     // La ruta base es "album_detail". La ruta completa con el argumento se define en AppNavigation.
     object AlbumDetail : Screen("album_detail/{albumId}") {

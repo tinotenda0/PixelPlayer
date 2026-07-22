@@ -646,7 +646,6 @@ class MainActivity : ComponentActivity() {
                 Screen.DeviceCapabilities.route,
                 Screen.EasterEgg.route,
                 Screen.WordDelimiterConfig.route,
-                Screen.TasteOnboarding.route,
                 Screen.YtMusicLink.route
             )
         }
