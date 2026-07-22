@@ -14,6 +14,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +36,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -64,6 +67,8 @@ fun YtMusicLinkScreen(
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var showPaste by remember { mutableStateOf(false) }
+    var pasted by remember { mutableStateOf("") }
 
     PixelPlayStatusBarStyle(color = MaterialTheme.colorScheme.surface)
 
@@ -199,6 +204,8 @@ fun YtMusicLinkScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Sign in with Google", style = MaterialTheme.typography.titleMedium) }
 
+                Phase.SIGNING_IN, Phase.VERIFYING, Phase.LOADING -> Unit
+
                 Phase.AWAITING_APPROVAL -> TextButton(onClick = { viewModel.cancelLink() }) {
                     Text("Cancel")
                 }
@@ -213,6 +220,40 @@ fun YtMusicLinkScreen(
 
                 else -> Unit
             }
+            // Manual fallback: Google sometimes refuses in-app sign-in outright ("this browser
+            // may not be secure"). Pasting the Cookie header always works.
+            if (ui.phase == Phase.NOT_LINKED || ui.phase == Phase.ERROR) {
+                TextButton(onClick = { showPaste = !showPaste }) {
+                    Text(if (showPaste) "Hide manual option" else "Sign-in blocked? Paste cookies")
+                }
+                if (showPaste) {
+                    Text(
+                        text = "On a computer, open music.youtube.com signed in, press F12 → " +
+                            "Network → click any request → copy the whole \"cookie\" request " +
+                            "header, and paste it here.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    TextField(
+                        value = pasted,
+                        onValueChange = { pasted = it },
+                        placeholder = { Text("Paste cookie header…") },
+                        minLines = 2,
+                        maxLines = 4,
+                        shape = ShapeCache.smooth16,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Button(
+                        onClick = { viewModel.submitCookies(pasted.trim()) },
+                        enabled = pasted.contains("SAPISID") && !ui.busy,
+                        shape = ShapeCache.smoothPill,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    ) { Text("Use these cookies") }
+                }
+            }
+
             TextButton(
                 onClick = onBack,
                 modifier = Modifier.padding(bottom = 20.dp)
@@ -268,6 +309,18 @@ private fun GoogleSignInWebView(
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     settings.userAgentString = DESKTOP_USER_AGENT
+                    // Android WebView stamps every request with "X-Requested-With: <package>",
+                    // which Google keys on to refuse sign-in regardless of user-agent. An empty
+                    // allow-list suppresses it entirely.
+                    if (WebViewFeature.isFeatureSupported(
+                            WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)
+                    ) {
+                        runCatching {
+                            WebSettingsCompat.setRequestedWithHeaderOriginAllowList(
+                                settings, emptySet()
+                            )
+                        }
+                    }
                     webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView?, url: String?) {
                             if (captured) return

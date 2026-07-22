@@ -237,6 +237,10 @@ kotlin {
 }
 
 dependencies {
+    // Lets us suppress WebView's X-Requested-With header, which Google uses to detect embedded
+    // browsers and refuse sign-in ("this browser or app may not be secure").
+    implementation("androidx.webkit:webkit:1.12.1")
+
     // Core & Optimization
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.profileinstaller)
