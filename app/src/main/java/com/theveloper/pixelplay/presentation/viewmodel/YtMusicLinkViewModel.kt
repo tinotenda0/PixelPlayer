@@ -26,7 +26,8 @@ class YtMusicLinkViewModel @Inject constructor(
 ) : ViewModel() {
 
     enum class Phase {
-        LOADING, UNCONFIGURED, NOT_LINKED, AWAITING_APPROVAL, SIGNING_IN, VERIFYING, LINKED, ERROR
+        LOADING, UNCONFIGURED, NOT_LINKED, AWAITING_APPROVAL, SIGNING_IN, VERIFYING,
+        CHOOSING_ACCOUNT, LINKED, ERROR
     }
 
     data class UiState(
@@ -34,8 +35,13 @@ class YtMusicLinkViewModel @Inject constructor(
         val userCode: String = "",
         val verificationUrl: String = "https://google.com/device",
         val busy: Boolean = false,
-        val message: String = ""
+        val message: String = "",
+        val accountName: String = "",
+        val accounts: List<com.theveloper.pixelplay.data.navidrome.YtmAccount> = emptyList()
     )
+
+    // Held only between "choose an account" and the user picking one.
+    private var pendingCookie: String? = null
 
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
@@ -54,7 +60,11 @@ class YtMusicLinkViewModel @Inject constructor(
                         status.linked -> Phase.LINKED
                         !status.configured -> Phase.UNCONFIGURED
                         else -> Phase.NOT_LINKED
-                    }
+                    },
+                    accountName = status.accountName,
+                    message = if (status.needsRelink) {
+                        "This account needs re-linking — sign in again."
+                    } else ""
                 )
             }
         }
@@ -74,12 +84,26 @@ class YtMusicLinkViewModel @Inject constructor(
      * Hand the gateway the cookies captured by the in-app sign-in. The server verifies them with a
      * real authenticated call before storing, so "linked" here means it genuinely works.
      */
-    fun submitCookies(cookie: String) {
+    fun submitCookies(cookie: String, authUser: String? = null) {
         if (_ui.value.phase == Phase.VERIFYING) return
+        pendingCookie = cookie
         _ui.update { it.copy(phase = Phase.VERIFYING, busy = true, message = "") }
         viewModelScope.launch {
-            when (navidromeRepository.ytmSetCookies(cookie)) {
-                "linked" -> _ui.update { it.copy(phase = Phase.LINKED, busy = false) }
+            val result = navidromeRepository.ytmSetCookies(cookie, authUser)
+            when (result.status) {
+                "linked" -> {
+                    pendingCookie = null
+                    _ui.update {
+                        it.copy(phase = Phase.LINKED, busy = false,
+                            accountName = result.accountName, accounts = emptyList())
+                    }
+                }
+                // More than one Google account is signed in on that device — the user has to say
+                // which one, otherwise we'd bind to whichever happens to be first.
+                "choose" -> _ui.update {
+                    it.copy(phase = Phase.CHOOSING_ACCOUNT, busy = false,
+                        accounts = result.accounts, message = "")
+                }
                 "incomplete" -> _ui.update {
                     it.copy(phase = Phase.NOT_LINKED, busy = false,
                         message = "Sign-in didn't complete — try again.")
@@ -94,6 +118,12 @@ class YtMusicLinkViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    /** Finish linking once the user picks which signed-in Google account to use. */
+    fun chooseAccount(account: com.theveloper.pixelplay.data.navidrome.YtmAccount) {
+        val cookie = pendingCookie ?: return
+        submitCookies(cookie, account.index)
     }
 
     fun startLink() {

@@ -709,7 +709,9 @@ class NavidromeRepository @Inject constructor(
             val o = api.getYtmStatus().getOrNull()
             YtmStatus(
                 linked = o?.optBoolean("linked", false) ?: false,
-                configured = o?.optBoolean("configured", false) ?: false
+                configured = o?.optBoolean("configured", false) ?: false,
+                accountName = o?.optString("accountName", "") ?: "",
+                needsRelink = o?.optBoolean("needsRelink", false) ?: false
             )
         }
     }
@@ -735,11 +737,27 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
-    /** Submit cookies captured by the in-app sign-in. Returns "linked", "rejected", or "incomplete". */
-    suspend fun ytmSetCookies(cookie: String): String {
-        if (!isLoggedIn) return "error"
+    /**
+     * Submit cookies captured by the in-app sign-in. When the cookie jar holds more than one
+     * signed-in Google account the server answers "choose" with the candidates, and the caller
+     * must resubmit with the picked [authUser] index — otherwise we'd bind to the wrong account.
+     */
+    suspend fun ytmSetCookies(cookie: String, authUser: String? = null): YtmLinkResult {
+        if (!isLoggedIn) return YtmLinkResult("error")
         return withContext(Dispatchers.IO) {
-            api.setYtmCookies(cookie).getOrNull()?.optString("status", "error") ?: "error"
+            val o = api.setYtmCookies(cookie, authUser).getOrNull()
+                ?: return@withContext YtmLinkResult("error")
+            val arr = o.optJSONArray("account")
+            val accounts = (0 until (arr?.length() ?: 0)).mapNotNull { i ->
+                arr?.optJSONObject(i)?.let {
+                    YtmAccount(it.optString("index", "0"), it.optString("name", ""))
+                }
+            }
+            YtmLinkResult(
+                status = o.optString("status", "error"),
+                accountName = o.optString("accountName", ""),
+                accounts = accounts
+            )
         }
     }
 
@@ -1148,8 +1166,23 @@ class NavidromeRepository @Inject constructor(
     }
 }
 
-/** Whether the signed-in gateway user has linked a YouTube Music account. */
-data class YtmStatus(val linked: Boolean, val configured: Boolean)
+/** Whether the signed-in gateway user has linked a YouTube Music account, and which one. */
+data class YtmStatus(
+    val linked: Boolean,
+    val configured: Boolean,
+    val accountName: String = "",
+    val needsRelink: Boolean = false
+)
+
+/** A Google account reachable from the captured cookie jar. */
+data class YtmAccount(val index: String, val name: String)
+
+/** Outcome of submitting cookies: "linked", "choose", "rejected", "incomplete", "error". */
+data class YtmLinkResult(
+    val status: String,
+    val accountName: String = "",
+    val accounts: List<YtmAccount> = emptyList()
+)
 
 /** A device-code linking attempt: show [userCode] and send the user to [verificationUrl]. */
 data class YtmLink(

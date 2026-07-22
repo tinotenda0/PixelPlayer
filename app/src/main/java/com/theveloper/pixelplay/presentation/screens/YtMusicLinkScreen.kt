@@ -176,18 +176,62 @@ fun YtMusicLinkScreen(
                         }
                     }
                 }
+                Phase.CHOOSING_ACCOUNT -> Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Which account?",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "More than one Google account is signed in on this device.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+                    )
+                    ui.accounts.forEach { account ->
+                        Surface(
+                            onClick = { viewModel.chooseAccount(account) },
+                            shape = ShapeCache.smooth16,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = account.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+                            )
+                        }
+                    }
+                }
+
                 Phase.LINKED -> {
                     Surface(
                         shape = ShapeCache.smooth24,
                         color = MaterialTheme.colorScheme.secondaryContainer
                     ) {
-                        Text(
-                            text = "Account linked",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.padding(horizontal = 28.dp, vertical = 20.dp)
-                        )
+                        ) {
+                            Text(
+                                text = "Account linked",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            if (ui.accountName.isNotBlank()) {
+                                Text(
+                                    text = ui.accountName,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
                     }
                 }
                 else -> Unit

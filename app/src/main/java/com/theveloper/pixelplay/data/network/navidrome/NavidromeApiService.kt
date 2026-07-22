@@ -346,10 +346,13 @@ class NavidromeApiService @Inject constructor(
      * Hand the gateway a cookie jar captured by the in-app Google sign-in. Sent as a POST body
      * because a YouTube cookie jar is far too long for a query string.
      */
-    suspend fun setYtmCookies(cookie: String): Result<JSONObject> {
+    suspend fun setYtmCookies(cookie: String, authUser: String? = null): Result<JSONObject> {
         return withContext(Dispatchers.IO) {
             try {
-                val url = buildApiUrl("setYtmCookies")
+                val url = buildApiUrl(
+                    "setYtmCookies",
+                    authUser?.let { mapOf("authuser" to it) } ?: emptyMap()
+                )
                 val request = Request.Builder()
                     .url(url)
                     .header("User-Agent", "PixelPlayer/$API_VERSION")
