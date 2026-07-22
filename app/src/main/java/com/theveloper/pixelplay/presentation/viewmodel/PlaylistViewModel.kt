@@ -75,6 +75,7 @@ class PlaylistViewModel @Inject constructor(
     private val dailyMixManager: DailyMixManager,
     private val aiPlaylistGenerator: AiPlaylistGenerator,
     private val m3uManager: M3uManager,
+    private val navidromeRepository: com.theveloper.pixelplay.data.navidrome.NavidromeRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -253,6 +254,38 @@ class PlaylistViewModel @Inject constructor(
                         }
                     } else {
                         Log.w("PlaylistVM", "Folder playlist with path $folderPath not found.")
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                playlistNotFound = true,
+                                currentPlaylistDetails = null,
+                                currentPlaylistSongs = emptyList()
+                            )
+                        }
+                    }
+                } else if (isGatewayPlaylistId(playlistId)) {
+                    // Gateway-hosted playlist (custom mix, YT Music playlist, curated row). These
+                    // live on the server, not in local prefs, and their tracks are gateway ids the
+                    // local song table has never seen — so both the playlist and its songs have to
+                    // come from the gateway or the screen renders empty.
+                    val fetched = navidromeRepository.getGatewayPlaylist(playlistId).getOrNull()
+                    if (fetched != null && fetched.second.isNotEmpty()) {
+                        val (name, songs) = fetched
+                        _uiState.update {
+                            it.copy(
+                                currentPlaylistDetails = Playlist(
+                                    id = playlistId,
+                                    name = name,
+                                    songIds = songs.map { s -> s.id }
+                                ),
+                                currentPlaylistSongs = songs,
+                                playlistSongsOrderMode = PlaylistSongsOrderMode.Manual,
+                                isLoading = false,
+                                playlistNotFound = false
+                            )
+                        }
+                    } else {
+                        Log.w("PlaylistVM", "Gateway playlist $playlistId returned nothing.")
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
@@ -839,6 +872,16 @@ class PlaylistViewModel @Inject constructor(
 
     private fun isFolderPlaylistId(playlistId: String): Boolean =
         playlistId.startsWith(FOLDER_PLAYLIST_PREFIX)
+
+    /**
+     * Playlists that live on the XPS gateway rather than in local prefs: `pl-` (user-created,
+     * including custom mixes), `ytmpl-` (a linked YouTube Music playlist) and `cur-ytm-`
+     * (a curated home row).
+     */
+    private fun isGatewayPlaylistId(playlistId: String): Boolean =
+        playlistId.startsWith("pl-") ||
+            playlistId.startsWith("ytmpl-") ||
+            playlistId.startsWith("cur-ytm-")
 
     private fun findFolder(
         targetPath: String,

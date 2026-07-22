@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
@@ -213,6 +214,12 @@ class SearchStateHolder @Inject constructor(
                         }
 
                         musicRepository.searchAll(normalizedQuery, currentFilter)
+                            // combine() produces nothing until BOTH sides have emitted. On a
+                            // streaming-only library the local flow can be slow or emit nothing,
+                            // which stalled the whole pipeline and showed no results even though
+                            // the gateway had already answered. Seed it so live results alone can
+                            // render.
+                            .onStart { emit(emptyList<SearchResultItem>()) }
                             .combine(liveFlow) { local, live -> local to live }
                             .collect { (resultsList, liveResults) ->
                                 val merged = mergeLive(resultsList, liveResults, _selectedSearchFilter.value)
@@ -235,10 +242,15 @@ class SearchStateHolder @Inject constructor(
                                     buildSourceRanks(resultsList, liveResults)
                                 )
 
-                                if (request.requestId != latestSearchRequestId.get()) {
-                                    return@collect
-                                }
-
+                                // NOTE: deliberately no `requestId != latest` guard here.
+                                // collectLatest already cancels this block the moment a newer
+                                // request arrives, so the guard was redundant — and harmful:
+                                // performSearch() bumps the counter on every call, including
+                                // blank-query calls that return early without ever producing
+                                // results. That left the counter ahead of this in-flight request,
+                                // so a perfectly good result set for the *current* query was
+                                // thrown away and nothing replaced it — the intermittent
+                                // "search shows nothing".
                                 val immutableResults = ranked.toImmutableList()
                                 if (_searchResults.value != immutableResults) {
                                     _searchResults.value = immutableResults

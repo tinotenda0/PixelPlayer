@@ -700,6 +700,25 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
+    /**
+     * Fetches a gateway playlist live: its name plus its tracks. Needed because the DAO only holds
+     * playlists that a sync has already pulled down — a playlist created seconds ago (a custom mix)
+     * isn't there yet, and its songs are gateway ids the local song table has never seen.
+     */
+    suspend fun getGatewayPlaylist(playlistId: String): Result<Pair<String, List<Song>>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) {
+            try {
+                val (playlistJson, songJsons) = api.getPlaylist(playlistId).getOrThrow()
+                val name = playlistJson.optString("name").ifBlank { "Playlist" }
+                val songs = NavidromeResponseParser.parseSongs(songJsons).map { it.toSong() }
+                Result.success(name to songs)
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: getGatewayPlaylist failed"); Result.failure(e)
+            }
+        }
+    }
+
     /** The gateway's genre names (real YouTube Music genres), or empty when unavailable. */
     suspend fun getGatewayGenres(): List<String> {
         if (!isLoggedIn) return emptyList()

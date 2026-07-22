@@ -133,6 +133,8 @@ fun ArtistDetailScreen(
     var showSongInfoBottomSheet by remember { mutableStateOf(false) }
     // Popular tracks are capped at 5 like Spotify, expandable to the full top-song list.
     var showAllTopSongs by rememberSaveable(artistId) { mutableStateOf(false) }
+    // Discography shows a horizontal shelf until expanded into the full album list.
+    var discographyExpanded by rememberSaveable(artistId) { mutableStateOf(false) }
     val selectedSongForInfo by playerViewModel.selectedSongForInfo.collectAsStateWithLifecycle()
     val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
@@ -357,19 +359,35 @@ fun ArtistDetailScreen(
                         }
 
                         if (uiState.discography.isNotEmpty()) {
-                            item(key = "discography_header", contentType = "artist_page_header") {
-                                ArtistSectionHeader(title = "Discography", topPadding = 24.dp)
+                            val openAlbum: (Album) -> Unit = { album ->
+                                val route = album.navidromeId
+                                    ?.let { Screen.AlbumDetail.createRoute(it) }
+                                    ?: Screen.AlbumDetail.createRoute(album.id)
+                                navController.navigate(route)
                             }
-                            item(key = "discography_row", contentType = "artist_page_albums") {
-                                ArtistDiscographyRow(
-                                    albums = uiState.discography,
-                                    onAlbumClick = { album ->
-                                        val route = album.navidromeId
-                                            ?.let { Screen.AlbumDetail.createRoute(it) }
-                                            ?: Screen.AlbumDetail.createRoute(album.id)
-                                        navController.navigate(route)
-                                    }
+                            item(key = "discography_header", contentType = "artist_page_header") {
+                                ArtistDiscographyHeader(
+                                    count = uiState.discography.size,
+                                    expanded = discographyExpanded,
+                                    onToggle = { discographyExpanded = !discographyExpanded }
                                 )
+                            }
+                            if (discographyExpanded) {
+                                // Full discography: every album, one row each, newest first.
+                                itemsIndexed(
+                                    items = uiState.discography,
+                                    key = { i, album -> "disc_full_${album.navidromeId ?: album.id}_$i" },
+                                    contentType = { _, _ -> "artist_page_album_row" }
+                                ) { _, album ->
+                                    ArtistAlbumRow(album = album, onClick = { openAlbum(album) })
+                                }
+                            } else {
+                                item(key = "discography_row", contentType = "artist_page_albums") {
+                                    ArtistDiscographyRow(
+                                        albums = uiState.discography,
+                                        onAlbumClick = openAlbum
+                                    )
+                                }
                             }
                         }
 
@@ -1413,6 +1431,89 @@ private fun ArtistAboutCard(
                 maxLines = if (expanded) Int.MAX_VALUE else 4,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+}
+
+/** Discography heading with a See all / Show less toggle for the full album list. */
+@Composable
+private fun ArtistDiscographyHeader(
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 24.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Discography",
+            style = MaterialTheme.typography.titleLarge,
+            fontFamily = GoogleSansRounded,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        TextButton(onClick = onToggle) {
+            Text(
+                text = if (expanded) "Show less" else "See all $count",
+                fontFamily = GoogleSansRounded,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+/** One album as a full-width row, used by the expanded discography. */
+@Composable
+private fun ArtistAlbumRow(
+    album: Album,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(AbsoluteSmoothCornerShape(18.dp, 60))
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp, horizontal = 4.dp)
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(album.albumArtUriString)
+                .size(Size(160, 160))
+                .crossfade(true)
+                .build(),
+            contentDescription = album.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(56.dp)
+                .clip(AbsoluteSmoothCornerShape(12.dp, 60))
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = album.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontFamily = GoogleSansRounded,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (album.year > 0) {
+                Text(
+                    text = album.year.toString(),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = GoogleSansRounded,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
