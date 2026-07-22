@@ -80,6 +80,7 @@ import com.theveloper.pixelplay.presentation.components.SongInfoBottomSheet
 import com.theveloper.pixelplay.presentation.components.SmartImage
 import com.theveloper.pixelplay.presentation.components.subcomps.EnhancedSongListItem
 import com.theveloper.pixelplay.presentation.components.subcomps.TightWrapText
+import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.presentation.model.RecentlyPlayedSongUiModel
 import com.theveloper.pixelplay.presentation.model.collectRecentlyPlayedSongIds
@@ -305,7 +306,7 @@ fun RecentlyPlayedScreen(
                     showSongInfoBottomSheet = false
                 },
                 onNavigateToArtist = {
-                    navController.navigateSafely(Screen.ArtistDetail.createRoute(song.artistId))
+                    navController.navigateSafely(ArtistNavigation.routeFor(song))
                     showSongInfoBottomSheet = false
                 },
                 onNavigateToArtistById = { artistId ->

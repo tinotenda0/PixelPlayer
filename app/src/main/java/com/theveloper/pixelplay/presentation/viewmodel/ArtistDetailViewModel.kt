@@ -46,7 +46,13 @@ data class ArtistDetailUiState(
     val topSongs: List<Song> = emptyList(),
     val discography: List<Album> = emptyList(),
     val biography: String? = null,
-    val subscribers: String? = null
+    val subscribers: String? = null,
+    /**
+     * True while the gateway profile for a locally-stored artist is still in flight. The local
+     * rows are only the handful of tracks that happened to be in a playlist, so showing them and
+     * then swapping in the real profile read as a glitch — the screen shows a loader instead.
+     */
+    val isUpgradingToGatewayProfile: Boolean = false
 )
 
 @Immutable
@@ -168,7 +174,8 @@ class ArtistDetailViewModel @Inject constructor(
                             songs = orderedSongs,
                             albumSections = albumSections,
                             effectiveImageUrl = effectiveUrl,
-                            isLoading = false
+                            isLoading = false,
+                            isUpgradingToGatewayProfile = true
                         )
 
                         // 4) Upgrade to the full gateway profile. A locally-stored artist is
@@ -207,15 +214,23 @@ class ArtistDetailViewModel @Inject constructor(
         upgradeJob = viewModelScope.launch {
             val gatewayId = artist.navidromeId?.takeIf { it.startsWith("yt-") }
                 ?: resolveGatewayId(artist.name)
-                ?: return@launch
+            if (gatewayId == null) {
+                _uiState.update { it.copy(isUpgradingToGatewayProfile = false) }
+                return@launch
+            }
 
-            val detail = navidromeRepository.getArtistDetail(gatewayId).getOrNull() ?: return@launch
-            if (detail.topSongs.isEmpty() && detail.albums.isEmpty()) return@launch
+            val detail = navidromeRepository.getArtistDetail(gatewayId).getOrNull()
+            if (detail == null || (detail.topSongs.isEmpty() && detail.albums.isEmpty())) {
+                // No gateway profile: fall back to whatever the local rows gave us.
+                _uiState.update { it.copy(isUpgradingToGatewayProfile = false) }
+                return@launch
+            }
 
             _uiState.update { state ->
                 // The user may have navigated on while this was in flight.
                 if (state.artist?.id != artist.id) state
                 else state.copy(
+                    isUpgradingToGatewayProfile = false,
                     songs = detail.topSongs.ifEmpty { state.songs },
                     // Cleared so the Spotify-style sections render instead of the sparse
                     // per-album groups built from the few local rows.
@@ -227,6 +242,28 @@ class ArtistDetailViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    /**
+     * Builds an artist radio the way YouTube Music does: seed from the artist's biggest track and
+     * extend with the gateway's similar-songs graph, so it wanders into related artists rather
+     * than looping the same discography.
+     */
+    suspend fun buildArtistRadio(): List<Song> {
+        val seed = _uiState.value.topSongs.firstOrNull()
+            ?: _uiState.value.songs.firstOrNull()
+            ?: return emptyList()
+        val seedId = seed.navidromeId ?: seed.id
+        val similar = navidromeRepository.getSimilarSongs(seedId, count = 40)
+            .getOrNull().orEmpty()
+        // Seed first, then the radio, de-duped so the seed can't reappear mid-queue.
+        val seen = mutableSetOf(seed.navidromeId ?: seed.id)
+        val queue = mutableListOf(seed)
+        for (s in similar) {
+            val key = s.navidromeId ?: s.id
+            if (seen.add(key)) queue.add(s)
+        }
+        return queue
     }
 
     /** Finds the gateway id for a local artist by name, requiring a confident name match. */

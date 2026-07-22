@@ -36,6 +36,7 @@ import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material3.*
@@ -82,6 +83,7 @@ import com.theveloper.pixelplay.presentation.components.SmartImageCompactListTar
 import com.theveloper.pixelplay.presentation.components.SmartImage
 import com.theveloper.pixelplay.presentation.components.SongInfoBottomSheet
 import com.theveloper.pixelplay.presentation.components.resolveNavBarOccupiedHeight
+import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.presentation.viewmodel.ArtistDetailViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.ArtistAlbumSection
@@ -135,6 +137,7 @@ fun ArtistDetailScreen(
     var showAllTopSongs by rememberSaveable(artistId) { mutableStateOf(false) }
     // Discography shows a horizontal shelf until expanded into the full album list.
     var discographyExpanded by rememberSaveable(artistId) { mutableStateOf(false) }
+    var isBuildingRadio by remember { mutableStateOf(false) }
     val selectedSongForInfo by playerViewModel.selectedSongForInfo.collectAsStateWithLifecycle()
     val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
@@ -317,6 +320,25 @@ fun ArtistDetailScreen(
                         )
                     ) {
                         // --- Spotify-style gateway artist page: Popular, Discography, About. ---
+                        if (uiState.topSongs.isNotEmpty() && !uiState.isUpgradingToGatewayProfile) {
+                            item(key = "artist_radio", contentType = "artist_page_action") {
+                                ArtistRadioButton(
+                                    isBuilding = isBuildingRadio,
+                                    onClick = {
+                                        if (!isBuildingRadio) {
+                                            isBuildingRadio = true
+                                            coroutineScope.launch {
+                                                val queue = viewModel.buildArtistRadio()
+                                                isBuildingRadio = false
+                                                queue.firstOrNull()?.let { first ->
+                                                    playerViewModel.showAndPlaySong(first, queue)
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
                         if (uiState.topSongs.isNotEmpty()) {
                             item(key = "popular_header", contentType = "artist_page_header") {
                                 ArtistSectionHeader(title = "Popular")
@@ -403,7 +425,24 @@ fun ArtistDetailScreen(
                             }
                         }
 
+                        // While the real profile is being fetched, show a loader rather than the
+                        // sparse local rows — swapping one layout for another mid-load reads as a
+                        // glitch.
+                        if (uiState.isUpgradingToGatewayProfile) {
+                            item(key = "artist_profile_loading", contentType = "artist_page_loading") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 64.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    ContainedLoadingIndicator()
+                                }
+                            }
+                        }
+
                         albumSections.forEachIndexed { index, section ->
+                            if (uiState.isUpgradingToGatewayProfile) return@forEachIndexed
                             if (section.songs.isEmpty()) return@forEachIndexed
 
                             val sectionKey = section.collapseKey()
@@ -592,7 +631,7 @@ fun ArtistDetailScreen(
                 },
                 onNavigateToArtist = {
                     navController.navigateSafelyReplacing(
-                        route = Screen.ArtistDetail.createRoute(currentSong.artistId),
+                        route = ArtistNavigation.routeFor(currentSong),
                         patternToPop = Screen.ArtistDetail.route
                     )
                     showSongInfoBottomSheet = false
@@ -1515,5 +1554,43 @@ private fun ArtistAlbumRow(
                 )
             }
         }
+    }
+}
+
+/**
+ * Starts an artist radio — the artist's biggest track followed by the gateway's similar-songs
+ * graph, so it drifts into related artists the way YouTube Music's radio does.
+ */
+@Composable
+private fun ArtistRadioButton(
+    isBuilding: Boolean,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        shape = AbsoluteSmoothCornerShape(24.dp, 60),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, bottom = 4.dp)
+    ) {
+        if (isBuilding) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.onPrimary
+            )
+        } else {
+            Icon(
+                Icons.Rounded.Radio,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = if (isBuilding) "Starting radio…" else "Play radio",
+            fontFamily = GoogleSansRounded,
+            fontWeight = FontWeight.Medium
+        )
     }
 }

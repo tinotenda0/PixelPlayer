@@ -151,6 +151,7 @@ import com.theveloper.pixelplay.presentation.components.ReorderTabsSheet
 import com.theveloper.pixelplay.presentation.components.EditMultipleSongsSheet
 import com.theveloper.pixelplay.presentation.components.SongInfoBottomSheet
 import com.theveloper.pixelplay.presentation.components.subcomps.LibraryActionRow
+import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.presentation.components.MultiSelectionBottomSheet
 import com.theveloper.pixelplay.presentation.components.AlbumMultiSelectionOptionSheet
@@ -1875,7 +1876,7 @@ fun LibraryScreen(
                 },
                 onNavigateToArtist = {
                     navController.navigateSafelyReplacing(
-                        route = Screen.ArtistDetail.createRoute(currentSong.artistId),
+                        route = ArtistNavigation.routeFor(currentSong),
                         patternToPop = Screen.ArtistDetail.route
                     )
                     showSongInfoBottomSheet = false

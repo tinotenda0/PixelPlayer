@@ -107,6 +107,7 @@ import com.theveloper.pixelplay.presentation.components.resolveMainScreenBottomG
 import com.theveloper.pixelplay.presentation.model.collectRecentlyPlayedSongIds
 import com.theveloper.pixelplay.presentation.model.mapRecentlyPlayedSongs
 import com.theveloper.pixelplay.presentation.components.subcomps.PlayingEqIcon
+import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.presentation.components.StreamingProviderSheet
 import com.theveloper.pixelplay.presentation.telegram.auth.TelegramLoginActivity
@@ -446,7 +447,7 @@ fun HomeScreen(
                             },
                             onNavigateToArtist = { song ->
                                 navController.navigateSafelyReplacing(
-                                    route = Screen.ArtistDetail.createRoute(song.artistId),
+                                    route = ArtistNavigation.routeFor(song),
                                     patternToPop = Screen.ArtistDetail.route
                                 )
                             },

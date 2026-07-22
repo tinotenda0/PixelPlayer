@@ -81,6 +81,7 @@ import com.theveloper.pixelplay.presentation.components.SmartImage
 import com.theveloper.pixelplay.presentation.components.SongInfoBottomSheet
 import com.theveloper.pixelplay.presentation.components.threeShapeSwitch
 import com.theveloper.pixelplay.presentation.components.resolveNavBarOccupiedHeight
+import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.presentation.viewmodel.MainViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
@@ -201,7 +202,7 @@ fun DailyMixScreen(
                 showSongInfoSheet = false
             },
             onNavigateToArtist = {
-                navController.navigateSafely(Screen.ArtistDetail.createRoute(song.artistId))
+                navController.navigateSafely(ArtistNavigation.routeFor(song))
                 showSongInfoSheet = false
             },
             onNavigateToArtistById = { artistId ->
