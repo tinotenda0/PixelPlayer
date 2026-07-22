@@ -56,10 +56,14 @@ object SearchRanker {
         val qWords = tokenize(query).map { normalize(it) }.filter { it.isNotEmpty() }
 
         return items
-            .map { item -> item to score(nq, qWords, item, playStats, nowMs) }
-            .sortedWith(compareByDescending<Pair<SearchResultItem, Int>> { it.second }
-                // Stable, human-sensible tiebreak: shorter/earlier name first.
-                .thenBy { primaryName(it.first).lowercase() })
+            .withIndex()
+            .map { (index, item) -> Triple(item, score(nq, qWords, item, playStats, nowMs), index) }
+            // Tiebreak on the ORIGINAL order, not the name. Results arrive already ordered by
+            // source relevance (the gateway returns best-match-first), and equal-scoring items are
+            // common — an alphabetical tiebreak threw that relevance away and made results look
+            // A-to-Z sorted rather than ranked by how well they match / how often they're played.
+            .sortedWith(compareByDescending<Triple<SearchResultItem, Int, Int>> { it.second }
+                .thenBy { it.third })
             .map { it.first }
     }
 

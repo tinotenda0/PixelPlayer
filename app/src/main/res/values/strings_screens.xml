@@ -7,6 +7,16 @@
     <string name="setup_lets_go">Let\'s Go!</string>
     <string name="setup_step_format">Step %1$d of %2$d</string>
     <string name="setup_toast_grant_permission_first">Please grant the required permission first.</string>
+    <!-- Taste onboarding -->
+    <string name="taste_title">Who do you prefer?</string>
+    <string name="taste_subtitle">Tap the artist you like more. We\'ll tune your mixes from your picks.</string>
+    <string name="taste_round">Round %1$d of %2$d</string>
+    <string name="taste_skip">Skip</string>
+    <string name="taste_add_own">Add an artist you love</string>
+    <string name="taste_finish">Finish</string>
+    <string name="taste_finish_count">Finish · %1$d picked</string>
+    <string name="taste_pick_prompt">Pick a few artists</string>
+    <string name="taste_chosen_header">Your picks</string>
     <string name="setup_toast_grant_all_permissions">Please grant all required permissions.</string>
     <string name="setup_welcome_prefix">Welcome to </string>
     <string name="setup_beta_symbol">β</string>

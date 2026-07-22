@@ -349,30 +349,13 @@ fun EnhancedSongListItem(
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // On-demand YouTube streams (gateway "yt-" ids) aren't in the
-                        // library — tag them so it's clear they stream on tap.
-                        if (song.navidromeId?.startsWith("yt-") == true) {
-                            Text(
-                                text = "STREAM",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(MaterialTheme.colorScheme.tertiaryContainer)
-                                    .padding(horizontal = 5.dp, vertical = 1.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                        }
-                        Text(
-                            text = song.displayArtist,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = contentColor.copy(alpha = 0.7f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    Text(
+                        text = song.displayArtist,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = contentColor.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
                 
                 val showPlayingIndicator = isCurrentSong && !isSelectionMode

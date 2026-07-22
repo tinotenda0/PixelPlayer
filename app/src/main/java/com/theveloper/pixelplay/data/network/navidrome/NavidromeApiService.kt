@@ -559,15 +559,34 @@ class NavidromeApiService @Inject constructor(
      */
     suspend fun getLyricsBySongId(songId: String): Result<String> {
         return requestAndParse("getLyricsBySongId", mapOf("id" to songId)).map { response ->
-            val lyrics = response.optJSONObject("lyricsList")?.optJSONArray("structuredLyrics")
-                ?.optJSONObject(0)?.optJSONArray("line")
+            val blocks = response.optJSONObject("lyricsList")?.optJSONArray("structuredLyrics")
+            if (blocks == null || blocks.length() == 0) return@map ""
 
-            if (lyrics != null && lyrics.length() > 0) {
-                (0 until lyrics.length()).mapNotNull { lyrics.optJSONObject(it)?.optString("value") }
-                    .joinToString("\n")
-            } else {
-                ""
-            }
+            // Prefer a synced block so the player gets scrolling lyrics; fall back to the first.
+            val block = (0 until blocks.length())
+                .mapNotNull { blocks.optJSONObject(it) }
+                .let { list -> list.firstOrNull { it.optBoolean("synced", false) } ?: list.firstOrNull() }
+                ?: return@map ""
+
+            val lines = block.optJSONArray("line")
+            if (lines == null || lines.length() == 0) return@map ""
+            val synced = block.optBoolean("synced", false)
+            val offsetMs = block.optInt("offset", 0)
+
+            (0 until lines.length()).mapNotNull { i ->
+                val line = lines.optJSONObject(i) ?: return@mapNotNull null
+                val value = line.optString("value", "")
+                if (!synced) {
+                    value
+                } else {
+                    // Emit LRC so the app's existing LyricsUtils.parseLyrics produces timed lines.
+                    val start = (line.optLong("start", 0L) + offsetMs).coerceAtLeast(0L)
+                    val minutes = start / 60_000
+                    val seconds = (start % 60_000) / 1000
+                    val hundredths = (start % 1000) / 10
+                    "[%02d:%02d.%02d]%s".format(minutes, seconds, hundredths, value)
+                }
+            }.joinToString("\n")
         }
     }
 

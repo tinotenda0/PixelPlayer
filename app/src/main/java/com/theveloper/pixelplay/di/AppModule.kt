@@ -343,14 +343,16 @@ object AppModule {
         lrcLibApiService: LrcLibApiService,
         lyricsDao: LyricsDao,
         okHttpClient: OkHttpClient,
-        neteaseRepository: Lazy<com.theveloper.pixelplay.data.netease.NeteaseRepository>
+        neteaseRepository: Lazy<com.theveloper.pixelplay.data.netease.NeteaseRepository>,
+        navidromeRepository: Lazy<com.theveloper.pixelplay.data.navidrome.NavidromeRepository>
     ): LyricsRepository {
         return LyricsRepositoryImpl(
             context = context,
             lrcLibApiService = lrcLibApiService,
             lyricsDao = lyricsDao,
             okHttpClient = okHttpClient,
-            neteaseRepositoryProvider = neteaseRepository
+            neteaseRepositoryProvider = neteaseRepository,
+            navidromeRepositoryProvider = navidromeRepository
         )
     }
 

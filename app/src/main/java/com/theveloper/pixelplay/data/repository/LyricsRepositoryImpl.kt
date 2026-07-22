@@ -117,8 +117,22 @@ class LyricsRepositoryImpl @Inject constructor(
     private val lrcLibApiService: LrcLibApiService,
     private val lyricsDao: com.theveloper.pixelplay.data.database.LyricsDao,
     private val okHttpClient: OkHttpClient,
-    private val neteaseRepositoryProvider: dagger.Lazy<com.theveloper.pixelplay.data.netease.NeteaseRepository>
+    private val neteaseRepositoryProvider: dagger.Lazy<com.theveloper.pixelplay.data.netease.NeteaseRepository>,
+    private val navidromeRepositoryProvider: dagger.Lazy<com.theveloper.pixelplay.data.navidrome.NavidromeRepository>
 ) : LyricsRepository {
+
+    /**
+     * The gateway song id for a track served by the XPS Subsonic gateway, or null.
+     *
+     * Not all producers populate [Song.navidromeId] (NavidromeSongEntity.toSong omits it), so fall
+     * back to deriving it from the `navidrome://` content URI the way SongEntity does.
+     */
+    private fun gatewaySongId(song: Song): String? =
+        song.navidromeId?.takeIf { it.isNotBlank() }
+            ?: song.contentUriString
+                .takeIf { it.startsWith("navidrome://") }
+                ?.removePrefix("navidrome://")
+                ?.takeIf { it.isNotBlank() }
 
 
     companion object {
@@ -1349,6 +1363,36 @@ class LyricsRepositoryImpl @Inject constructor(
                 return@withContext Result.success(stored)
             }
 
+            // Gateway first for tracks served by the XPS Subsonic gateway. It resolves lyrics by
+            // song id (not artist+title), so featured-artist credits can't break the match, and it
+            // returns synced LRC in one fast, server-cached call — LRCLIB stays as the fallback.
+            gatewaySongId(song)?.let { gatewayId ->
+                val raw = runCatching {
+                    navidromeRepositoryProvider.get().getLyrics(gatewayId).getOrNull()
+                }.getOrNull()
+                if (!raw.isNullOrBlank()) {
+                    val parsed = LyricsUtils.parseLyrics(raw).copy(areFromRemote = true)
+                    if (parsed.isValid()) {
+                        try {
+                            lyricsDao.insert(
+                                com.theveloper.pixelplay.data.database.LyricsEntity(
+                                    songId = song.id.toLong(),
+                                    content = raw,
+                                    isSynced = !parsed.synced.isNullOrEmpty(),
+                                    source = "gateway"
+                                )
+                            )
+                        } catch (e: NumberFormatException) {
+                            Log.w(TAG, "Skipping DB update for non-numeric ID: ${song.id}")
+                        }
+                        lyricsCache.put(cacheKey, parsed)
+                        saveLocalLyricsJson(song, parsed)
+                        LogUtils.d(this@LyricsRepositoryImpl, "Fetched gateway lyrics for: ${song.title}")
+                        return@withContext Result.success(Pair(parsed, raw))
+                    }
+                }
+            }
+
             // First, try the search API which is more flexible, then pick the best match
             val searchResult = searchRemote(song)
             if (searchResult.isSuccess) {
@@ -1379,14 +1423,29 @@ class LyricsRepositoryImpl @Inject constructor(
                 }
             }
 
-            // Fallback: Try the exact match API (less likely to succeed, but worth a shot)
-            val response = withNetworkRetry(operationName = "lrclib_get_lyrics") {
-                lrcLibApiService.getLyrics(
-                    trackName = song.title,
-                    artistName = song.displayArtist,
-                    albumName = song.album,
-                    duration = (song.duration / 1000).toInt()
-                )
+            // Fallback: the exact-match API. Every param is required, so passing raw values —
+            // "Title (feat. X)", a comma-joined artist list, an empty album, or duration 0 (common
+            // for streamed tracks) — makes LRCLIB answer 400 rather than 404. Sanitize the same way
+            // the search path does, and skip entirely when we have no duration to match on.
+            val durationSeconds = (song.duration / 1000).toInt()
+            val exactArtist = song.displayArtist.trim()
+                .replace(BRACKETED_QUALIFIER_REGEX, "").trim()
+                .split(" feat.", " ft.", " featuring", " & ", " , ").first().trim()
+            val exactTitle = song.title.trim()
+                .replace(BRACKETED_QUALIFIER_REGEX, "").trim()
+                .split(" feat.", " ft.", " featuring", " (").first().trim()
+            val response = if (durationSeconds <= 0 || exactArtist.isBlank() || exactTitle.isBlank()) {
+                LogUtils.d(this@LyricsRepositoryImpl, "Skipping LRCLIB exact match (insufficient metadata)")
+                null
+            } else {
+                withNetworkRetry(operationName = "lrclib_get_lyrics") {
+                    lrcLibApiService.getLyrics(
+                        trackName = exactTitle,
+                        artistName = exactArtist,
+                        albumName = song.album,
+                        duration = durationSeconds
+                    )
+                }
             }
 
             val exactMatch = response
