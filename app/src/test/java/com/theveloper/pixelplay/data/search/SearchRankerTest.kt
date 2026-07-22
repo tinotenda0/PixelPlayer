@@ -153,4 +153,34 @@ class SearchRankerTest {
         val firstArtist = ranked.filterIsInstance<SearchResultItem.ArtistItem>().first()
         assertEquals("Kendrick Lamar", firstArtist.artist.name)
     }
+
+    @Test
+    fun `upstream popularity beats merged position for equally-matching results`() {
+        // Two artists matching identically, with equal-length names so closeness cancels out.
+        // The popular one sits LATER in the merged list. Scoring off the merged index (what the
+        // code did before per-source ranks) would put the unpopular one first purely for being
+        // earlier in the concatenation.
+        val unpopularFirst = artist("Kendrick Lamax")   // merged index 0, upstream rank 5
+        val popularSecond = artist("Kendrick Lamar")    // merged index 1, upstream rank 0
+        val merged = listOf(unpopularFirst, popularSecond)
+
+        val ranks = mapOf(
+            SearchRanker.itemKey(unpopularFirst) to 5,
+            SearchRanker.itemKey(popularSecond) to 0
+        )
+        val ranked = SearchRanker.rank("kendrick", merged, noPlays, ranks)
+        assertEquals(
+            "Kendrick Lamar",
+            (ranked.first() as SearchResultItem.ArtistItem).artist.name
+        )
+    }
+
+    @Test
+    fun `itemKey prefers the gateway id so local and live rows for one track agree`() {
+        val local = song(id = "12345", title = "Last Last", artist = "Burna Boy")
+        val live = song(id = "navidrome_yt-song-abc", title = "Last Last", artist = "Burna Boy")
+        // Disjoint id spaces: keys only line up when a gateway id is present on both.
+        assertEquals("s:12345", SearchRanker.itemKey(local))
+        assertEquals("s:navidrome_yt-song-abc", SearchRanker.itemKey(live))
+    }
 }

@@ -94,6 +94,29 @@ class SearchStateHolder @Inject constructor(
         }
         return out
     }
+
+    /**
+     * Position of each result within the list it came from, keyed the way [SearchRanker] keys
+     * items. The gateway returns songs/artists/albums in popularity order, but the merge
+     * concatenates the three lists, so the merged index destroys that signal — this preserves it.
+     * Local results are ranked among themselves; their relevance comes from play history instead.
+     */
+    private fun buildSourceRanks(local: List<SearchResultItem>, live: LiveResults): Map<String, Int> {
+        val ranks = HashMap<String, Int>()
+        // Local first, so a gateway hit for the same entity overwrites with its upstream position.
+        local.forEachIndexed { i, item -> ranks[SearchRanker.itemKey(item)] = i }
+        live.songs.forEachIndexed { i, s ->
+            ranks[SearchRanker.itemKey(SearchResultItem.SongItem(s))] = i
+        }
+        live.artists.forEachIndexed { i, a ->
+            ranks[SearchRanker.itemKey(SearchResultItem.ArtistItem(a))] = i
+        }
+        live.albums.forEachIndexed { i, al ->
+            ranks[SearchRanker.itemKey(SearchResultItem.AlbumItem(al))] = i
+        }
+        return ranks
+    }
+
     private companion object {
         const val SEARCH_DEBOUNCE_MS = 300L
     }
@@ -205,7 +228,12 @@ class SearchStateHolder @Inject constructor(
                                 } else {
                                     musicRepository.getSearchPlayStats(songIds)
                                 }
-                                val ranked = SearchRanker.rank(normalizedQuery, merged, playStats)
+                                val ranked = SearchRanker.rank(
+                                    normalizedQuery,
+                                    merged,
+                                    playStats,
+                                    buildSourceRanks(resultsList, liveResults)
+                                )
 
                                 if (request.requestId != latestSearchRequestId.get()) {
                                     return@collect

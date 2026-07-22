@@ -33,6 +33,8 @@ import coil.size.Size
 import com.theveloper.pixelplay.data.model.Artist
 import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.presentation.navigation.navigateSafelyReplacing
+import com.theveloper.pixelplay.presentation.components.MiniPlayerHeight
+import com.theveloper.pixelplay.presentation.components.resolveNavBarOccupiedHeight
 import com.theveloper.pixelplay.presentation.viewmodel.MixBuilderViewModel
 import com.theveloper.pixelplay.ui.theme.GoogleSansRounded
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
@@ -44,6 +46,7 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 @Composable
 fun MixBuilderScreen(
     navController: NavController,
+    playerViewModel: com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel,
     viewModel: MixBuilderViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -66,8 +69,16 @@ fun MixBuilderScreen(
         viewModel.dismissError()
     }
 
+    // The app draws its own floating nav bar (and mini player) over the Scaffold, so the FAB has
+    // to be lifted clear of them or it sits underneath and can't be tapped.
+    val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val navBarCompactMode by playerViewModel.navBarCompactMode.collectAsStateWithLifecycle()
+    val bottomOccluded = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode) +
+        MiniPlayerHeight
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = {
@@ -86,6 +97,7 @@ fun MixBuilderScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
+                modifier = Modifier.padding(bottom = bottomOccluded),
                 onClick = viewModel::build,
                 expanded = uiState.canBuild,
                 icon = {
@@ -163,7 +175,7 @@ fun MixBuilderScreen(
                 MixBuilderHint()
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(bottom = 96.dp),
+                    contentPadding = PaddingValues(bottom = bottomOccluded + 96.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(

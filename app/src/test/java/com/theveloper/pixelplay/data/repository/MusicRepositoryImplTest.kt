@@ -116,7 +116,8 @@ class MusicRepositoryImplTest {
             favoritesDao = mockFavoritesDao,
             artistImageRepository = mockArtistImageRepository,
             folderTreeBuilder = mockk(relaxed = true),
-            engagementDao = mockk(relaxed = true)
+            engagementDao = mockk(relaxed = true),
+            navidromeRepositoryProvider = dagger.Lazy { mockk(relaxed = true) }
         )
     }
 

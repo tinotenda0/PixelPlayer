@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.data.model.Album
+import com.theveloper.pixelplay.data.search.SearchRanker
 import com.theveloper.pixelplay.data.model.Artist
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.repository.ArtistImageRepository
@@ -169,6 +170,13 @@ class ArtistDetailViewModel @Inject constructor(
                             effectiveImageUrl = effectiveUrl,
                             isLoading = false
                         )
+
+                        // 4) Upgrade to the full gateway profile. A locally-stored artist is
+                        //    usually one discovered through a playlist, so the local rows are the
+                        //    one or two tracks that happened to be featured — not a discography.
+                        //    The gateway caches artists globally, so this is cheap after the
+                        //    first lookup by anyone.
+                        upgradeToGatewayProfile(artist)
                     }
 
             } catch (e: Exception) {
@@ -187,6 +195,49 @@ class ArtistDetailViewModel @Inject constructor(
      * sections, plus the artist header image from the gateway. Used when the artist id is a
      * `yt-artist-…` string rather than a local Room Long id.
      */
+    /**
+     * Replaces a locally-derived artist page with the gateway's full profile (top songs, whole
+     * discography, biography) once it resolves. Runs after the local page is already on screen,
+     * so the upgrade is additive — a failure or a no-match simply leaves the local view alone.
+     */
+    private var upgradeJob: Job? = null
+
+    private suspend fun upgradeToGatewayProfile(artist: Artist) {
+        upgradeJob?.cancel()
+        upgradeJob = viewModelScope.launch {
+            val gatewayId = artist.navidromeId?.takeIf { it.startsWith("yt-") }
+                ?: resolveGatewayId(artist.name)
+                ?: return@launch
+
+            val detail = navidromeRepository.getArtistDetail(gatewayId).getOrNull() ?: return@launch
+            if (detail.topSongs.isEmpty() && detail.albums.isEmpty()) return@launch
+
+            _uiState.update { state ->
+                // The user may have navigated on while this was in flight.
+                if (state.artist?.id != artist.id) state
+                else state.copy(
+                    songs = detail.topSongs.ifEmpty { state.songs },
+                    // Cleared so the Spotify-style sections render instead of the sparse
+                    // per-album groups built from the few local rows.
+                    albumSections = emptyList(),
+                    topSongs = detail.topSongs,
+                    discography = detail.albums,
+                    biography = detail.description,
+                    subscribers = detail.subscribers
+                )
+            }
+        }
+    }
+
+    /** Finds the gateway id for a local artist by name, requiring a confident name match. */
+    private suspend fun resolveGatewayId(name: String): String? {
+        if (name.isBlank()) return null
+        val hits = navidromeRepository.searchArtists(name, limit = 5).getOrNull().orEmpty()
+        val target = SearchRanker.normalize(name)
+        // Exact normalized match only: "Michael Jackson" must not bind to "Michael Jackson Tribute".
+        return hits.firstOrNull { SearchRanker.normalize(it.name) == target }?.navidromeId
+    }
+
     private fun loadGatewayArtist(gatewayId: String) {
         currentLoadJob?.cancel()
         currentLoadJob = viewModelScope.launch {

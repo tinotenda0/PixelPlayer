@@ -315,7 +315,8 @@ fun AppNavigation(
             }
             composable(Screen.MixBuilder.route) {
                 com.theveloper.pixelplay.presentation.screens.MixBuilderScreen(
-                    navController = navController
+                    navController = navController,
+                    playerViewModel = playerViewModel
                 )
             }
             composable(

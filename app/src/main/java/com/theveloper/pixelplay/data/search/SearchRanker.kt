@@ -54,10 +54,32 @@ object SearchRanker {
 
     private data class FieldMatch(val tier: Int, val quality: Double)
 
+    /**
+     * Stable identity for an item, used to line results up with their [sourceRanks] entry.
+     * Mirrors the de-dup keys the search merge uses.
+     */
+    fun itemKey(item: SearchResultItem): String = when (item) {
+        is SearchResultItem.SongItem ->
+            "s:" + (item.song.navidromeId ?: item.song.id)
+        is SearchResultItem.ArtistItem ->
+            "a:" + (item.artist.navidromeId ?: item.artist.name.lowercase())
+        is SearchResultItem.AlbumItem ->
+            "b:" + (item.album.navidromeId
+                ?: "${item.album.title.lowercase()}|${item.album.artist.lowercase()}")
+        is SearchResultItem.PlaylistItem -> "p:" + item.playlist.id
+    }
+
+    /**
+     * [sourceRanks] maps [itemKey] to the item's position *within the list it came from*, so
+     * upstream popularity ordering survives the merge. Without it the merged index would be used,
+     * which is meaningless: the merge concatenates local results, then gateway songs, then
+     * artists, then albums, so a merged index says more about type than about popularity.
+     */
     fun rank(
         query: String,
         items: List<SearchResultItem>,
         playStats: Map<String, PlayStat>,
+        sourceRanks: Map<String, Int> = emptyMap(),
         nowMs: Long = System.currentTimeMillis()
     ): List<SearchResultItem> {
         val nq = normalize(query)
@@ -72,7 +94,8 @@ object SearchRanker {
         return items
             .withIndex()
             .map { (index, item) ->
-                Triple(item, score(nq, qWords, item, playStats, affinity, index, nowMs), index)
+                val rank = sourceRanks[itemKey(item)] ?: index
+                Triple(item, score(nq, qWords, item, playStats, affinity, rank, nowMs), index)
             }
             // Tiebreak on the ORIGINAL order, not the name. Results arrive already ordered by
             // source relevance (the gateway returns best-match-first), and equal-scoring items are
