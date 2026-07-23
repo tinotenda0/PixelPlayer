@@ -79,6 +79,15 @@ class SongInfoBottomSheetViewModel @Inject constructor(
         if (ids.isNotEmpty()) navidromeDownloadManager.pinSongs(ids)
     }
 
+    /** Drop the offline copies of a whole playlist/album, freeing the space again. */
+    fun removeDownloads(songs: List<Song>) {
+        val ids = songs.mapNotNull { it.navidromeId }.filter { it.isNotBlank() }
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            ids.forEach { navidromeDownloadManager.removeDownload(it) }
+        }
+    }
+
     data class SongLocationInfo(
         val label: String,
         val value: String,

@@ -47,6 +47,9 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicOff
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -188,6 +191,9 @@ fun PlaylistDetailScreen(
     val currentPlaylist = uiState.currentPlaylistDetails
     val isFolderPlaylist = currentPlaylist?.id?.startsWith(FOLDER_PLAYLIST_PREFIX) == true
     val songsInPlaylist = uiState.currentPlaylistSongs
+    val songInfoViewModel: com.theveloper.pixelplay.presentation.viewmodel.SongInfoBottomSheetViewModel =
+        androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel()
+    val downloadedIds by songInfoViewModel.downloadedNavidromeIds.collectAsStateWithLifecycle()
 
     LaunchedEffect(playlistId) {
         playlistViewModel.loadPlaylistDetails(playlistId)
@@ -304,6 +310,34 @@ fun PlaylistDetailScreen(
                     }
                 },
                 actions = {
+                    // Download the whole playlist for offline. Only meaningful for gateway
+                    // tracks, so it hides when the playlist has none.
+                    val downloadableIds = remember(songsInPlaylist) {
+                        songsInPlaylist.mapNotNull { it.navidromeId }.filter { it.isNotBlank() }
+                    }
+                    if (downloadableIds.isNotEmpty()) {
+                        val allDownloaded = remember(downloadableIds, downloadedIds) {
+                            downloadedIds.containsAll(downloadableIds)
+                        }
+                        IconButton(
+                            onClick = {
+                                if (allDownloaded) {
+                                    songInfoViewModel.removeDownloads(songsInPlaylist)
+                                } else {
+                                    songInfoViewModel.downloadAll(songsInPlaylist)
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (allDownloaded) Icons.Rounded.DownloadDone
+                                              else Icons.Rounded.Download,
+                                contentDescription = if (allDownloaded) "Remove downloads"
+                                                     else "Download playlist",
+                                tint = if (allDownloaded) MaterialTheme.colorScheme.primary
+                                       else LocalContentColor.current
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = {
                             playerViewModel.showSortingSheet() 
