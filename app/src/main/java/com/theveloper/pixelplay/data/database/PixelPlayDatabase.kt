@@ -836,6 +836,19 @@ abstract class PixelPlayDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Adds `artist_refs` to navidrome_songs: the gateway's per-credit artist ids.
+         *
+         * A real migration, not a destructive rebuild — destructive fallback is debug-only here
+         * (by design, so a migration bug can't silently wipe playlists, favourites and stats),
+         * and shipping a schema bump without this path crashed release builds on launch.
+         */
+        val MIGRATION_45_46 = object : Migration(45, 46) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `navidrome_songs` ADD COLUMN `artist_refs` TEXT")
+            }
+        }
+
         private fun ensureSongsTableHasDateAdded(db: SupportSQLiteDatabase) {
             if (!tableExists(db, "songs")) {
                 recreateSongsTable(db)
