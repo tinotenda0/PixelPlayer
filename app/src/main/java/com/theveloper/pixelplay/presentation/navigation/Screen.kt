@@ -37,10 +37,20 @@ sealed class Screen(val route: String) {
         fun createRoute(albumId: String) = "album_detail/$albumId"
     }
 
-    object ArtistDetail : Screen("artist_detail/{artistId}") {
-        fun createRoute(artistId: Long) = "artist_detail/$artistId"
+    object ArtistDetail : Screen("artist_detail/{artistId}?name={name}") {
+        /**
+         * The optional `name` is a fallback, not decoration: a streamed song has no local artist
+         * row, so its numeric id is -1 and the lookup dead-ends at "Could not find the artist".
+         * Carrying the display name lets the screen recover by resolving upstream instead.
+         */
+        fun createRoute(artistId: Long, name: String? = null) = build(artistId.toString(), name)
+
         // Gateway artist id (e.g. "yt-artist-<browseId>"); browse ids are path-safe.
-        fun createRoute(artistId: String) = "artist_detail/$artistId"
+        fun createRoute(artistId: String, name: String? = null) = build(artistId, name)
+
+        private fun build(id: String, name: String?): String =
+            if (name.isNullOrBlank()) "artist_detail/$id"
+            else "artist_detail/$id?name=${android.net.Uri.encode(name)}"
     }
 
     object EditTransition : Screen("edit_transition?playlistId={playlistId}") {

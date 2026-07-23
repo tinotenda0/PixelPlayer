@@ -46,29 +46,38 @@ object ArtistNavigation {
         )
 
     /** Route to a specific credited artist, using the gateway's own id when we have one. */
-    fun routeForRef(ref: ArtistRef): String =
-        ref.gatewayId?.takeIf { it.isNotBlank() }?.let { Screen.ArtistDetail.createRoute(it) }
-            ?: if (ref.id > 0L) Screen.ArtistDetail.createRoute(ref.id) else routeForName(ref.name)
+    fun routeForRef(ref: ArtistRef): String {
+        val name = ref.name.takeIf { it.isNotBlank() }
+        ref.gatewayId?.takeIf { it.isNotBlank() }?.let {
+            return Screen.ArtistDetail.createRoute(it, name)
+        }
+        // Negative ids are synthesized for streamed/synced content and resolve to nothing.
+        return if (ref.id > 0L) Screen.ArtistDetail.createRoute(ref.id, name)
+               else routeForName(ref.name)
+    }
 
     /**
      * Best route to the song's (primary) artist: the local artist row when the song really is
      * local, otherwise a gateway name lookup.
      */
     fun routeFor(song: Song): String {
-        // Structured identity first: this is the only source that works for a song the server
-        // has never cached, and it is exact rather than a name guess.
+        // The display name always travels with the route as a fallback, so even a wrong or
+        // missing id can still resolve rather than dead-ending.
+        val fallbackName = creditedArtists(song).firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: song.artist?.trim()?.takeIf { it.isNotEmpty() }
+
+        // Structured identity first: exact, and the only thing that works for a song the
+        // server has never cached.
         song.artists.firstOrNull { it.isPrimary }?.let { return routeForRef(it) }
         song.artists.firstOrNull()?.let { return routeForRef(it) }
 
-        val isGatewaySong = !song.navidromeId.isNullOrBlank() || song.id.startsWith("navidrome_")
-        if (!isGatewaySong && song.artistId > 0L) {
-            return Screen.ArtistDetail.createRoute(song.artistId)
+        // Only a POSITIVE id is a real local artist row. -1 (streamed) and the negative
+        // synthesized ids used for synced content both resolve to nothing, so they must never
+        // be routed on their own.
+        if (song.artistId > 0L) {
+            return Screen.ArtistDetail.createRoute(song.artistId, fallbackName)
         }
-        val primary = creditedArtists(song).firstOrNull()
-        return if (primary.isNullOrBlank()) {
-            Screen.ArtistDetail.createRoute(song.artistId)
-        } else {
-            routeForName(primary)
-        }
+        return if (fallbackName != null) routeForName(fallbackName)
+               else Screen.ArtistDetail.createRoute(song.artistId)
     }
 }

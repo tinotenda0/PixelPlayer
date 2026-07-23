@@ -89,12 +89,19 @@ class ArtistDetailViewModel @Inject constructor(
     private val _artistColorScheme = MutableStateFlow<ColorSchemePair?>(null)
     val artistColorScheme: StateFlow<ColorSchemePair?> = _artistColorScheme.asStateFlow()
 
+    /** Display name carried alongside the id, used to recover when the id resolves to nothing. */
+    private val fallbackName: String? = savedStateHandle.get<String>("name")?.takeIf { it.isNotBlank() }
+
     init {
         savedStateHandle.getStateFlow<String?>("artistId", null)
             .onEach { idString ->
                 if (idString != null) {
                     val artistId = idString.toLongOrNull()
                     when {
+                        // A non-positive id is a placeholder, never a real local row. Go straight
+                        // to the name so it can resolve upstream instead of dead-ending.
+                        artistId != null && artistId <= 0L && fallbackName != null ->
+                            loadGatewayArtistByName(fallbackName)
                         artistId != null -> loadArtistData(artistId)
                         idString.startsWith("yt-") -> loadGatewayArtist(idString)
                         else -> _uiState.update { it.copy(error = context.getString(R.string.artist_detail_invalid_id), isLoading = false) }
@@ -131,8 +138,14 @@ class ArtistDetailViewModel @Inject constructor(
                     }
                     .collect { (artist, songs) ->
                         if (artist == null) {
-                            _uiState.update {
-                                it.copy(error = context.getString(R.string.artist_detail_not_found), isLoading = false)
+                            // Local row missing — recover via the name rather than dead-ending.
+                            if (fallbackName != null) {
+                                loadGatewayArtistByName(fallbackName)
+                            } else {
+                                _uiState.update {
+                                    it.copy(error = context.getString(R.string.artist_detail_not_found),
+                                        isLoading = false)
+                                }
                             }
                             return@collect
                         }
@@ -273,6 +286,11 @@ class ArtistDetailViewModel @Inject constructor(
         val target = SearchRanker.normalize(name)
         // Exact normalized match only: "Michael Jackson" must not bind to "Michael Jackson Tribute".
         return hits.firstOrNull { SearchRanker.normalize(it.name) == target }?.navidromeId
+    }
+
+    /** Resolve an artist by display name via the gateway's name lookup. */
+    private fun loadGatewayArtistByName(name: String) {
+        loadGatewayArtist("yt-artistn-" + android.net.Uri.encode(name))
     }
 
     private fun loadGatewayArtist(gatewayId: String) {

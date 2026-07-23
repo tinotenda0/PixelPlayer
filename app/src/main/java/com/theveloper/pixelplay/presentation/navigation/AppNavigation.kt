@@ -380,7 +380,15 @@ fun AppNavigation(
             }
             composable(
                 route = Screen.ArtistDetail.route,
-                arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
+                arguments = listOf(
+                    navArgument("artistId") { type = NavType.StringType },
+                    // Optional display-name fallback, so a placeholder id can still resolve.
+                    navArgument("name") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                ),
             ) { backStackEntry ->
                 val artistId = backStackEntry.arguments?.getString("artistId")
                 if (artistId != null) {
