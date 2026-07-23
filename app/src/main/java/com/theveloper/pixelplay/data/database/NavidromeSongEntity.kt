@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.theveloper.pixelplay.data.model.Song
+import com.theveloper.pixelplay.data.navidrome.model.NavidromeArtistRef
 import com.theveloper.pixelplay.data.navidrome.model.NavidromeSong
 
 /**
@@ -45,6 +46,15 @@ data class NavidromeSongEntity(
     val title: String,
     val artist: String,
     @ColumnInfo(name = "artist_id") val artistId: String?,
+    /**
+     * The gateway's per-credit artist identities, as `id\u001Fname` pairs joined by `\u001E`.
+     *
+     * [artist] is display text ("A, B") and cannot be split back into artists reliably — a comma
+     * is more often part of one act's name than a separator. Without these ids a collaboration
+     * collapsed into a single fake artist in the library. Null for servers that don't send
+     * OpenSubsonic `artists[]`.
+     */
+    @ColumnInfo(name = "artist_refs") val artistRefs: String? = null,
     val album: String,
     @ColumnInfo(name = "album_id") val albumId: String?,
     @ColumnInfo(name = "cover_art_id") val coverArtId: String?,
@@ -69,6 +79,12 @@ fun NavidromeSongEntity.toSong(): Song {
         title = title,
         artist = artist,
         artistId = -1L,
+        // Carry the gateway credits so a cached song's artists are as openable as a live one's.
+        artists = decodeArtistRefs(artistRefs).mapIndexed { index, ref ->
+            com.theveloper.pixelplay.data.model.ArtistRef(
+                id = -1L, name = ref.name, isPrimary = index == 0, gatewayId = ref.id
+            )
+        },
         album = album,
         albumId = -1L,
         path = path,
@@ -82,7 +98,8 @@ fun NavidromeSongEntity.toSong(): Song {
         year = year,
         trackNumber = trackNumber,
         dateAdded = dateAdded,
-        isFavorite = false
+        isFavorite = false,
+        navidromeId = navidromeId
     )
 }
 
@@ -97,6 +114,7 @@ fun NavidromeSong.toEntity(playlistId: String): NavidromeSongEntity {
         title = title,
         artist = artist,
         artistId = artistId,
+        artistRefs = encodeArtistRefs(artistRefs),
         album = album,
         albumId = albumId,
         coverArtId = coverArt,
@@ -111,4 +129,22 @@ fun NavidromeSong.toEntity(playlistId: String): NavidromeSongEntity {
         path = path,
         dateAdded = System.currentTimeMillis()
     )
+}
+
+private const val REF_FIELD_SEP = '\u001F'
+private const val REF_ENTRY_SEP = '\u001E'
+
+/** Serialize gateway artist credits for storage. Uses control chars no artist name contains. */
+fun encodeArtistRefs(refs: List<NavidromeArtistRef>): String? =
+    if (refs.isEmpty()) null
+    else refs.joinToString(REF_ENTRY_SEP.toString()) { "${it.id}$REF_FIELD_SEP${it.name}" }
+
+/** Inverse of [encodeArtistRefs]; tolerates malformed rows by skipping them. */
+fun decodeArtistRefs(encoded: String?): List<NavidromeArtistRef> {
+    if (encoded.isNullOrEmpty()) return emptyList()
+    return encoded.split(REF_ENTRY_SEP).mapNotNull { entry ->
+        val parts = entry.split(REF_FIELD_SEP)
+        if (parts.size != 2 || parts[0].isEmpty() || parts[1].isEmpty()) null
+        else NavidromeArtistRef(parts[0], parts[1])
+    }
 }

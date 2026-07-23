@@ -16,6 +16,7 @@ import com.theveloper.pixelplay.data.database.toEntity
 import com.theveloper.pixelplay.data.database.SongArtistCrossRef
 import com.theveloper.pixelplay.data.database.SongEntity
 import com.theveloper.pixelplay.data.database.SourceType
+import com.theveloper.pixelplay.data.database.decodeArtistRefs
 import com.theveloper.pixelplay.data.database.toSong
 import com.theveloper.pixelplay.data.model.Album
 import com.theveloper.pixelplay.data.model.ArtistRef
@@ -1050,12 +1051,20 @@ class NavidromeRepository @Inject constructor(
 
         navidromeSongs.forEach { navidromeSong ->
             val songId = toUnifiedSongId(navidromeSong.navidromeId)
-            val artistNames = parseArtistNames(navidromeSong.artist)
+            // Prefer the gateway's per-credit identities. Splitting the display string can't
+            // work: "Forrest Frank, Cory Asbury" and "Tyler, The Creator" are indistinguishable
+            // as text, so a collaboration used to collapse into one fake artist in the library.
+            val gatewayRefs = decodeArtistRefs(navidromeSong.artistRefs)
+            val artistNames = if (gatewayRefs.isNotEmpty()) gatewayRefs.map { it.name }
+                              else parseArtistNames(navidromeSong.artist)
             val primaryArtistName = artistNames.firstOrNull() ?: "Unknown Artist"
             val primaryArtistId = toUnifiedArtistId(primaryArtistName)
 
             artistNames.forEachIndexed { index, artistName ->
-                val artistId = toUnifiedArtistId(artistName)
+                // Key on the gateway's stable id when we have one: name-hashing splits one
+                // artist across punctuation/casing variants and merges distinct same-name acts.
+                val artistId = gatewayRefs.getOrNull(index)?.id?.takeIf { it.isNotEmpty() }
+                    ?.let { toUnifiedArtistId(it) } ?: toUnifiedArtistId(artistName)
                 artists.putIfAbsent(
                     artistId,
                     ArtistEntity(
