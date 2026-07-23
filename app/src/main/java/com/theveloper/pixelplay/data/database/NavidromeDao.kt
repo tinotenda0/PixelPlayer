@@ -20,6 +20,10 @@ interface NavidromeDao {
     @Query("SELECT * FROM navidrome_songs ORDER BY date_added DESC")
     suspend fun getAllNavidromeSongsList(): List<NavidromeSongEntity>
 
+    /** Row count only — used to detect an empty cache without materialising it. */
+    @Query("SELECT COUNT(*) FROM navidrome_songs")
+    suspend fun countNavidromeSongs(): Int
+
     @Query("SELECT * FROM navidrome_songs WHERE playlist_id = :playlistId ORDER BY date_added DESC")
     fun getSongsByPlaylist(playlistId: String): Flow<List<NavidromeSongEntity>>
 

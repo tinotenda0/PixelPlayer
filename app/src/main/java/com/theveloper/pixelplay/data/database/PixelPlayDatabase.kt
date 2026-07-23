@@ -846,6 +846,16 @@ abstract class PixelPlayDatabase : RoomDatabase() {
         val MIGRATION_45_46 = object : Migration(45, 46) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `navidrome_songs` ADD COLUMN `artist_refs` TEXT")
+
+                // Existing rows have no artist_refs, so they would keep producing the composite
+                // artists ("Ellie Goulding, Diplo, Swae Lee") that this column exists to prevent
+                // — preserving the data would preserve the bug. These four tables are a
+                // re-syncable cache of gateway content, so clearing them forces a clean rebuild.
+                // Playlists, favourites and listening stats live in other tables and survive.
+                db.execSQL("DELETE FROM `song_artist_cross_ref`")
+                db.execSQL("DELETE FROM `artists`")
+                db.execSQL("DELETE FROM `songs`")
+                db.execSQL("DELETE FROM `navidrome_songs`")
             }
         }
 

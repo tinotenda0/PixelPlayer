@@ -429,8 +429,15 @@ constructor(
                     val hasTelegramChannels = telegramDao.getAllChannels().first().isNotEmpty()
                     val neteaseCount = neteaseDao.getNeteaseCount()
                     // For Navidrome, we only do network sync if SYNC_THRESHOLD_MS (24h) threshold has passed.
-                    val navidromeNeedsNetworkSync = navidromeRepository.isLoggedIn && 
-                        (System.currentTimeMillis() - navidromeRepository.lastFullSyncTime >= NavidromeRepository.SYNC_THRESHOLD_MS)
+                    // Sync when the 24h window has passed OR the local cache is empty. Without
+                    // the empty check, a cache cleared by a schema migration would sit blank for
+                    // up to a day, since the timestamp says we synced recently.
+                    val navidromeCacheEmpty = navidromeRepository.isLoggedIn &&
+                        navidromeRepository.cachedSongCount() == 0
+                    val navidromeNeedsNetworkSync = navidromeRepository.isLoggedIn &&
+                        (navidromeCacheEmpty ||
+                            System.currentTimeMillis() - navidromeRepository.lastFullSyncTime >=
+                                NavidromeRepository.SYNC_THRESHOLD_MS)
                     
                     val needsActiveCloudSync = hasTelegramChannels ||
                         neteaseCount > 0 ||

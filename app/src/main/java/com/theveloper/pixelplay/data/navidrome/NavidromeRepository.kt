@@ -721,6 +721,11 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
+    /** How many gateway songs are cached locally. Zero means the library needs a re-sync. */
+    suspend fun cachedSongCount(): Int = withContext(Dispatchers.IO) {
+        runCatching { dao.countNavidromeSongs() }.getOrDefault(0)
+    }
+
     /** The gateway's genre names (real YouTube Music genres), or empty when unavailable. */
     suspend fun getGatewayGenres(): List<String> {
         if (!isLoggedIn) return emptyList()

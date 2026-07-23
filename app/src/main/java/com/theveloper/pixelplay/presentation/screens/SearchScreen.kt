@@ -453,7 +453,12 @@ fun SearchScreen(
                             RecentSearchesRow(
                                 items = recent,
                                 onPick = { term ->
+                                    // updateSearchQuery only sets the text; performSearch is what
+                                    // actually runs it. Without this the tap just re-recorded the
+                                    // term, which moved it to the front of the list and did
+                                    // nothing else — exactly what it looked like.
                                     playerViewModel.updateSearchQuery(term)
+                                    playerViewModel.performSearch(term)
                                     playerViewModel.onSearchQuerySubmitted(term)
                                 },
                                 onClear = { playerViewModel.clearSearchHistory() }
@@ -1242,11 +1247,14 @@ fun SearchResultsList(
                     count = itemsForSection.size,
                     key = { index ->
                         val item = itemsForSection[index]
+                        // Index-qualified: search merges local and gateway results, and upstream
+                        // can legitimately return the same track twice. A duplicate LazyColumn
+                        // key is a hard crash, so identity must never depend on the data alone.
                         when (item) {
-                            is SearchResultItem.SongItem -> "song_${item.song.id}"
-                            is SearchResultItem.AlbumItem -> "album_${item.album.id}"
-                            is SearchResultItem.ArtistItem -> "artist_${item.artist.id}"
-                            is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}_${index}"
+                            is SearchResultItem.SongItem -> "song_${item.song.id}_$index"
+                            is SearchResultItem.AlbumItem -> "album_${item.album.id}_$index"
+                            is SearchResultItem.ArtistItem -> "artist_${item.artist.id}_$index"
+                            is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}_$index"
                         }
                     },
                     contentType = { index ->
