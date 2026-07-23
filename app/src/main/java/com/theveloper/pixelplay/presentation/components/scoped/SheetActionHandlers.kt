@@ -9,6 +9,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavHostController
 import com.theveloper.pixelplay.data.model.Song
+import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.presentation.navigation.navigateSafelyReplacing
 import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
@@ -100,7 +101,7 @@ internal fun rememberSheetActionHandlers(
             sheetModalOverlayControllerState.value.updateSelectedSongForInfo(null)
             if (song.artistId != -1L) {
                 navController.navigateSafelyReplacing(
-                    route = Screen.ArtistDetail.createRoute(song.artistId),
+                    route = ArtistNavigation.routeFor(song),
                     patternToPop = Screen.ArtistDetail.route
                 )
             }

@@ -35,6 +35,12 @@ data class NavidromeSong(
     val title: String,
     val artist: String,
     val artistId: String? = null,
+    /**
+     * OpenSubsonic `artists[]` — every credited artist with the gateway's own stable id.
+     * This is the artist's real identity; the [artist] string is display text only. Empty when
+     * talking to a server that doesn't send it, in which case callers fall back to [artist].
+     */
+    val artistRefs: List<NavidromeArtistRef> = emptyList(),
     val album: String,
     val albumId: String? = null,
     val coverArt: String? = null,
@@ -91,3 +97,8 @@ data class NavidromeSong(
             else -> "audio/mpeg"
         }
 }
+
+/** One credited artist as the gateway reports it: a stable id plus a display name. */
+@Immutable
+@Parcelize
+data class NavidromeArtistRef(val id: String, val name: String) : Parcelable

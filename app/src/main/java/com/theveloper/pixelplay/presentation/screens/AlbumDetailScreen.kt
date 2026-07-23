@@ -96,6 +96,7 @@ import com.theveloper.pixelplay.presentation.components.SmartImage
 import com.theveloper.pixelplay.presentation.components.SongInfoBottomSheet
 import com.theveloper.pixelplay.presentation.components.resolveNavBarOccupiedHeight
 import com.theveloper.pixelplay.presentation.components.subcomps.EnhancedSongListItem
+import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.presentation.viewmodel.AlbumDetailViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
@@ -445,7 +446,7 @@ fun AlbumDetailScreen(
                     },
                     onNavigateToArtist = {
                         navController.navigateSafelyReplacing(
-                            route = Screen.ArtistDetail.createRoute(currentSong.artistId),
+                            route = ArtistNavigation.routeFor(currentSong),
                             patternToPop = Screen.ArtistDetail.route
                         )
                         showSongInfoBottomSheet = false

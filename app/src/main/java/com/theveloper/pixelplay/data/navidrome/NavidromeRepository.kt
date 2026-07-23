@@ -18,6 +18,7 @@ import com.theveloper.pixelplay.data.database.SongEntity
 import com.theveloper.pixelplay.data.database.SourceType
 import com.theveloper.pixelplay.data.database.toSong
 import com.theveloper.pixelplay.data.model.Album
+import com.theveloper.pixelplay.data.model.ArtistRef
 import com.theveloper.pixelplay.data.model.Artist
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.navidrome.model.NavidromeAlbum
@@ -1342,6 +1343,12 @@ fun NavidromeSong.toSong(): Song {
         title = title,
         artist = artist,
         artistId = -1L,
+        // The gateway's per-credit ids. artistId stays -1 (there is no local artist row), but
+        // these give every credit a real, openable identity — including on songs the server has
+        // never cached, which used to navigate nowhere.
+        artists = artistRefs.mapIndexed { index, ref ->
+            ArtistRef(id = -1L, name = ref.name, isPrimary = index == 0, gatewayId = ref.id)
+        },
         album = album,
         albumId = -1L,
         path = path,

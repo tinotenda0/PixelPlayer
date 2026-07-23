@@ -1,7 +1,8 @@
 package com.theveloper.pixelplay.presentation.navigation
 
+import android.net.Uri
+import com.theveloper.pixelplay.data.model.ArtistRef
 import com.theveloper.pixelplay.data.model.Song
-import java.net.URLEncoder
 
 /**
  * Artist navigation that works for streamed tracks as well as local ones.
@@ -38,14 +39,27 @@ object ArtistNavigation {
     /** Route to a specific artist by name, via the gateway's name lookup. */
     fun routeForName(name: String): String =
         Screen.ArtistDetail.createRoute(
-            GATEWAY_NAME_PREFIX + URLEncoder.encode(name.trim(), "UTF-8")
+            // Uri.encode, NOT URLEncoder: URLEncoder is FORM encoding, which turns spaces into
+            // "+". Nothing downstream converts "+" back, so "Forrest Frank" arrived at the
+            // gateway as "Forrest+Frank" and never resolved.
+            GATEWAY_NAME_PREFIX + Uri.encode(name.trim())
         )
+
+    /** Route to a specific credited artist, using the gateway's own id when we have one. */
+    fun routeForRef(ref: ArtistRef): String =
+        ref.gatewayId?.takeIf { it.isNotBlank() }?.let { Screen.ArtistDetail.createRoute(it) }
+            ?: if (ref.id > 0L) Screen.ArtistDetail.createRoute(ref.id) else routeForName(ref.name)
 
     /**
      * Best route to the song's (primary) artist: the local artist row when the song really is
      * local, otherwise a gateway name lookup.
      */
     fun routeFor(song: Song): String {
+        // Structured identity first: this is the only source that works for a song the server
+        // has never cached, and it is exact rather than a name guess.
+        song.artists.firstOrNull { it.isPrimary }?.let { return routeForRef(it) }
+        song.artists.firstOrNull()?.let { return routeForRef(it) }
+
         val isGatewaySong = !song.navidromeId.isNullOrBlank() || song.id.startsWith("navidrome_")
         if (!isGatewaySong && song.artistId > 0L) {
             return Screen.ArtistDetail.createRoute(song.artistId)

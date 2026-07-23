@@ -1,6 +1,7 @@
 package com.theveloper.pixelplay.data.network.navidrome
 
 import com.theveloper.pixelplay.data.navidrome.model.NavidromeAlbum
+import com.theveloper.pixelplay.data.navidrome.model.NavidromeArtistRef
 import com.theveloper.pixelplay.data.navidrome.model.NavidromeArtist
 import com.theveloper.pixelplay.data.navidrome.model.NavidromeMusicFolder
 import com.theveloper.pixelplay.data.navidrome.model.NavidromePlaylist
@@ -79,6 +80,21 @@ object NavidromeResponseParser {
 
     // ─── Song Parsing ────────────────────────────────────────────────────
 
+
+    /**
+     * OpenSubsonic `artists[]` — the per-credit ids that make an artist reachable even when the
+     * server has never cached the song. Absent on plain Subsonic servers, hence the empty list.
+     */
+    private fun parseArtistRefs(json: JSONObject): List<NavidromeArtistRef> {
+        val array = json.optJSONArray("artists") ?: return emptyList()
+        return (0 until array.length()).mapNotNull { i ->
+            val entry = array.optJSONObject(i) ?: return@mapNotNull null
+            val id = entry.optString("id")
+            val name = entry.optString("name")
+            if (id.isEmpty() || name.isEmpty()) null else NavidromeArtistRef(id, name)
+        }
+    }
+
     /**
      * Parse a song from JSON (Child format from Subsonic API).
      */
@@ -86,8 +102,12 @@ object NavidromeResponseParser {
         return NavidromeSong(
             id = json.optString("id", ""),
             title = json.optString("title", json.optString("name", "Unknown Title")),
-            artist = json.optString("artist", "Unknown Artist"),
+            // Prefer OpenSubsonic's displayArtist; `artist` is the same text on our gateway
+            // but displayArtist is the field that is defined to be display-only.
+            artist = json.optString("displayArtist").takeIf { it.isNotEmpty() }
+                ?: json.optString("artist", "Unknown Artist"),
             artistId = json.optString("artistId").takeIf { it.isNotEmpty() },
+            artistRefs = parseArtistRefs(json),
             album = json.optString("album", "Unknown Album"),
             albumId = json.optString("albumId").takeIf { it.isNotEmpty() },
             coverArt = json.optString("coverArt").takeIf { it.isNotEmpty() },

@@ -69,5 +69,14 @@ data class Artist(
 data class ArtistRef(
     val id: Long,
     val name: String,
-    val isPrimary: Boolean = false
+    val isPrimary: Boolean = false,
+    /**
+     * The gateway's own artist id (e.g. `yt-artist-<browseId>`) when this credit came from the
+     * streaming gateway rather than the local library.
+     *
+     * [id] is a local Room row id and is meaningless for a track the server has never cached —
+     * it is -1 for every streamed song, which is why navigating by it used to dead-end. This
+     * carries the artist's real identity instead, so any credit can be opened directly.
+     */
+    val gatewayId: String? = null
 ) : Parcelable

@@ -135,6 +135,7 @@ import com.theveloper.pixelplay.presentation.components.PlaylistBottomSheet
 import com.theveloper.pixelplay.presentation.components.PlaylistCover
 import com.theveloper.pixelplay.presentation.components.resolveMainScreenBottomGradientHeight
 import com.theveloper.pixelplay.presentation.components.resolveNavBarOccupiedHeight
+import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.presentation.screens.search.components.GenreCategoriesGrid
 import com.theveloper.pixelplay.presentation.viewmodel.PlaylistViewModel
@@ -758,8 +759,11 @@ fun SearchScreen(
                     showSongInfoBottomSheet = false
                 },
                 onNavigateToArtist = {
+                    // Was createRoute(currentSong.artistId): a streamed song has no local artist
+                    // row, so that is always -1 and routed to artist_detail/-1 → "not found".
+                    // This is the path taken when opening an artist from a search result.
                     navController.navigateSafelyReplacing(
-                        route = Screen.ArtistDetail.createRoute(currentSong.artistId),
+                        route = ArtistNavigation.routeFor(currentSong),
                         patternToPop = Screen.ArtistDetail.route
                     )
                     showSongInfoBottomSheet = false
