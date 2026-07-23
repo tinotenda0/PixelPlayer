@@ -2357,6 +2357,35 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Plays a song picked out of search, then extends the queue with musically similar tracks.
+     *
+     * Previously the queue became "the other search results", so tapping a song left you playing
+     * whatever else matched the words you typed — covers, live cuts, unrelated artists. A radio
+     * built from the track itself is what every streaming app does here.
+     */
+    fun playSongWithRadio(song: Song, queueName: String = "Radio") {
+        // Start immediately on the song alone; waiting on the network before any audio would
+        // make the tap feel broken.
+        showAndPlaySong(song, listOf(song), queueName)
+        val seedId = song.navidromeId ?: song.id.takeIf { it.startsWith("navidrome_") }
+        if (seedId == null) return
+        viewModelScope.launch {
+            val similar = navidromeRepository.getSimilarSongs(seedId, count = 40)
+                .getOrNull().orEmpty()
+            if (similar.isEmpty()) return@launch
+            val seen = mutableSetOf(song.navidromeId ?: song.id)
+            val queue = mutableListOf(song)
+            for (s in similar) {
+                val key = s.navidromeId ?: s.id
+                if (seen.add(key)) queue.add(s)
+            }
+            // Re-issue with the full queue; the current track keeps playing because it stays
+            // at index 0.
+            showAndPlaySong(song, queue, queueName)
+        }
+    }
+
     fun playArtist(artist: Artist) {
         val gatewayId = artist.navidromeId
         if (gatewayId != null) {

@@ -49,6 +49,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,6 +58,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Card
+import androidx.compose.material3.Surface
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -155,7 +157,9 @@ private const val MAX_ALBUM_MULTI_SELECTION = 6
 private data class SearchUiSlice(
     val selectedSearchFilter: SearchFilterType = SearchFilterType.ALL,
     val searchResults: ImmutableList<SearchResultItem> = persistentListOf(),
-    val isLiveSearching: Boolean = false
+    val isLiveSearching: Boolean = false,
+    val searchHistory: ImmutableList<com.theveloper.pixelplay.data.model.SearchHistoryItem> =
+        persistentListOf()
 )
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -232,7 +236,8 @@ fun SearchScreen(
                 SearchUiSlice(
                     selectedSearchFilter = uiState.selectedSearchFilter,
                     searchResults = uiState.searchResults,
-                    isLiveSearching = uiState.isLiveSearching
+                    isLiveSearching = uiState.isLiveSearching,
+                    searchHistory = uiState.searchHistory
                 )
             }
             .distinctUntilChanged()
@@ -438,6 +443,21 @@ fun SearchScreen(
             ) { isGenreMode ->
                 if (isGenreMode) {
                     Column(modifier = Modifier.fillMaxSize()) {
+                        // Recent searches: the history was already being recorded but never shown,
+                        // so repeating a search meant retyping it.
+                        val recent = remember(searchUiState.searchHistory) {
+                            searchUiState.searchHistory.take(5)
+                        }
+                        if (recent.isNotEmpty() && !isGenreSelectionMode) {
+                            RecentSearchesRow(
+                                items = recent,
+                                onPick = { term ->
+                                    playerViewModel.updateSearchQuery(term)
+                                    playerViewModel.onSearchQuerySubmitted(term)
+                                },
+                                onClear = { playerViewModel.clearSearchHistory() }
+                            )
+                        }
                         if (isGenreSelectionMode) {
                             SelectionActionRow(
                                 selectedCount = selectedGenres.size,
@@ -1156,12 +1176,9 @@ fun SearchResultsList(
     }
     val onSongResultClick = remember(playerViewModel, onItemSelected, songResultsQueue, searchQueueName) {
         { song: Song ->
-            val playbackQueue = if (songResultsQueue.any { it.id == song.id }) {
-                songResultsQueue
-            } else {
-                listOf(song)
-            }
-            playerViewModel.showAndPlaySong(song, playbackQueue, searchQueueName)
+            // Queue from music that sounds like this, not from the rest of the search results:
+            // "the other things that matched my words" is never the playlist you wanted.
+            playerViewModel.playSongWithRadio(song, searchQueueName)
             onItemSelected()
         }
     }
@@ -1776,4 +1793,57 @@ fun SearchFilterChip(
              null
          }
     )
+}
+
+/**
+ * Recent searches — the five most recent terms, tappable to run again.
+ * History was already being persisted; it just had nowhere to appear.
+ */
+@Composable
+private fun RecentSearchesRow(
+    items: List<com.theveloper.pixelplay.data.model.SearchHistoryItem>,
+    onPick: (String) -> Unit,
+    onClear: () -> Unit
+) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Recent",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onClear) {
+                Text("Clear", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(items, key = { it.id ?: it.query }) { entry ->
+                Surface(
+                    onClick = { onPick(entry.query) },
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.History,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = entry.query,
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
