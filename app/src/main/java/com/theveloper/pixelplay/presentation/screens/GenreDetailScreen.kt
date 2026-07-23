@@ -590,9 +590,9 @@ fun GenreDetailScreen(
                             )
                             showSongOptionsSheet = null
                         },
-                        onNavigateToArtistById = { artistId ->
+                        onNavigateToArtistById = { artistRef ->
                             navController.navigateSafelyReplacing(
-                                route = com.theveloper.pixelplay.presentation.navigation.Screen.ArtistDetail.createRoute(artistId),
+                                route = com.theveloper.pixelplay.presentation.navigation.ArtistNavigation.routeForRef(artistRef),
                                 patternToPop = com.theveloper.pixelplay.presentation.navigation.Screen.ArtistDetail.route
                             )
                             showSongOptionsSheet = null

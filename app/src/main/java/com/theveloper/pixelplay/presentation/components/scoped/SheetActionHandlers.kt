@@ -99,12 +99,14 @@ internal fun rememberSheetActionHandlers(
             playerViewModelState.value.collapsePlayerSheet()
             queueSheetControllerState.value.animate(false)
             sheetModalOverlayControllerState.value.updateSelectedSongForInfo(null)
-            if (song.artistId != -1L) {
-                navController.navigateSafelyReplacing(
-                    route = ArtistNavigation.routeFor(song),
-                    patternToPop = Screen.ArtistDetail.route
-                )
-            }
+            // No artistId guard: a streamed song has no local artist row, so artistId is -1
+            // for ALL of them. Guarding on it swallowed the tap entirely — the reason this did
+            // nothing at all rather than erroring. routeFor resolves gateway identity itself.
+            navController.navigateSafelyReplacing(
+                route = ArtistNavigation.routeFor(song),
+                patternToPop = Screen.ArtistDetail.route
+            )
+            Unit
         }
     }
     val onNavigateToGenre = remember(scope, navController) {

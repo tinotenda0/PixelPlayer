@@ -84,6 +84,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.data.model.Song
+import com.theveloper.pixelplay.data.model.ArtistRef
 import com.theveloper.pixelplay.presentation.components.subcomps.AutoSizingTextToFill
 import com.theveloper.pixelplay.utils.formatDuration
 import com.theveloper.pixelplay.utils.shapes.RoundedStarShape
@@ -125,7 +126,12 @@ fun SongInfoBottomSheet(
     onDeleteFromDevice: (activity: Activity, song: Song, onResult: (Boolean) -> Unit) -> Unit,
     onNavigateToAlbum: () -> Unit,
     onNavigateToArtist: () -> Unit,
-    onNavigateToArtistById: (Long) -> Unit = { onNavigateToArtist() },
+    /**
+     * Navigate to one specific credited artist. Takes the whole [ArtistRef], not its Long id:
+     * that id is a local Room row and is -1 for every streamed song, so passing it meant the
+     * multi-artist picker could never open anything.
+     */
+    onNavigateToArtistById: (ArtistRef) -> Unit = { onNavigateToArtist() },
     onNavigateToGenre: () -> Unit,
     onEditSong: (
         title: String,
@@ -786,7 +792,16 @@ fun SongInfoBottomSheet(
             onDismiss = { showArtistPicker = false },
             onArtistClick = { artist ->
                 showArtistPicker = false
-                onNavigateToArtistById(artist.id)
+                // Artist.navidromeId is the gateway identity; Artist.id is a local row and is
+                // meaningless for streamed content.
+                onNavigateToArtistById(
+                    ArtistRef(
+                        id = artist.id,
+                        name = artist.name,
+                        isPrimary = true,
+                        gatewayId = artist.navidromeId
+                    )
+                )
             }
         )
     }
