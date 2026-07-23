@@ -45,6 +45,8 @@ import com.theveloper.pixelplay.data.model.Genre
 import com.theveloper.pixelplay.data.model.Lyrics
 import com.theveloper.pixelplay.data.model.LyricsSourcePreference
 import com.theveloper.pixelplay.data.model.SearchFilterType
+import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
+import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.model.SortOption
 import com.theveloper.pixelplay.data.model.toLibraryTabIdOrNull
@@ -675,7 +677,9 @@ class PlayerViewModel @Inject constructor(
 
     private val _albumNavigationRequests = MutableSharedFlow<Long>(extraBufferCapacity = 1)
     val albumNavigationRequests = _albumNavigationRequests.asSharedFlow()
-    private val _artistNavigationRequests = MutableSharedFlow<Long>(extraBufferCapacity = 1)
+    // A route string, not an artist id: a streamed song's artistId is -1, which cannot express
+    // which artist it is. The route can (gateway id, or a name lookup).
+    private val _artistNavigationRequests = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val artistNavigationRequests = _artistNavigationRequests.asSharedFlow()
     private val _searchNavDoubleTapEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val searchNavDoubleTapEvents = _searchNavDoubleTapEvents.asSharedFlow()
@@ -2540,8 +2544,17 @@ class PlayerViewModel @Inject constructor(
                 }
             }
 
-            if (resolvedId == 0L || resolvedId == -1L) {
-                Log.d("ArtistDebug", "triggerArtistNavigationFromPlayer: could not resolve artistId for name=${currentSong?.artist}")
+            // Previously this returned here, which is why tapping the artist in the player did
+            // NOTHING for most songs: a streamed track has artistId = -1 and getArtistIdByName
+            // only searches the LOCAL table, which never contains streamed artists. Instead of
+            // giving up, fall back to resolving the artist from the song itself.
+            val route = if (resolvedId > 0L) {
+                Screen.ArtistDetail.createRoute(resolvedId, currentSong?.artist)
+            } else {
+                currentSong?.let { ArtistNavigation.routeFor(it) }
+            }
+            if (route == null) {
+                Log.d("ArtistDebug", "triggerArtistNavigationFromPlayer: no song to resolve from")
                 return@launch
             }
 
@@ -2556,7 +2569,7 @@ class PlayerViewModel @Inject constructor(
                 awaitPlayerCollapse()
             }
 
-            _artistNavigationRequests.emit(artistId)
+            _artistNavigationRequests.emit(route)
         }
     }
 

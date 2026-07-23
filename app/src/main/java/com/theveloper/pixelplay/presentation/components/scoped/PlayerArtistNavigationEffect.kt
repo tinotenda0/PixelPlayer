@@ -20,12 +20,12 @@ internal fun PlayerArtistNavigationEffect(
 ) {
     val latestSheetCollapsedTargetY by rememberUpdatedState(sheetCollapsedTargetY)
     LaunchedEffect(navController) {
-        playerViewModel.artistNavigationRequests.collectLatest { artistId ->
+        playerViewModel.artistNavigationRequests.collectLatest { route ->
             sheetMotionController.snapCollapsed(latestSheetCollapsedTargetY)
             playerViewModel.collapsePlayerSheet()
 
             navController.navigateSafelyReplacing(
-                route = Screen.ArtistDetail.createRoute(artistId),
+                route = route,
                 patternToPop = Screen.ArtistDetail.route
             )
         }
