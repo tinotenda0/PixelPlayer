@@ -139,10 +139,15 @@ class SpotifyImportViewModel @Inject constructor(
         _ui.update { it.copy(busy = true, message = "") }
         viewModelScope.launch {
             val progress = navidromeRepository.spotifyStartImport()
-            _ui.update {
-                it.copy(phase = Phase.IMPORTING, busy = false,
-                    progress = progress ?: it.progress)
+            if (progress == null) {
+                // Couldn't reach the gateway / not linked — don't pretend an import is running.
+                _ui.update {
+                    it.copy(phase = Phase.ERROR, busy = false,
+                        message = "Couldn't start the import. Check your connection and try again.")
+                }
+                return@launch
             }
+            _ui.update { it.copy(phase = Phase.IMPORTING, busy = false, progress = progress) }
             startImportPolling()
         }
     }
@@ -150,7 +155,10 @@ class SpotifyImportViewModel @Inject constructor(
     private fun startImportPolling() {
         importPollJob?.cancel()
         importPollJob = viewModelScope.launch {
-            while (true) {
+            // Bounded so a stuck/never-terminating server state can't poll forever. A big library
+            // matches in well under this; on the deadline we just re-sync the real state.
+            val deadline = System.currentTimeMillis() + 45 * 60_000L
+            while (System.currentTimeMillis() < deadline) {
                 delay(2000)
                 val p = navidromeRepository.spotifyImportStatus() ?: continue
                 _ui.update { it.copy(progress = p) }
@@ -168,8 +176,16 @@ class SpotifyImportViewModel @Inject constructor(
                         }
                         return@launch
                     }
+                    // "idle" means nothing is running server-side (e.g. the service restarted and
+                    // lost the in-memory job) — stop polling and re-read the truth.
+                    "idle" -> {
+                        refresh()
+                        return@launch
+                    }
                 }
             }
+            // Timed out waiting — re-sync rather than spin or falsely error.
+            refresh()
         }
     }
 
