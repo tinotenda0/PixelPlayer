@@ -453,12 +453,15 @@ fun SearchScreen(
                             RecentSearchesRow(
                                 items = recent,
                                 onPick = { term ->
-                                    // updateSearchQuery only sets the text; performSearch is what
-                                    // actually runs it. Without this the tap just re-recorded the
-                                    // term, which moved it to the front of the list and did
-                                    // nothing else — exactly what it looked like.
+                                    // Set this composable's OWN searchQuery — it's what drives the
+                                    // text field, the switch out of browse mode (showGenreBrowse =
+                                    // searchQuery.isBlank()), and the LaunchedEffect(searchQuery)
+                                    // that runs the search. Setting only the ViewModel's copy left
+                                    // the local query blank, so the tap re-recorded the term (moving
+                                    // it to the top) but stayed on the history view and never
+                                    // searched — exactly what it looked like.
+                                    searchQuery = term
                                     playerViewModel.updateSearchQuery(term)
-                                    playerViewModel.performSearch(term)
                                     playerViewModel.onSearchQuerySubmitted(term)
                                 },
                                 onClear = { playerViewModel.clearSearchHistory() }

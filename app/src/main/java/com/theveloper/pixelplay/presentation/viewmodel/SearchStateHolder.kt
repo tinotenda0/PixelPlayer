@@ -163,6 +163,9 @@ class SearchStateHolder @Inject constructor(
     fun initialize(scope: CoroutineScope) {
         this.scope = scope
         observeSearchRequests()
+        // Load recent searches up front so they show the moment the Search screen opens — not
+        // only after the user has already run a search this session.
+        loadSearchHistory()
     }
 
     @OptIn(FlowPreview::class)
