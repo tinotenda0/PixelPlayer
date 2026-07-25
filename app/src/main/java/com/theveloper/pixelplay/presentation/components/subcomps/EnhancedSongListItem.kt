@@ -349,13 +349,19 @@ fun EnhancedSongListItem(
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = song.displayArtist,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = contentColor.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (song.isExplicit) {
+                            ExplicitBadge()
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text(
+                            text = song.displayArtist,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = contentColor.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
                 
                 val showPlayingIndicator = isCurrentSong && !isSelectionMode

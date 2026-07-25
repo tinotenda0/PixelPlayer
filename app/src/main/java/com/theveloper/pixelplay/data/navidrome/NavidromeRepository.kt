@@ -1615,6 +1615,7 @@ fun NavidromeSong.toSong(): Song {
         trackNumber = trackNumber,
         dateAdded = System.currentTimeMillis(),
         isFavorite = false,
+        isExplicit = explicit,
         navidromeId = id
     )
 }

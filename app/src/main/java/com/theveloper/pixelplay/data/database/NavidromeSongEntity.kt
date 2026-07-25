@@ -67,7 +67,8 @@ data class NavidromeSongEntity(
     @ColumnInfo(name = "mime_type") val mimeType: String?,
     val suffix: String?,
     val path: String,
-    @ColumnInfo(name = "date_added") val dateAdded: Long
+    @ColumnInfo(name = "date_added") val dateAdded: Long,
+    @ColumnInfo(name = "explicit") val explicit: Boolean = false
 )
 
 /**
@@ -99,6 +100,7 @@ fun NavidromeSongEntity.toSong(): Song {
         trackNumber = trackNumber,
         dateAdded = dateAdded,
         isFavorite = false,
+        isExplicit = explicit,
         navidromeId = navidromeId
     )
 }
@@ -127,7 +129,8 @@ fun NavidromeSong.toEntity(playlistId: String): NavidromeSongEntity {
         mimeType = resolvedMimeType,
         suffix = suffix,
         path = path,
-        dateAdded = System.currentTimeMillis()
+        dateAdded = System.currentTimeMillis(),
+        explicit = explicit
     )
 }
 

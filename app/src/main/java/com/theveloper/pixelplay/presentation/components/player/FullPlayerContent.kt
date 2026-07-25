@@ -2190,7 +2190,10 @@ private fun PlayerSongInfo(
         )
         Spacer(modifier = Modifier.height(2.dp))
 
-
+        if (song.isExplicit) {
+            com.theveloper.pixelplay.presentation.components.subcomps.ExplicitBadge()
+            Spacer(modifier = Modifier.height(4.dp))
+        }
 
         AutoScrollingTextOnDemand(
             text = artist,

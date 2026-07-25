@@ -27,6 +27,7 @@ data class Song(
     val genre: String? = null,
     val lyrics: String? = null,
     val isFavorite: Boolean = false,
+    val isExplicit: Boolean = false,
     val trackNumber: Int = 0,
     val discNumber: Int? = null,
     val year: Int = 0,

@@ -40,7 +40,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AiCacheEntity::class,
         AiUsageEntity::class
     ],
-    version = 47,
+    version = 48,
     exportSchema = true
 )
 abstract class PixelPlayDatabase : RoomDatabase() {
@@ -870,6 +870,14 @@ abstract class PixelPlayDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE `navidrome_downloads` ADD COLUMN `album_art_uri` TEXT")
                 db.execSQL("ALTER TABLE `navidrome_downloads` ADD COLUMN `duration_ms` INTEGER")
                 db.execSQL("ALTER TABLE `navidrome_downloads` ADD COLUMN `artist_refs` TEXT")
+            }
+        }
+
+        val MIGRATION_47_48 = object : Migration(47, 48) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `navidrome_songs` ADD COLUMN `explicit` INTEGER NOT NULL DEFAULT 0"
+                )
             }
         }
 

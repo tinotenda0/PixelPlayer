@@ -820,6 +820,7 @@ fun SongListItemFavs(
     albumArtUrl: String?,
     isPlaying: Boolean,
     isCurrentSong: Boolean,
+    isExplicit: Boolean = false,
     onClick: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
@@ -862,11 +863,17 @@ fun SongListItemFavs(
                         color = contentColor,
                         maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = artist, style = MaterialTheme.typography.bodyMedium,
-                        color = contentColor.copy(alpha = 0.7f),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isExplicit) {
+                            com.theveloper.pixelplay.presentation.components.subcomps.ExplicitBadge()
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(
+                            text = artist, style = MaterialTheme.typography.bodyMedium,
+                            color = contentColor.copy(alpha = 0.7f),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
             Spacer(Modifier.width(16.dp))
@@ -910,6 +917,7 @@ fun SongListItemFavsWrapper(
         albumArtUrl = song.albumArtUriString,
         isPlaying = stablePlayerState.isPlaying,
         isCurrentSong = song.id == stablePlayerState.currentSong?.id,
+        isExplicit = song.isExplicit,
         onClick = onClick
     )
 }

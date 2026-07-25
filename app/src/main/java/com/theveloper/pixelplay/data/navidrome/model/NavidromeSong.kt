@@ -54,7 +54,8 @@ data class NavidromeSong(
     val suffix: String? = null,
     val path: String = "",
     val size: Long? = null,
-    val playCount: Int = 0
+    val playCount: Int = 0,
+    val explicit: Boolean = false
 ) : Parcelable {
     companion object {
         fun empty() = NavidromeSong(

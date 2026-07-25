@@ -121,7 +121,8 @@ object NavidromeResponseParser {
             suffix = json.optString("suffix").takeIf { it.isNotEmpty() },
             path = json.optString("path", ""),
             size = json.optLong("size", 0).takeIf { it > 0 },
-            playCount = json.optInt("playCount", 0)
+            playCount = json.optInt("playCount", 0),
+            explicit = json.optBoolean("explicit", false)
         )
     }
 

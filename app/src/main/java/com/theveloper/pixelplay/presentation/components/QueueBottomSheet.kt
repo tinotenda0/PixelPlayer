@@ -2076,11 +2076,17 @@ fun QueuePlaylistSongItem(
                             fontWeight = if (isCurrentSong) FontWeight.Bold else FontWeight.Normal,
                             style = MaterialTheme.typography.bodyLarge
                         )
-                        Text(
-                            song.displayArtist, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isCurrentSong) colors.primary.copy(alpha = 0.8f) else colors.onSurfaceVariant
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (song.isExplicit) {
+                                com.theveloper.pixelplay.presentation.components.subcomps.ExplicitBadge()
+                                Spacer(Modifier.width(6.dp))
+                            }
+                            Text(
+                                song.displayArtist, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (isCurrentSong) colors.primary.copy(alpha = 0.8f) else colors.onSurfaceVariant
+                            )
+                        }
                     }
 
                     if (isCurrentSong) {
