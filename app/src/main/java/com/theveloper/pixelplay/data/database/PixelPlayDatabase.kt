@@ -40,7 +40,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AiCacheEntity::class,
         AiUsageEntity::class
     ],
-    version = 46,
+    version = 47,
     exportSchema = true
 )
 abstract class PixelPlayDatabase : RoomDatabase() {
@@ -856,6 +856,20 @@ abstract class PixelPlayDatabase : RoomDatabase() {
                 db.execSQL("DELETE FROM `artists`")
                 db.execSQL("DELETE FROM `songs`")
                 db.execSQL("DELETE FROM `navidrome_songs`")
+            }
+        }
+
+        // Store track metadata alongside each downloaded file so a pinned song is fully
+        // browsable/playable OFFLINE without the synced library. Additive, nullable columns —
+        // existing download rows keep working (metadata just NULL until re-pinned).
+        val MIGRATION_46_47 = object : Migration(46, 47) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `navidrome_downloads` ADD COLUMN `title` TEXT")
+                db.execSQL("ALTER TABLE `navidrome_downloads` ADD COLUMN `artist` TEXT")
+                db.execSQL("ALTER TABLE `navidrome_downloads` ADD COLUMN `album` TEXT")
+                db.execSQL("ALTER TABLE `navidrome_downloads` ADD COLUMN `album_art_uri` TEXT")
+                db.execSQL("ALTER TABLE `navidrome_downloads` ADD COLUMN `duration_ms` INTEGER")
+                db.execSQL("ALTER TABLE `navidrome_downloads` ADD COLUMN `artist_refs` TEXT")
             }
         }
 

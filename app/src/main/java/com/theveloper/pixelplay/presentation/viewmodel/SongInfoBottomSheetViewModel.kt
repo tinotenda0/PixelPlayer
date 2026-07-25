@@ -68,15 +68,16 @@ class SongInfoBottomSheetViewModel @Inject constructor(
             if (id in downloadedNavidromeIds.value) {
                 navidromeDownloadManager.removeDownload(id)
             } else {
-                navidromeDownloadManager.pinSongs(listOf(id))
+                // pin(song) captures title/artist/art so it's browsable offline in Downloads.
+                navidromeDownloadManager.pin(listOf(song))
             }
         }
     }
 
     /** Pin every provided Subsonic/YouTube track (used for album/playlist downloads). */
     fun downloadAll(songs: List<Song>) {
-        val ids = songs.mapNotNull { it.navidromeId }.filter { it.isNotBlank() }
-        if (ids.isNotEmpty()) navidromeDownloadManager.pinSongs(ids)
+        val downloadable = songs.filter { !it.navidromeId.isNullOrBlank() }
+        if (downloadable.isNotEmpty()) navidromeDownloadManager.pin(downloadable)
     }
 
     /** Drop the offline copies of a whole playlist/album, freeing the space again. */

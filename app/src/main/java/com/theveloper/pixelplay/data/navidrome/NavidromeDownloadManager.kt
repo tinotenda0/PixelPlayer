@@ -3,6 +3,11 @@ package com.theveloper.pixelplay.data.navidrome
 import android.content.Context
 import com.theveloper.pixelplay.data.database.NavidromeDownloadDao
 import com.theveloper.pixelplay.data.database.NavidromeDownloadEntity
+import com.theveloper.pixelplay.data.database.decodeArtistRefs
+import com.theveloper.pixelplay.data.database.encodeArtistRefs
+import com.theveloper.pixelplay.data.model.ArtistRef
+import com.theveloper.pixelplay.data.model.Song
+import com.theveloper.pixelplay.data.navidrome.model.NavidromeArtistRef
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +77,21 @@ class NavidromeDownloadManager @Inject constructor(
     val downloadedIds: Flow<Set<String>> =
         downloadDao.getAllDownloads().map { list -> list.map { it.navidromeId }.toSet() }
 
+    /**
+     * Reactive list of downloaded tracks as full [Song]s, reconstructed from the metadata stored
+     * at pin time. This is the source for the offline Downloads screen — it needs NOTHING from the
+     * network or the synced library, so it works fully offline (including on-demand yt- tracks).
+     * Newest downloads first.
+     */
+    val downloadedSongs: Flow<List<Song>> =
+        downloadDao.getAllDownloads().map { list ->
+            list.sortedByDescending { it.downloadedAt }.map { it.toSong() }
+        }
+
+    // Metadata captured at pin() time, keyed by navidromeId, consumed by downloadTrack when the
+    // file completes (only completed downloads are persisted, so this bridges pin -> completion).
+    private val pendingMeta = ConcurrentHashMap<String, Song>()
+
     // Long read timeout: whole audio files are streamed to disk in one call.
     private val httpClient: OkHttpClient = okHttpClient.newBuilder()
         .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
@@ -117,7 +137,24 @@ class NavidromeDownloadManager @Inject constructor(
     }
 
     /**
-     * Queue the given tracks for download. Already-downloaded and already-queued ids are skipped.
+     * Pin full [Song]s for offline playback — the preferred entry point. Captures each song's
+     * metadata (title/artist/album/art/duration/credits) so the downloaded track is browsable and
+     * playable offline without the synced library, then queues the audio download.
+     */
+    fun pin(songs: List<Song>) {
+        val ids = ArrayList<String>(songs.size)
+        for (song in songs) {
+            val id = song.navidromeId
+            if (id.isNullOrBlank()) continue
+            pendingMeta[id] = song
+            ids.add(id)
+        }
+        if (ids.isNotEmpty()) pinSongs(ids)
+    }
+
+    /**
+     * Queue the given tracks for download by id. Already-downloaded and already-queued ids are
+     * skipped. Prefer [pin] when you have the [Song]s so metadata is stored for offline browsing.
      */
     fun pinSongs(navidromeIds: List<String>) {
         if (navidromeIds.isEmpty()) return
@@ -208,13 +245,26 @@ class NavidromeDownloadManager @Inject constructor(
                 return@use false
             }
 
+            val meta = pendingMeta.remove(navidromeId)
             downloadDao.insert(
                 NavidromeDownloadEntity(
                     navidromeId = navidromeId,
                     filePath = finalFile.absolutePath,
                     mimeType = mimeType,
                     sizeBytes = finalFile.length(),
-                    downloadedAt = System.currentTimeMillis()
+                    downloadedAt = System.currentTimeMillis(),
+                    title = meta?.title,
+                    artist = meta?.displayArtist,
+                    album = meta?.album,
+                    albumArtUri = meta?.albumArtUriString,
+                    durationMs = meta?.duration,
+                    artistRefs = meta?.artists
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { refs ->
+                            encodeArtistRefs(
+                                refs.map { NavidromeArtistRef(id = it.gatewayId.orEmpty(), name = it.name) }
+                            )
+                        },
                 )
             )
             localPathCache[navidromeId] = finalFile.absolutePath
@@ -244,6 +294,35 @@ class NavidromeDownloadManager @Inject constructor(
         downloadDao.deleteAll()
         localPathCache.clear()
         downloadDir.listFiles()?.forEach { it.delete() }
+    }
+
+    /** Rebuild a playable [Song] from a downloaded row's stored metadata (offline-safe). */
+    private fun NavidromeDownloadEntity.toSong(): Song {
+        val refs = decodeArtistRefs(artistRefs)
+        return Song(
+            id = "navidrome_$navidromeId",
+            title = title ?: navidromeId,
+            artist = artist ?: "Unknown Artist",
+            artistId = -1L,
+            artists = refs.mapIndexed { index, ref ->
+                ArtistRef(id = -1L, name = ref.name, isPrimary = index == 0, gatewayId = ref.id)
+            },
+            album = album ?: "",
+            albumId = -1L,
+            path = "",
+            contentUriString = "navidrome://$navidromeId",
+            albumArtUriString = albumArtUri,
+            duration = durationMs ?: 0L,
+            genre = null,
+            mimeType = mimeType,
+            bitrate = null,
+            sampleRate = null,
+            year = 0,
+            trackNumber = 0,
+            dateAdded = downloadedAt,
+            isFavorite = false,
+            navidromeId = navidromeId,
+        )
     }
 
     private fun mimeTypeToExtension(mimeType: String?, url: String): String {
