@@ -907,6 +907,13 @@ fun SettingsCategoryScreen(
                                     primaryActionLabel = stringResource(R.string.settings_ytmusic_link_action),
                                     onPrimaryAction = { navController.navigate(Screen.YtMusicLink.route) }
                                 )
+                                ActionSettingsItem(
+                                    title = stringResource(R.string.settings_spotify_import_title),
+                                    subtitle = stringResource(R.string.settings_spotify_import_subtitle),
+                                    icon = { Icon(painterResource(R.drawable.rounded_library_music_24), null, tint = MaterialTheme.colorScheme.secondary) },
+                                    primaryActionLabel = stringResource(R.string.settings_spotify_import_action),
+                                    onPrimaryAction = { navController.navigate(Screen.SpotifyImport.route) }
+                                )
                                 SwitchSettingItem(
                                     title = stringResource(R.string.settings_show_queue_history_title),
                                     subtitle = stringResource(R.string.settings_show_queue_history_subtitle),

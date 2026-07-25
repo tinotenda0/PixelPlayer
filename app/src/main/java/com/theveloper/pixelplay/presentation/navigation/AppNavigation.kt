@@ -313,6 +313,11 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() }
                 )
             }
+            composable(Screen.SpotifyImport.route) {
+                com.theveloper.pixelplay.presentation.screens.SpotifyImportScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
             composable(Screen.Downloads.route) {
                 ScreenWrapper(navController = navController, playerViewModel = playerViewModel, animatedVisibilityScope = this) {
                     com.theveloper.pixelplay.presentation.screens.DownloadsScreen(

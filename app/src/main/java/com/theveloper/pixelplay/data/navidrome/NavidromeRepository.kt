@@ -943,6 +943,71 @@ class NavidromeRepository @Inject constructor(
         return withContext(Dispatchers.IO) { api.unlinkYtm().isSuccess }
     }
 
+    // ── Spotify import ────────────────────────────────────────────────────────
+
+    suspend fun spotifyStatus(): SpotifyStatus {
+        if (!isLoggedIn) return SpotifyStatus(linked = false, configured = false)
+        return withContext(Dispatchers.IO) {
+            val o = api.getSpotifyStatus().getOrNull()
+            SpotifyStatus(
+                linked = o?.optBoolean("linked", false) ?: false,
+                configured = o?.optBoolean("configured", false) ?: false,
+                accountName = o?.optString("accountName", "") ?: "",
+                progress = o?.optJSONObject("import")?.let { parseSpotifyProgress(it) }
+            )
+        }
+    }
+
+    /** Begin linking; returns the Spotify consent URL to open in a browser. */
+    suspend fun spotifyStartLink(): SpotifyLink {
+        if (!isLoggedIn) return SpotifyLink("error")
+        return withContext(Dispatchers.IO) {
+            val o = api.startSpotifyLink().getOrNull() ?: return@withContext SpotifyLink("error")
+            SpotifyLink(status = o.optString("status", "error"), authUrl = o.optString("authUrl", ""))
+        }
+    }
+
+    /** "linked" | "none" | "unconfigured". */
+    suspend fun spotifyPollLink(): String {
+        if (!isLoggedIn) return "none"
+        return withContext(Dispatchers.IO) {
+            api.pollSpotifyLink().getOrNull()?.optString("status", "none") ?: "none"
+        }
+    }
+
+    suspend fun spotifyUnlink(): Boolean {
+        if (!isLoggedIn) return false
+        return withContext(Dispatchers.IO) { api.unlinkSpotify().isSuccess }
+    }
+
+    suspend fun spotifyStartImport(): SpotifyImportProgress? {
+        if (!isLoggedIn) return null
+        return withContext(Dispatchers.IO) {
+            api.startSpotifyImport().getOrNull()?.optJSONObject("import")
+                ?.let { parseSpotifyProgress(it) }
+        }
+    }
+
+    suspend fun spotifyImportStatus(): SpotifyImportProgress? {
+        if (!isLoggedIn) return null
+        return withContext(Dispatchers.IO) {
+            api.spotifyImportStatus().getOrNull()?.optJSONObject("import")
+                ?.let { parseSpotifyProgress(it) }
+        }
+    }
+
+    private fun parseSpotifyProgress(o: org.json.JSONObject): SpotifyImportProgress =
+        SpotifyImportProgress(
+            state = o.optString("state", "idle"),
+            phase = o.optString("phase", ""),
+            total = o.optInt("total", 0),
+            done = o.optInt("done", 0),
+            matched = o.optInt("matched", 0),
+            unmatched = o.optInt("unmatched", 0),
+            playlists = o.optInt("playlists", 0),
+            message = o.optString("message", "")
+        )
+
     // ── Taste onboarding ─────────────────────────────────────────────────────
 
     /** Starting pool of artists for the pairwise "who do you prefer?" onboarding. */
@@ -1407,6 +1472,32 @@ data class YtmLink(
     val userCode: String = "",
     val verificationUrl: String = "https://google.com/device",
     val intervalSeconds: Int = 5
+)
+
+/** Spotify link + import status for the current user. */
+data class SpotifyStatus(
+    val linked: Boolean,
+    val configured: Boolean,
+    val accountName: String = "",
+    val progress: SpotifyImportProgress? = null
+)
+
+/** Begin-linking result: open [authUrl] in a browser. status = "pending"|"unconfigured"|"error". */
+data class SpotifyLink(
+    val status: String,
+    val authUrl: String = ""
+)
+
+/** Live progress of a background Spotify import. state = idle|running|done|error. */
+data class SpotifyImportProgress(
+    val state: String,
+    val phase: String = "",
+    val total: Int = 0,
+    val done: Int = 0,
+    val matched: Int = 0,
+    val unmatched: Int = 0,
+    val playlists: Int = 0,
+    val message: String = ""
 )
 
 // ─── Extension Functions ────────────────────────────────────────────────────

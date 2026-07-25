@@ -435,6 +435,28 @@ class NavidromeApiService @Inject constructor(
         }
     }
 
+    // ─── Spotify import (custom XPS endpoints) ───────────────────────────
+
+    private suspend fun spotifyCall(endpoint: String): Result<JSONObject> =
+        requestAndParse(endpoint).map { it.optJSONObject("spotify") ?: JSONObject() }
+
+    /** Whether this user has linked Spotify (and whether linking is configured server-side). */
+    suspend fun getSpotifyStatus(): Result<JSONObject> = spotifyCall("getSpotifyStatus")
+
+    /** Begin linking; returns the Spotify consent URL to open in a browser. */
+    suspend fun startSpotifyLink(): Result<JSONObject> = spotifyCall("startSpotifyLink")
+
+    /** Poll after the browser consent; the gateway callback stores the token. */
+    suspend fun pollSpotifyLink(): Result<JSONObject> = spotifyCall("pollSpotifyLink")
+
+    suspend fun unlinkSpotify(): Result<JSONObject> = spotifyCall("unlinkSpotify")
+
+    /** Kick off the background import of playlists/liked/taste/history. */
+    suspend fun startSpotifyImport(): Result<JSONObject> = spotifyCall("startSpotifyImport")
+
+    /** Poll the running import's progress. */
+    suspend fun spotifyImportStatus(): Result<JSONObject> = spotifyCall("spotifyImportStatus")
+
     /** Starting pool of recognisable artists for the pairwise taste onboarding. */
     suspend fun getTasteStart(): Result<List<JSONObject>> {
         return requestAndParse("getTasteStart").map { extractTasteArtists(it) }
