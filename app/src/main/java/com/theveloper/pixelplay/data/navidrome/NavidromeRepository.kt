@@ -1045,6 +1045,89 @@ class NavidromeRepository @Inject constructor(
             message = o.optString("message", "")
         )
 
+    // ── Jam: household remote control ─────────────────────────────────────────
+
+    suspend fun registerJamDevice(deviceName: String, platform: String, sessionId: String): Boolean {
+        if (!isLoggedIn) return false
+        return withContext(Dispatchers.IO) {
+            api.registerDevice(deviceName, platform, sessionId).isSuccess
+        }
+    }
+
+    /** Host: publish state, get back any commands controllers queued. */
+    suspend fun jamHeartbeat(
+        sessionId: String, state: JamState, queueIds: List<String>
+    ): List<JamCommand> {
+        if (!isLoggedIn) return emptyList()
+        return withContext(Dispatchers.IO) {
+            val params = mapOf(
+                "sessionId" to sessionId,
+                "songId" to state.songId, "title" to state.title, "artist" to state.artist,
+                "album" to state.album, "coverArt" to state.coverArt,
+                "positionMs" to state.positionMs.toString(),
+                "durationMs" to state.durationMs.toString(),
+                "isPlaying" to state.isPlaying.toString(),
+                "queue" to queueIds.joinToString(",")
+            )
+            val o = api.deviceHeartbeat(params).getOrNull() ?: return@withContext emptyList()
+            val arr = o.optJSONArray("commands")
+            (0 until (arr?.length() ?: 0)).mapNotNull { i ->
+                arr?.optJSONObject(i)?.let { c ->
+                    val payload = c.optJSONObject("payload")
+                    val ids = payload?.optJSONArray("songIds")
+                    JamCommand(
+                        action = c.optString("action"),
+                        positionMs = payload?.optLong("positionMs")?.takeIf { payload.has("positionMs") },
+                        songIds = (0 until (ids?.length() ?: 0)).mapNotNull { j -> ids?.optString(j) }
+                    )
+                }
+            }
+        }
+    }
+
+    /** Guest: household devices currently playing (auto-discovered hosts). */
+    suspend fun getJamHosts(sessionId: String): List<JamHost> {
+        if (!isLoggedIn) return emptyList()
+        return withContext(Dispatchers.IO) {
+            val o = api.getJamHosts(sessionId).getOrNull() ?: return@withContext emptyList()
+            val arr = o.optJSONArray("host")
+            (0 until (arr?.length() ?: 0)).mapNotNull { i ->
+                arr?.optJSONObject(i)?.let { h ->
+                    val s = h.optJSONObject("state") ?: org.json.JSONObject()
+                    JamHost(
+                        id = h.optString("id"),
+                        user = h.optString("user"),
+                        deviceName = h.optString("deviceName", "Device"),
+                        platform = h.optString("platform", ""),
+                        state = JamState(
+                            songId = s.optString("songId"), title = s.optString("title"),
+                            artist = s.optString("artist"), album = s.optString("album"),
+                            coverArt = s.optString("coverArt"),
+                            positionMs = s.optLong("positionMs"),
+                            durationMs = s.optLong("durationMs"),
+                            isPlaying = s.optBoolean("isPlaying")
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    /** Guest: send a control command to a host. */
+    suspend fun jamControl(
+        targetId: String, action: String, positionMs: Long? = null, songIds: List<String> = emptyList()
+    ): Boolean {
+        if (!isLoggedIn) return false
+        return withContext(Dispatchers.IO) {
+            val params = buildMap {
+                put("targetId", targetId); put("action", action)
+                positionMs?.let { put("positionMs", it.toString()) }
+                if (songIds.isNotEmpty()) put("songIds", songIds.joinToString(","))
+            }
+            api.jamControl(params).getOrNull()?.optBoolean("accepted", false) ?: false
+        }
+    }
+
     // ── Taste onboarding ─────────────────────────────────────────────────────
 
     /** Starting pool of artists for the pairwise "who do you prefer?" onboarding. */
@@ -1509,6 +1592,34 @@ data class YtmLink(
     val userCode: String = "",
     val verificationUrl: String = "https://google.com/device",
     val intervalSeconds: Int = 5
+)
+
+/** A Jam host's current playback state (for the guest's now-playing view). */
+data class JamState(
+    val songId: String = "",
+    val title: String = "",
+    val artist: String = "",
+    val album: String = "",
+    val coverArt: String = "",
+    val positionMs: Long = 0,
+    val durationMs: Long = 0,
+    val isPlaying: Boolean = false
+)
+
+/** A household device currently playing, offered as a controllable Jam host. */
+data class JamHost(
+    val id: String,
+    val user: String,
+    val deviceName: String,
+    val platform: String,
+    val state: JamState
+)
+
+/** A control command handed to a host on its heartbeat. */
+data class JamCommand(
+    val action: String,
+    val positionMs: Long? = null,
+    val songIds: List<String> = emptyList()
 )
 
 /** Spotify link + import status for the current user. */

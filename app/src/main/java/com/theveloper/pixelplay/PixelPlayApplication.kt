@@ -80,6 +80,9 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
     lateinit var connectivityStateHolder: dagger.Lazy<com.theveloper.pixelplay.presentation.viewmodel.ConnectivityStateHolder>
 
     @Inject
+    lateinit var jamManager: dagger.Lazy<com.theveloper.pixelplay.data.jam.JamManager>
+
+    @Inject
     lateinit var plexRepository: dagger.Lazy<com.theveloper.pixelplay.data.plex.PlexRepository>
 
     @Inject
@@ -153,6 +156,9 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
         // App-scope connectivity monitoring so effectiveOffline is correct before any screen opens
         // and stays live even when the player ViewModel is cleared. initialize() is idempotent.
         connectivityStateHolder.get().initialize()
+
+        // Jam host role: advertises + accepts commands only while actually playing and opted in.
+        jamManager.get().start()
 
         startupScope.launch {
             AlbumArtUtils.migrateLegacyCacheLocation(this@PixelPlayApplication)

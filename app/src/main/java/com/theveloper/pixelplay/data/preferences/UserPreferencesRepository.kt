@@ -148,6 +148,7 @@ class UserPreferencesRepository @Inject constructor(
         val PERSISTENT_SHUFFLE_ENABLED = booleanPreferencesKey("persistent_shuffle_enabled")
         val ENDLESS_PLAYBACK_ENABLED = booleanPreferencesKey("endless_playback_enabled")
         val OFFLINE_MODE_ENABLED = booleanPreferencesKey("offline_mode_enabled")
+        val ALLOW_HOUSEHOLD_CONTROL = booleanPreferencesKey("allow_household_control")
         val TASTE_ONBOARDING_DONE = booleanPreferencesKey("taste_onboarding_done")
         val DISABLE_CAST_AUTOPLAY = booleanPreferencesKey("disable_cast_autoplay")
         val RESUME_ON_HEADSET_RECONNECT = booleanPreferencesKey("resume_on_headset_reconnect")
@@ -346,6 +347,15 @@ class UserPreferencesRepository @Inject constructor(
 
     suspend fun setOfflineModeEnabled(enabled: Boolean) {
         dataStore.edit { it[PreferencesKeys.OFFLINE_MODE_ENABLED] = enabled }
+    }
+
+    /** When on, other household phones can auto-discover this device (while it's playing) and
+     * control its playback — the "Jam" feature. Default on; turn off to stay private. */
+    val allowHouseholdControlFlow: Flow<Boolean> =
+        pref { it[PreferencesKeys.ALLOW_HOUSEHOLD_CONTROL] ?: true }
+
+    suspend fun setAllowHouseholdControl(enabled: Boolean) {
+        dataStore.edit { it[PreferencesKeys.ALLOW_HOUSEHOLD_CONTROL] = enabled }
     }
 
     /** Whether the user has completed the pairwise taste-seeding onboarding. */

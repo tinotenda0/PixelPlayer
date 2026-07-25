@@ -914,6 +914,13 @@ fun SettingsCategoryScreen(
                                     primaryActionLabel = stringResource(R.string.settings_spotify_import_action),
                                     onPrimaryAction = { navController.navigate(Screen.SpotifyImport.route) }
                                 )
+                                ActionSettingsItem(
+                                    title = stringResource(R.string.settings_jam_title),
+                                    subtitle = stringResource(R.string.settings_jam_subtitle),
+                                    icon = { Icon(painterResource(R.drawable.rounded_cast_24), null, tint = MaterialTheme.colorScheme.secondary) },
+                                    primaryActionLabel = stringResource(R.string.settings_jam_action),
+                                    onPrimaryAction = { navController.navigate(Screen.Jam.route) }
+                                )
                                 SwitchSettingItem(
                                     title = stringResource(R.string.settings_show_queue_history_title),
                                     subtitle = stringResource(R.string.settings_show_queue_history_subtitle),

@@ -648,6 +648,7 @@ class MainActivity : ComponentActivity() {
                 Screen.WordDelimiterConfig.route,
                 Screen.YtMusicLink.route,
                 Screen.SpotifyImport.route,
+                Screen.Jam.route,
                 Screen.Downloads.route
             )
         }

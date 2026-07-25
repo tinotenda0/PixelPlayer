@@ -461,6 +461,32 @@ class NavidromeApiService @Inject constructor(
     /** Poll the running import's progress. */
     suspend fun spotifyImportStatus(): Result<JSONObject> = spotifyCall("spotifyImportStatus")
 
+    // ─── Jam: household remote control (custom XPS endpoints) ────────────
+
+    private suspend fun jamCall(
+        endpoint: String,
+        key: String,
+        params: Map<String, String> = emptyMap()
+    ): Result<JSONObject> =
+        requestAndParse(endpoint, params).map { it.optJSONObject(key) ?: JSONObject() }
+
+    /** Register this device as a controllable session. */
+    suspend fun registerDevice(deviceName: String, platform: String, sessionId: String) =
+        jamCall("registerDevice", "playerSession",
+            mapOf("deviceName" to deviceName, "platform" to platform, "sessionId" to sessionId))
+
+    /** Publish this host's playback state AND collect commands queued by controllers, in one call. */
+    suspend fun deviceHeartbeat(params: Map<String, String>) =
+        jamCall("deviceHeartbeat", "playerSession", params)
+
+    /** Household devices currently playing — the auto-discovered hosts a guest can control. */
+    suspend fun getJamHosts(sessionId: String) =
+        jamCall("getJamHosts", "jamHosts", mapOf("sessionId" to sessionId))
+
+    /** Send a control command to a host device (any household user). */
+    suspend fun jamControl(params: Map<String, String>) =
+        jamCall("jamControl", "playerCommand", params)
+
     /** Starting pool of recognisable artists for the pairwise taste onboarding. */
     suspend fun getTasteStart(): Result<List<JSONObject>> {
         return requestAndParse("getTasteStart").map { extractTasteArtists(it) }

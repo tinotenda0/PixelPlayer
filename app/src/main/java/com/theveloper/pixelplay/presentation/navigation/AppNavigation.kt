@@ -318,6 +318,11 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() }
                 )
             }
+            composable(Screen.Jam.route) {
+                com.theveloper.pixelplay.presentation.screens.JamScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
             composable(Screen.Downloads.route) {
                 ScreenWrapper(navController = navController, playerViewModel = playerViewModel, animatedVisibilityScope = this) {
                     com.theveloper.pixelplay.presentation.screens.DownloadsScreen(
