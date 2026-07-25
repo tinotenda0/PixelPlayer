@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -96,6 +97,11 @@ fun OfflineDownloadsSurface(
         playerViewModel.stablePlayerState.map { it.isPlaying }.distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = false)
 
+    // The surface only shows while effectiveOffline is true. If we ALSO have a connection, the only
+    // way we got here is the user pinning Offline mode — so offer a one-tap way back out.
+    val isOnline by playerViewModel.isOnline.collectAsStateWithLifecycle()
+    val pinnedWhileOnline = isOnline
+
     val queueName = stringResource(R.string.downloads_queue_name)
     var query by remember { mutableStateOf("") }
 
@@ -116,9 +122,20 @@ fun OfflineDownloadsSurface(
     val lazyListState = rememberLazyListState()
 
     Box(modifier = modifier.fillMaxSize()) {
+      Column(modifier = Modifier.fillMaxSize()) {
+        // Pinned top bar — ALWAYS visible so Offline mode is never a dead-end: the Settings gear
+        // reaches Settings (where the toggle lives), and "Turn off" exits directly when we're online.
+        OfflineTopBar(
+            topInset = topInset,
+            showTurnOff = pinnedWhileOnline,
+            onTurnOff = { downloadsViewModel.setOfflineMode(false) },
+            onOpenSettings = { navController.navigateSafely(Screen.Settings.route) }
+        )
         LazyColumn(
             state = lazyListState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
             contentPadding = PaddingValues(
                 bottom = MiniPlayerHeight + bottomBarHeightDp + 16.dp
             ),
@@ -126,9 +143,8 @@ fun OfflineDownloadsSurface(
         ) {
             item(key = "offline_banner") {
                 OfflineBanner(
-                    modifier = Modifier
-                        .then(if (topInset) Modifier.statusBarsPadding() else Modifier)
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                    pinnedWhileOnline = pinnedWhileOnline,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
 
@@ -242,6 +258,7 @@ fun OfflineDownloadsSurface(
                 }
             }
         }
+      }
 
         if (showSongInfoBottomSheet && selectedSongForInfo != null) {
             val song = selectedSongForInfo!!
@@ -304,7 +321,7 @@ fun OfflineDownloadsSurface(
 }
 
 @Composable
-private fun OfflineBanner(modifier: Modifier = Modifier) {
+private fun OfflineBanner(pinnedWhileOnline: Boolean, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -323,14 +340,54 @@ private fun OfflineBanner(modifier: Modifier = Modifier) {
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(
-                    text = stringResource(R.string.offline_banner_title),
+                    text = stringResource(
+                        if (pinnedWhileOnline) R.string.offline_banner_pinned_title
+                        else R.string.offline_banner_title
+                    ),
                     style = MaterialTheme.typography.titleSmall
                 )
                 Text(
-                    text = stringResource(R.string.offline_banner_subtitle),
+                    text = stringResource(
+                        if (pinnedWhileOnline) R.string.offline_banner_pinned_subtitle
+                        else R.string.offline_banner_subtitle
+                    ),
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun OfflineTopBar(
+    topInset: Boolean,
+    showTurnOff: Boolean,
+    onTurnOff: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (topInset) Modifier.statusBarsPadding() else Modifier)
+            .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.downloads_title),
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.weight(1f))
+        if (showTurnOff) {
+            TextButton(onClick = onTurnOff) {
+                Text(stringResource(R.string.offline_turn_off))
+            }
+        }
+        IconButton(onClick = onOpenSettings) {
+            Icon(
+                painter = painterResource(R.drawable.rounded_settings_24),
+                contentDescription = stringResource(R.string.common_settings)
+            )
         }
     }
 }

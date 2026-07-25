@@ -1042,6 +1042,9 @@ class PlayerViewModel @Inject constructor(
     /** True when the app should show/play only downloads: no internet, or Offline mode pinned on. */
     val effectiveOffline: StateFlow<Boolean> = connectivityStateHolder.effectiveOffline
 
+    /** Raw network reachability. Used to tell "no signal" apart from "user pinned Offline mode". */
+    val isOnline: StateFlow<Boolean> = connectivityStateHolder.isOnline
+
 
 
     // Connectivity is now managed by ConnectivityStateHolder

@@ -308,6 +308,9 @@
     <string name="downloads_search_placeholder">Search your downloads</string>
     <string name="offline_banner_title">You\'re offline</string>
     <string name="offline_banner_subtitle">Showing the music you\'ve downloaded.</string>
+    <string name="offline_banner_pinned_title">Offline mode is on</string>
+    <string name="offline_banner_pinned_subtitle">Showing only your downloads. Tap Turn off to go back online.</string>
+    <string name="offline_turn_off">Turn off</string>
     <string name="settings_offline_mode_title">Offline mode</string>
     <string name="settings_offline_mode_subtitle">Only show and play your downloads. Turns off automatically when you\'re back online unless you keep it on.</string>
     <string name="settings_downloads_title">Downloads</string>

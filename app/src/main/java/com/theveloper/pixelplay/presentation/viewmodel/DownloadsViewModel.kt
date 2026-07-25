@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.navidrome.NavidromeDownloadManager
+import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -23,7 +24,8 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class DownloadsViewModel @Inject constructor(
-    private val downloadManager: NavidromeDownloadManager
+    private val downloadManager: NavidromeDownloadManager,
+    private val userPreferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
 
     data class DownloadsUiState(
@@ -56,5 +58,10 @@ class DownloadsViewModel @Inject constructor(
 
     fun removeAll() {
         viewModelScope.launch { downloadManager.removeAllDownloads() }
+    }
+
+    /** Turn the pinned Offline-mode preference off, from inside the offline surface. */
+    fun setOfflineMode(enabled: Boolean) {
+        viewModelScope.launch { userPreferencesRepository.setOfflineModeEnabled(enabled) }
     }
 }
