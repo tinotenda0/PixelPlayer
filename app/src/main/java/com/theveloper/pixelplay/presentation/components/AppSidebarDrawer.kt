@@ -33,6 +33,7 @@ import com.theveloper.pixelplay.R
 sealed class DrawerDestination(val route: String) {
     object Home : DrawerDestination("home")
     object Equalizer : DrawerDestination("equalizer")
+    object Downloads : DrawerDestination("downloads")
     object Settings : DrawerDestination("settings")
     object Telegram : DrawerDestination("telegram")
 }
@@ -142,6 +143,33 @@ private fun DrawerContent(
             },
             selected = selectedRoute == DrawerDestination.Equalizer.route,
             onClick = { onDestinationSelected(DrawerDestination.Equalizer) },
+            modifier = Modifier.padding(vertical = 4.dp),
+            colors = NavigationDrawerItemDefaults.colors(
+                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                unselectedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0f),
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
+            shape = RoundedCornerShape(16.dp)
+        )
+
+        NavigationDrawerItem(
+            icon = {
+                Icon(
+                    painter = painterResource(R.drawable.rounded_download_24),
+                    contentDescription = stringResource(R.string.downloads_title)
+                )
+            },
+            label = {
+                Text(
+                    text = stringResource(R.string.downloads_title),
+                    style = MaterialTheme.typography.labelLarge
+                )
+            },
+            selected = selectedRoute == DrawerDestination.Downloads.route,
+            onClick = { onDestinationSelected(DrawerDestination.Downloads) },
             modifier = Modifier.padding(vertical = 4.dp),
             colors = NavigationDrawerItemDefaults.colors(
                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,

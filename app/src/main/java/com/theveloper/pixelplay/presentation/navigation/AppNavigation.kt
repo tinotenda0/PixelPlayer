@@ -313,6 +313,14 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() }
                 )
             }
+            composable(Screen.Downloads.route) {
+                ScreenWrapper(navController = navController, playerViewModel = playerViewModel, animatedVisibilityScope = this) {
+                    com.theveloper.pixelplay.presentation.screens.DownloadsScreen(
+                        playerViewModel = playerViewModel,
+                        navController = navController
+                    )
+                }
+            }
             composable(Screen.MixBuilder.route) {
                 com.theveloper.pixelplay.presentation.screens.MixBuilderScreen(
                     navController = navController,

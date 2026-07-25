@@ -886,6 +886,20 @@ fun SettingsCategoryScreen(
                                     onCheckedChange = { settingsViewModel.setEndlessPlaybackEnabled(it) },
                                     leadingIcon = { Icon(painterResource(R.drawable.rounded_all_inclusive_24), null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
+                                SwitchSettingItem(
+                                    title = stringResource(R.string.settings_offline_mode_title),
+                                    subtitle = stringResource(R.string.settings_offline_mode_subtitle),
+                                    checked = uiState.offlineModeEnabled,
+                                    onCheckedChange = { settingsViewModel.setOfflineModeEnabled(it) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_cloud_off_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                ActionSettingsItem(
+                                    title = stringResource(R.string.settings_downloads_title),
+                                    subtitle = stringResource(R.string.settings_downloads_subtitle),
+                                    icon = { Icon(painterResource(R.drawable.rounded_download_24), null, tint = MaterialTheme.colorScheme.secondary) },
+                                    primaryActionLabel = stringResource(R.string.settings_downloads_action),
+                                    onPrimaryAction = { navController.navigate(Screen.Downloads.route) }
+                                )
                                 ActionSettingsItem(
                                     title = stringResource(R.string.settings_ytmusic_link_title),
                                     subtitle = stringResource(R.string.settings_ytmusic_link_subtitle),

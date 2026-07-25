@@ -147,6 +147,7 @@ class UserPreferencesRepository @Inject constructor(
         val IS_SHUFFLE_ON = booleanPreferencesKey("is_shuffle_on")
         val PERSISTENT_SHUFFLE_ENABLED = booleanPreferencesKey("persistent_shuffle_enabled")
         val ENDLESS_PLAYBACK_ENABLED = booleanPreferencesKey("endless_playback_enabled")
+        val OFFLINE_MODE_ENABLED = booleanPreferencesKey("offline_mode_enabled")
         val TASTE_ONBOARDING_DONE = booleanPreferencesKey("taste_onboarding_done")
         val DISABLE_CAST_AUTOPLAY = booleanPreferencesKey("disable_cast_autoplay")
         val RESUME_ON_HEADSET_RECONNECT = booleanPreferencesKey("resume_on_headset_reconnect")
@@ -337,6 +338,14 @@ class UserPreferencesRepository @Inject constructor(
 
     suspend fun setEndlessPlaybackEnabled(enabled: Boolean) {
         dataStore.edit { it[PreferencesKeys.ENDLESS_PLAYBACK_ENABLED] = enabled }
+    }
+
+    /** When on, the app behaves as if offline: only downloaded tracks are shown/played. */
+    val offlineModeEnabledFlow: Flow<Boolean> =
+        pref { it[PreferencesKeys.OFFLINE_MODE_ENABLED] ?: false }
+
+    suspend fun setOfflineModeEnabled(enabled: Boolean) {
+        dataStore.edit { it[PreferencesKeys.OFFLINE_MODE_ENABLED] = enabled }
     }
 
     /** Whether the user has completed the pairwise taste-seeding onboarding. */

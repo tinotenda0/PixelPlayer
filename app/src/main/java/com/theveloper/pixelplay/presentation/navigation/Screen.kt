@@ -28,6 +28,7 @@ sealed class Screen(val route: String) {
     }
     object DJSpace : Screen("dj_space")
     object YtMusicLink : Screen("ytmusic_link")
+    object Downloads : Screen("downloads")
     object MixBuilder : Screen("mix_builder")
     // La ruta base es "album_detail". La ruta completa con el argumento se define en AppNavigation.
     object AlbumDetail : Screen("album_detail/{albumId}") {

@@ -77,6 +77,9 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
     lateinit var advancedPerformanceDiagnosticsController: dagger.Lazy<AdvancedPerformanceDiagnosticsController>
 
     @Inject
+    lateinit var connectivityStateHolder: dagger.Lazy<com.theveloper.pixelplay.presentation.viewmodel.ConnectivityStateHolder>
+
+    @Inject
     lateinit var plexRepository: dagger.Lazy<com.theveloper.pixelplay.data.plex.PlexRepository>
 
     @Inject
@@ -146,6 +149,10 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(appLifecycleObserver)
         advancedPerformanceDiagnosticsController.get().start(startupScope)
+
+        // App-scope connectivity monitoring so effectiveOffline is correct before any screen opens
+        // and stays live even when the player ViewModel is cleared. initialize() is idempotent.
+        connectivityStateHolder.get().initialize()
 
         startupScope.launch {
             AlbumArtUtils.migrateLegacyCacheLocation(this@PixelPlayApplication)

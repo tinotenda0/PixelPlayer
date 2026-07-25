@@ -77,6 +77,7 @@ data class SettingsUiState(
     val crossfadeDuration: Int = 2000,
     val persistentShuffleEnabled: Boolean = false,
     val endlessPlaybackEnabled: Boolean = false,
+    val offlineModeEnabled: Boolean = false,
     val folderBackGestureNavigation: Boolean = true,
     val lyricsSourcePreference: LyricsSourcePreference = LyricsSourcePreference.EMBEDDED_FIRST,
     val autoScanLrcFiles: Boolean = false,
@@ -165,6 +166,7 @@ private sealed interface SettingsUiUpdate {
         val crossfadeDuration: Int,
         val persistentShuffleEnabled: Boolean,
         val endlessPlaybackEnabled: Boolean,
+        val offlineModeEnabled: Boolean,
         val folderBackGestureNavigation: Boolean,
         val lyricsSourcePreference: LyricsSourcePreference,
         val autoScanLrcFiles: Boolean,
@@ -694,7 +696,8 @@ class SettingsViewModel @Inject constructor(
                 userPreferencesRepository.animatedLyricsBlurStrengthFlow,
                 userPreferencesRepository.disableBlurAllOverFlow,
                 userPreferencesRepository.showScrollbarFlow,
-                userPreferencesRepository.endlessPlaybackEnabledFlow
+                userPreferencesRepository.endlessPlaybackEnabledFlow,
+                userPreferencesRepository.offlineModeEnabledFlow
             ) { values ->
                 SettingsUiUpdate.Group2(
                     keepPlayingInBackground = values[0] as Boolean,
@@ -717,7 +720,8 @@ class SettingsViewModel @Inject constructor(
                     animatedLyricsBlurStrength = values[17] as Float,
                     disableBlurAllOver = values[18] as Boolean,
                     showScrollbar = values[19] as Boolean,
-                    endlessPlaybackEnabled = values[20] as Boolean
+                    endlessPlaybackEnabled = values[20] as Boolean,
+                    offlineModeEnabled = values[21] as Boolean
                 )
             }.collect { update ->
                 _uiState.update { state ->
@@ -742,7 +746,8 @@ class SettingsViewModel @Inject constructor(
                         animatedLyricsBlurStrength = update.animatedLyricsBlurStrength,
                         disableBlurAllOver = update.disableBlurAllOver,
                         showScrollbar = update.showScrollbar,
-                        endlessPlaybackEnabled = update.endlessPlaybackEnabled
+                        endlessPlaybackEnabled = update.endlessPlaybackEnabled,
+                        offlineModeEnabled = update.offlineModeEnabled
                     )
                 }
             }
@@ -1052,6 +1057,12 @@ class SettingsViewModel @Inject constructor(
     fun setEndlessPlaybackEnabled(enabled: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setEndlessPlaybackEnabled(enabled)
+        }
+    }
+
+    fun setOfflineModeEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setOfflineModeEnabled(enabled)
         }
     }
 

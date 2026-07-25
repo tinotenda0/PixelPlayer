@@ -1353,6 +1353,13 @@ class DualPlayerEngine @Inject constructor(
             }
         }
 
+        // Not downloaded. Block streaming when effectively offline — either no internet, or the
+        // user pinned Offline mode on (Full-restrict: only downloads are playable).
+        if (connectivityStateHolder.effectiveOffline.value) {
+            connectivityStateHolder.triggerOfflineBlockedEvent()
+            return@withContext null
+        }
+
         if (!navidromeStreamProxy.ensureReady(5_000L)) return@withContext null
         navidromeStreamProxy.warmUpStreamUrl(uriString)
         navidromeStreamProxy.resolveNavidromeUri(uriString)?.toUri()

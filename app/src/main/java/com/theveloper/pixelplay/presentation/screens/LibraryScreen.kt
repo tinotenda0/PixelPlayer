@@ -438,6 +438,19 @@ fun LibraryScreen(
     libraryViewModel: LibraryViewModel = hiltViewModel(),
     songInfoBottomSheetViewModel: SongInfoBottomSheetViewModel = hiltViewModel()
 ) {
+    // Full-restrict offline: the streamed library is unavailable without a connection, so show only
+    // downloads. Placed first so no library sync/loaders run while offline.
+    val effectiveOffline by playerViewModel.effectiveOffline.collectAsStateWithLifecycle()
+    if (effectiveOffline) {
+        com.theveloper.pixelplay.presentation.components.OfflineDownloadsSurface(
+            playerViewModel = playerViewModel,
+            navController = navController,
+            enableSearch = false,
+            topInset = true
+        )
+        return
+    }
+
     // La recolección de estados de alto nivel se mantiene mínima.
     val context = LocalContext.current // Added context
     val haptic = LocalHapticFeedback.current

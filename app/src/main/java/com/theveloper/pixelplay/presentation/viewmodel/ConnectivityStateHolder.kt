@@ -21,10 +21,17 @@ import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.core.content.ContextCompat
+import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -49,8 +56,12 @@ data class BluetoothAudioDeviceState(
  */
 @Singleton
 class ConnectivityStateHolder @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val userPreferencesRepository: UserPreferencesRepository
 ) {
+    // App-scoped so connectivity + offline state survive independent of any screen lifecycle.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     // WiFi State
     private val _isWifiEnabled = MutableStateFlow(false)
     val isWifiEnabled: StateFlow<Boolean> = _isWifiEnabled.asStateFlow()
@@ -63,6 +74,18 @@ class ConnectivityStateHolder @Inject constructor(
 
     private val _isOnline = MutableStateFlow(false)
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
+
+    /**
+     * The single source of truth for whether the app should behave as offline: either the device
+     * has no usable internet, OR the user has pinned "Offline mode" on in Settings. When true,
+     * online-only surfaces (Home rows, Search results, streamed library) are hidden and the app
+     * shows/plays only downloads. Defaults optimistically to online so users with a connection
+     * never see a false "offline" flash on cold start.
+     */
+    val effectiveOffline: StateFlow<Boolean> =
+        combine(_isOnline, userPreferencesRepository.offlineModeEnabledFlow) { online, offlinePinned ->
+            offlinePinned || !online
+        }.stateIn(scope, SharingStarted.Eagerly, false)
 
     // Bluetooth State
     private val _isBluetoothEnabled = MutableStateFlow(false)
@@ -118,6 +141,15 @@ class ConnectivityStateHolder @Inject constructor(
 
     private var isInitialized = false
     private val discoveredBluetoothAudioDevices = linkedMapOf<String, BluetoothAudioDeviceState>()
+
+    init {
+        // Seed the current online state synchronously so effectiveOffline reflects reality before
+        // the network callback registers — otherwise online users briefly see the offline UI.
+        runCatching {
+            val caps = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
+            _isOnline.value = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        }
+    }
 
     /**
      * Initialize connectivity monitoring. Should be called once from ViewModel.

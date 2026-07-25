@@ -1039,6 +1039,9 @@ class PlayerViewModel @Inject constructor(
     val bluetoothAudioDeviceStates: StateFlow<List<BluetoothAudioDeviceState>> = connectivityStateHolder.bluetoothAudioDeviceStates
     val bluetoothAudioDevices: StateFlow<List<String>> = connectivityStateHolder.bluetoothAudioDevices
 
+    /** True when the app should show/play only downloads: no internet, or Offline mode pinned on. */
+    val effectiveOffline: StateFlow<Boolean> = connectivityStateHolder.effectiveOffline
+
 
 
     // Connectivity is now managed by ConnectivityStateHolder
@@ -3044,7 +3047,9 @@ class PlayerViewModel @Inject constructor(
         aiStateHolder.onCleared()
         libraryStateHolder.onCleared()
         sleepTimerStateHolder.onCleared()
-        connectivityStateHolder.onCleared()
+        // NOTE: connectivityStateHolder is now app-scoped (initialized in PixelPlayApplication and
+        // read app-wide via effectiveOffline). Tearing it down here would stop offline detection
+        // whenever the player VM is cleared, so it intentionally outlives this ViewModel.
         queueUndoStateHolder.onCleared()
         playlistDismissUndoStateHolder.onCleared()
     }

@@ -173,6 +173,20 @@ fun SearchScreen(
     navController: NavHostController,
     onSearchBarActiveChange: (Boolean) -> Unit = {}
 ) {
+    // Full-restrict offline: online search can't run without a connection, so search over the
+    // user's downloads instead (Spotify/Tidal behaviour). Placed first to bypass online search state.
+    val effectiveOffline by playerViewModel.effectiveOffline.collectAsStateWithLifecycle()
+    if (effectiveOffline) {
+        com.theveloper.pixelplay.presentation.components.OfflineDownloadsSurface(
+            playerViewModel = playerViewModel,
+            navController = navController,
+            enableSearch = true,
+            topInset = true,
+            modifier = Modifier.padding(bottom = paddingValues.calculateBottomPadding())
+        )
+        return
+    }
+
     var searchQuery by rememberSaveable { mutableStateOf(playerViewModel.searchQuery) }
     val statusBarTopInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
     val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()

@@ -142,6 +142,20 @@ fun HomeScreen(
     plexViewModel: PlexDashboardViewModel = hiltViewModel(),
     onOpenSidebar: () -> Unit
 ) {
+    // Full-restrict offline: when there's no connection (or Offline mode is pinned on), bypass the
+    // entire curated online home and show only downloads. Placed first so no online loaders run.
+    val effectiveOffline by playerViewModel.effectiveOffline.collectAsStateWithLifecycle()
+    if (effectiveOffline) {
+        com.theveloper.pixelplay.presentation.components.OfflineDownloadsSurface(
+            playerViewModel = playerViewModel,
+            navController = navController,
+            enableSearch = false,
+            topInset = true,
+            modifier = Modifier.padding(bottom = paddingValuesParent.calculateBottomPadding())
+        )
+        return
+    }
+
     val context = LocalContext.current
     // DETECTAR MODO BENCHMARK
     val isBenchmarkMode = remember {
