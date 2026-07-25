@@ -1111,14 +1111,25 @@ class NavidromeRepository @Inject constructor(
     /**
      * Sync Navidrome songs to the unified music library.
      */
+    /**
+     * Raw cached library-song count. Lets the sync tell "empty because we never synced / it was
+     * reset" from "recently synced" — so an empty cache always forces a server fetch instead of
+     * being treated as a valid up-to-date empty library.
+     */
+    suspend fun cachedLibrarySongCount(): Int =
+        withContext(Dispatchers.IO) { dao.countNavidromeSongs() }
+
     suspend fun syncUnifiedLibrarySongsFromNavidrome() {
         val navidromeSongs = dao.getAllNavidromeSongsList()
         val existingUnifiedIds = musicDao.getAllNavidromeSongIds()
 
         if (navidromeSongs.isEmpty()) {
-            if (existingUnifiedIds.isNotEmpty()) {
-                musicDao.clearAllNavidromeSongs()
-            }
+            // Do NOT wipe the unified library just because the raw cache is empty. An empty cache
+            // means "not fetched yet" or "a fetch failed" — NOT "the user's library is empty".
+            // Wiping here turned one transient sync failure (or a DB-migration cache reset) into a
+            // blank Library and home screen that stayed blank until the next full server sync (and
+            // the 24h sync-threshold could keep it blank for a day). Leave what's there; a
+            // successful server fetch repopulates the raw cache and this runs again with data.
             return
         }
 
@@ -1136,7 +1147,13 @@ class NavidromeRepository @Inject constructor(
             val artistNames = if (gatewayRefs.isNotEmpty()) gatewayRefs.map { it.name }
                               else parseArtistNames(navidromeSong.artist)
             val primaryArtistName = artistNames.firstOrNull() ?: "Unknown Artist"
-            val primaryArtistId = toUnifiedArtistId(primaryArtistName)
+            // MUST derive the album's artist id exactly like the index-0 artist row below (gateway
+            // id first, name-hash fallback). Deriving it from the NAME here while the artist row
+            // was inserted under its GATEWAY id meant the album referenced an artist that didn't
+            // exist → a FOREIGN KEY constraint failure in insertAlbums that aborted the ENTIRE
+            // library sync, leaving the Library and home screen blank.
+            val primaryArtistId = gatewayRefs.firstOrNull()?.id?.takeIf { it.isNotEmpty() }
+                ?.let { toUnifiedArtistId(it) } ?: toUnifiedArtistId(primaryArtistName)
 
             artistNames.forEachIndexed { index, artistName ->
                 // Key on the gateway's stable id when we have one: name-hashing splits one

@@ -1713,11 +1713,13 @@ constructor(
 
         val lastSync = navidromeRepository.lastFullSyncTime
         val currentTime = System.currentTimeMillis()
+        val cacheEmpty = navidromeRepository.cachedLibrarySongCount() == 0
 
-        // Only auto-sync Navidrome during main library sync if it's been more than SYNC_THRESHOLD_MS (24h)
-        if (currentTime - lastSync < NavidromeRepository.SYNC_THRESHOLD_MS) {
-            Log.d(TAG, "Skipping Navidrome sync during main library sync - last sync was recent.")
-            // Still sync unified library from local cache to be safe
+        // Skip the server fetch only if we synced recently AND we actually have a cached library.
+        // An empty cache means we never successfully populated it (or it was reset) — in that case
+        // always fetch, regardless of the 24h threshold, so the Library/home can't get stuck blank.
+        if (currentTime - lastSync < NavidromeRepository.SYNC_THRESHOLD_MS && !cacheEmpty) {
+            Log.d(TAG, "Skipping Navidrome server sync - recent and cache present.")
             navidromeRepository.syncUnifiedLibrarySongsFromNavidrome()
             return
         }
