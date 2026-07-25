@@ -349,7 +349,14 @@ fun EnhancedSongListItem(
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
+                    val isDownloaded = song.navidromeId?.let {
+                        it in com.theveloper.pixelplay.presentation.components.LocalDownloadedSongIds.current
+                    } ?: false
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isDownloaded) {
+                            DownloadedBadge()
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
                         if (song.isExplicit) {
                             ExplicitBadge()
                             Spacer(modifier = Modifier.width(6.dp))

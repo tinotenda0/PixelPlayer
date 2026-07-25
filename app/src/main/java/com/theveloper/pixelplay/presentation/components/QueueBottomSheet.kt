@@ -2076,7 +2076,14 @@ fun QueuePlaylistSongItem(
                             fontWeight = if (isCurrentSong) FontWeight.Bold else FontWeight.Normal,
                             style = MaterialTheme.typography.bodyLarge
                         )
+                        val isDownloaded = song.navidromeId?.let {
+                            it in com.theveloper.pixelplay.presentation.components.LocalDownloadedSongIds.current
+                        } ?: false
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isDownloaded) {
+                                com.theveloper.pixelplay.presentation.components.subcomps.DownloadedBadge()
+                                Spacer(Modifier.width(6.dp))
+                            }
                             if (song.isExplicit) {
                                 com.theveloper.pixelplay.presentation.components.subcomps.ExplicitBadge()
                                 Spacer(Modifier.width(6.dp))

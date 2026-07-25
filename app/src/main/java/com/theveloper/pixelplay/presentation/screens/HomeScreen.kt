@@ -821,6 +821,7 @@ fun SongListItemFavs(
     isPlaying: Boolean,
     isCurrentSong: Boolean,
     isExplicit: Boolean = false,
+    isDownloaded: Boolean = false,
     onClick: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
@@ -864,6 +865,10 @@ fun SongListItemFavs(
                         maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isDownloaded) {
+                            com.theveloper.pixelplay.presentation.components.subcomps.DownloadedBadge()
+                            Spacer(Modifier.width(6.dp))
+                        }
                         if (isExplicit) {
                             com.theveloper.pixelplay.presentation.components.subcomps.ExplicitBadge()
                             Spacer(Modifier.width(6.dp))
@@ -918,6 +923,9 @@ fun SongListItemFavsWrapper(
         isPlaying = stablePlayerState.isPlaying,
         isCurrentSong = song.id == stablePlayerState.currentSong?.id,
         isExplicit = song.isExplicit,
+        isDownloaded = song.navidromeId?.let {
+            it in com.theveloper.pixelplay.presentation.components.LocalDownloadedSongIds.current
+        } ?: false,
         onClick = onClick
     )
 }

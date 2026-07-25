@@ -56,11 +56,20 @@ class NavidromeDownloadManager @Inject constructor(
         val isActive: Boolean get() = completed + failed < total
     }
 
+    /** A track that is downloading now or waiting in the queue (for the live "Downloading" list). */
+    data class ActiveDownload(val id: String, val song: Song?, val downloading: Boolean)
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val queueMutex = Mutex()
     private var workerJob: Job? = null
     private val pendingIds = ArrayDeque<String>()
     private val queuedIdSet = ConcurrentHashMap.newKeySet<String>()
+    @Volatile
+    private var currentDownloadId: String? = null
+
+    private val _activeDownloads = MutableStateFlow<List<ActiveDownload>>(emptyList())
+    /** The in-progress + queued tracks, current one first. Empty when nothing is downloading. */
+    val activeDownloads: StateFlow<List<ActiveDownload>> = _activeDownloads.asStateFlow()
 
     // Fast lookup cache navidromeId -> filePath, mirrored from the DAO.
     private val localPathCache = ConcurrentHashMap<String, String>()
@@ -173,11 +182,20 @@ class NavidromeDownloadManager @Inject constructor(
                     if (cur != null && cur.isActive) cur.copy(total = cur.total + fresh.size)
                     else QueueProgress(completed = 0, failed = 0, total = fresh.size)
                 }
+                publishActive()
                 if (workerJob?.isActive != true) {
                     workerJob = scope.launch { drainQueue() }
                 }
             }
         }
+    }
+
+    /** Rebuild the live active-downloads list. MUST be called while holding [queueMutex]. */
+    private fun publishActive() {
+        val items = ArrayList<ActiveDownload>()
+        currentDownloadId?.let { items.add(ActiveDownload(it, pendingMeta[it], downloading = true)) }
+        for (id in pendingIds) items.add(ActiveDownload(id, pendingMeta[id], downloading = false))
+        _activeDownloads.value = items
     }
 
     private suspend fun drainQueue() {
@@ -187,6 +205,8 @@ class NavidromeDownloadManager @Inject constructor(
             val nextId = queueMutex.withLock {
                 val id = pendingIds.removeFirstOrNull()
                 if (id == null) workerJob = null
+                currentDownloadId = id
+                publishActive()
                 id
             } ?: break
             val success = try {
@@ -283,6 +303,9 @@ class NavidromeDownloadManager @Inject constructor(
         queueMutex.withLock {
             pendingIds.clear()
             queuedIdSet.clear()
+            pendingMeta.clear()
+            currentDownloadId = null
+            publishActive()
         }
         // Wait for any in-flight download to actually stop before wiping — otherwise it can
         // finish writing a file AFTER the wipe and leave an orphan on disk.

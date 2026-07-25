@@ -44,13 +44,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavController
+import androidx.compose.material3.CircularProgressIndicator
 import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.data.model.Song
+import com.theveloper.pixelplay.data.navidrome.NavidromeDownloadManager
 import com.theveloper.pixelplay.presentation.components.MiniPlayerHeight
 import com.theveloper.pixelplay.presentation.components.PlaylistBottomSheet
 import com.theveloper.pixelplay.presentation.components.SongInfoBottomSheet
@@ -121,7 +124,7 @@ fun DownloadsScreen(
         },
         containerColor = MaterialTheme.colorScheme.surface
     ) { innerPadding ->
-        if (uiState.songs.isEmpty()) {
+        if (uiState.songs.isEmpty() && uiState.active.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -162,21 +165,36 @@ fun DownloadsScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                item(key = "downloads_summary") {
-                    Text(
-                        text = stringResource(
-                            R.string.downloads_summary,
-                            uiState.songs.size,
-                            formatSize(uiState.totalSizeBytes)
-                        ) + if (uiState.activeCount > 0) {
-                            " • " + stringResource(R.string.downloads_active, uiState.activeCount)
-                        } else "",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                    )
+                if (uiState.active.isNotEmpty()) {
+                    item(key = "downloading_header") {
+                        Text(
+                            text = stringResource(R.string.downloads_downloading, uiState.active.size),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        )
+                    }
+                    items(
+                        items = uiState.active,
+                        key = { "active_${it.id}" },
+                        contentType = { "active_download" }
+                    ) { ad -> ActiveDownloadRow(ad) }
                 }
-                item(key = "downloads_actions") {
+                if (uiState.songs.isNotEmpty()) {
+                    item(key = "downloads_summary") {
+                        Text(
+                            text = stringResource(
+                                R.string.downloads_summary,
+                                uiState.songs.size,
+                                formatSize(uiState.totalSizeBytes)
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                if (uiState.songs.isNotEmpty()) item(key = "downloads_actions") {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -318,6 +336,56 @@ fun DownloadsScreen(
                         Text(stringResource(R.string.common_cancel))
                     }
                 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActiveDownloadRow(ad: NavidromeDownloadManager.ActiveDownload) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(40.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (ad.downloading) {
+                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    painter = painterResource(R.drawable.rounded_download_24),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = ad.song?.title ?: stringResource(R.string.downloads_downloading_item),
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = ad.song?.displayArtist?.takeIf { it.isNotBlank() }
+                    ?: if (ad.downloading) stringResource(R.string.downloads_downloading_now)
+                       else stringResource(R.string.downloads_queued),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (!ad.downloading) {
+            Text(
+                text = stringResource(R.string.downloads_queued),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

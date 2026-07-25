@@ -213,6 +213,7 @@ class PlayerViewModel @Inject constructor(
     private val rokuEcpClient: com.theveloper.pixelplay.data.network.roku.RokuEcpClient,
     private val plexRepository: com.theveloper.pixelplay.data.plex.PlexRepository,
     private val navidromeRepository: com.theveloper.pixelplay.data.navidrome.NavidromeRepository,
+    private val navidromeDownloadManager: com.theveloper.pixelplay.data.navidrome.NavidromeDownloadManager,
     private val queueStateHolder: QueueStateHolder,
     private val queueUndoStateHolder: QueueUndoStateHolder,
     private val playlistDismissUndoStateHolder: PlaylistDismissUndoStateHolder,
@@ -1044,6 +1045,14 @@ class PlayerViewModel @Inject constructor(
 
     /** Raw network reachability. Used to tell "no signal" apart from "user pinned Offline mode". */
     val isOnline: StateFlow<Boolean> = connectivityStateHolder.isOnline
+
+    /**
+     * Set of downloaded track ids (navidromeId), for the Spotify-style "downloaded" marker on song
+     * rows. Exposed as a StateFlow and surfaced app-wide via LocalDownloadedSongIds.
+     */
+    val downloadedSongIds: StateFlow<Set<String>> =
+        navidromeDownloadManager.downloadedIds
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
 
 

@@ -300,6 +300,10 @@
     <string name="downloads_queue_name">Downloads</string>
     <string name="downloads_summary">%1$d songs • %2$s</string>
     <string name="downloads_active">%1$d downloading</string>
+    <string name="downloads_downloading">Downloading (%1$d)</string>
+    <string name="downloads_downloading_item">Downloading…</string>
+    <string name="downloads_downloading_now">Downloading now</string>
+    <string name="downloads_queued">Queued</string>
     <string name="downloads_clear_all">Clear all</string>
     <string name="downloads_clear_all_title">Remove all downloads?</string>
     <string name="downloads_clear_all_message">This deletes every downloaded song from this device. You can download them again anytime you\'re online.</string>

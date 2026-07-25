@@ -31,19 +31,20 @@ class DownloadsViewModel @Inject constructor(
     data class DownloadsUiState(
         val songs: ImmutableList<Song> = persistentListOf(),
         val totalSizeBytes: Long = 0L,
-        val activeCount: Int = 0
-    )
+        val active: ImmutableList<NavidromeDownloadManager.ActiveDownload> = persistentListOf()
+    ) {
+        val activeCount: Int get() = active.size
+    }
 
     val uiState: StateFlow<DownloadsUiState> = combine(
         downloadManager.downloadedSongs,
         downloadManager.totalSizeBytes,
-        downloadManager.queueProgress
-    ) { songs, sizeBytes, progress ->
-        val active = progress?.let { (it.total - it.completed - it.failed).coerceAtLeast(0) } ?: 0
+        downloadManager.activeDownloads
+    ) { songs, sizeBytes, active ->
         DownloadsUiState(
             songs = songs.toImmutableList(),
             totalSizeBytes = sizeBytes,
-            activeCount = active
+            active = active.toImmutableList()
         )
     }.stateIn(
         scope = viewModelScope,

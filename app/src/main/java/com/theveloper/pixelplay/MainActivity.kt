@@ -970,14 +970,21 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                         ) {
-                            AppNavigation(
-                                playerViewModel = playerViewModel,
-                                navController = navController,
-                                paddingValues = innerPadding,
-                                userPreferencesRepository = userPreferencesRepository,
-                                onSearchBarActiveChange = { isSearchBarActive = it },
-                                onOpenSidebar = { scope.launch { drawerState.open() } }
-                            )
+                            val downloadedSongIds by playerViewModel.downloadedSongIds
+                                .collectAsStateWithLifecycle()
+                            androidx.compose.runtime.CompositionLocalProvider(
+                                com.theveloper.pixelplay.presentation.components.LocalDownloadedSongIds
+                                    provides downloadedSongIds
+                            ) {
+                                AppNavigation(
+                                    playerViewModel = playerViewModel,
+                                    navController = navController,
+                                    paddingValues = innerPadding,
+                                    userPreferencesRepository = userPreferencesRepository,
+                                    onSearchBarActiveChange = { isSearchBarActive = it },
+                                    onOpenSidebar = { scope.launch { drawerState.open() } }
+                                )
+                            }
                         }
 
                         val isExpandedOrExpanding by remember {
