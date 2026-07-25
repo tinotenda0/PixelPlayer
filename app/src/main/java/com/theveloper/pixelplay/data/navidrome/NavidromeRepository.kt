@@ -980,10 +980,47 @@ class NavidromeRepository @Inject constructor(
         return withContext(Dispatchers.IO) { api.unlinkSpotify().isSuccess }
     }
 
-    suspend fun spotifyStartImport(): SpotifyImportProgress? {
+    /** Fetch the user's playlists + counts so the app can offer a selection. */
+    suspend fun spotifyPreview(): SpotifyPreview? {
         if (!isLoggedIn) return null
         return withContext(Dispatchers.IO) {
-            api.startSpotifyImport().getOrNull()?.optJSONObject("import")
+            val o = api.spotifyPreview().getOrNull() ?: return@withContext null
+            if (o.optString("status") != "ok") return@withContext null
+            val arr = o.optJSONArray("playlists")
+            val playlists = (0 until (arr?.length() ?: 0)).mapNotNull { i ->
+                arr?.optJSONObject(i)?.let {
+                    SpotifyPlaylistOption(
+                        id = it.optString("id"),
+                        name = it.optString("name", "Playlist"),
+                        count = it.optInt("count", 0)
+                    )
+                }
+            }
+            SpotifyPreview(
+                playlists = playlists,
+                playlistsAvailable = o.optBoolean("playlistsAvailable", false),
+                likedCount = o.optInt("likedCount", 0),
+                topArtistsCount = o.optInt("topArtistsCount", 0)
+            )
+        }
+    }
+
+    suspend fun spotifyStartImport(options: SpotifyImportOptions? = null): SpotifyImportProgress? {
+        if (!isLoggedIn) return null
+        return withContext(Dispatchers.IO) {
+            val params = options?.let {
+                val playlistsParam = when {
+                    it.playlistIds == null -> "all"
+                    else -> it.playlistIds.joinToString(",")
+                }
+                mapOf(
+                    "playlists" to playlistsParam,
+                    "liked" to it.liked.toString(),
+                    "artists" to it.artists.toString(),
+                    "history" to it.history.toString()
+                )
+            } ?: emptyMap()
+            api.startSpotifyImport(params).getOrNull()?.optJSONObject("import")
                 ?.let { parseSpotifyProgress(it) }
         }
     }
@@ -1486,6 +1523,26 @@ data class SpotifyStatus(
 data class SpotifyLink(
     val status: String,
     val authUrl: String = ""
+)
+
+/** One of the user's Spotify playlists, offered for selection. */
+data class SpotifyPlaylistOption(val id: String, val name: String, val count: Int)
+
+/** What's available to import, for the Tidal-style selection screen. */
+data class SpotifyPreview(
+    val playlists: List<SpotifyPlaylistOption>,
+    /** False when Spotify is blocking playlist track access for this app (dev-mode/quota). */
+    val playlistsAvailable: Boolean,
+    val likedCount: Int,
+    val topArtistsCount: Int
+)
+
+/** The user's selection. playlistIds = null means "all playlists"; empty list means none. */
+data class SpotifyImportOptions(
+    val playlistIds: List<String>?,
+    val liked: Boolean,
+    val artists: Boolean,
+    val history: Boolean
 )
 
 /** Live progress of a background Spotify import. state = idle|running|done|error. */

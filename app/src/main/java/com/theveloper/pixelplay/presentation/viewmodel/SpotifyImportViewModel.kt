@@ -1,10 +1,16 @@
 package com.theveloper.pixelplay.presentation.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkManager
 import com.theveloper.pixelplay.data.navidrome.NavidromeRepository
+import com.theveloper.pixelplay.data.navidrome.SpotifyImportOptions
 import com.theveloper.pixelplay.data.navidrome.SpotifyImportProgress
+import com.theveloper.pixelplay.data.navidrome.SpotifyPreview
+import com.theveloper.pixelplay.data.worker.SyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -26,18 +32,32 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class SpotifyImportViewModel @Inject constructor(
-    private val navidromeRepository: NavidromeRepository
+    private val navidromeRepository: NavidromeRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
-    enum class Phase { LOADING, UNCONFIGURED, NOT_LINKED, AWAITING_APPROVAL, LINKED, IMPORTING, DONE, ERROR }
+    enum class Phase {
+        LOADING, UNCONFIGURED, NOT_LINKED, AWAITING_APPROVAL, LINKED, SELECTING,
+        IMPORTING, DONE, ERROR
+    }
 
     data class UiState(
         val phase: Phase = Phase.LOADING,
         val accountName: String = "",
         val message: String = "",
         val busy: Boolean = false,
-        val progress: SpotifyImportProgress? = null
-    )
+        val progress: SpotifyImportProgress? = null,
+        // Selection screen
+        val preview: SpotifyPreview? = null,
+        val selectedPlaylistIds: Set<String> = emptySet(),
+        val likedSelected: Boolean = true,
+        val artistsSelected: Boolean = true,
+        val historySelected: Boolean = true
+    ) {
+        /** At least one thing chosen — the Import button's enabled state. */
+        val hasSelection: Boolean
+            get() = selectedPlaylistIds.isNotEmpty() || likedSelected || artistsSelected || historySelected
+    }
 
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
@@ -70,8 +90,59 @@ class SpotifyImportViewModel @Inject constructor(
                 )
             }
             if (status.linked && running) startImportPolling()
+            else if (status.linked) loadPreview()
         }
     }
+
+    /** Fetch what's available to import and move to the selection screen. */
+    fun loadPreview() {
+        _ui.update { it.copy(phase = Phase.LINKED, busy = true, message = "") }
+        viewModelScope.launch {
+            val preview = navidromeRepository.spotifyPreview()
+            if (preview == null) {
+                _ui.update {
+                    it.copy(phase = Phase.LINKED, busy = false,
+                        message = "Couldn't load your Spotify library. Tap to try again.")
+                }
+                return@launch
+            }
+            _ui.update {
+                it.copy(
+                    phase = Phase.SELECTING,
+                    busy = false,
+                    preview = preview,
+                    // Only pre-select playlists we can actually read.
+                    selectedPlaylistIds =
+                        if (preview.playlistsAvailable) preview.playlists.map { p -> p.id }.toSet()
+                        else emptySet(),
+                    likedSelected = preview.likedCount > 0,
+                    artistsSelected = preview.topArtistsCount > 0,
+                    historySelected = true,
+                    message = ""
+                )
+            }
+        }
+    }
+
+    fun togglePlaylist(id: String) {
+        _ui.update {
+            val sel = it.selectedPlaylistIds.toMutableSet()
+            if (!sel.add(id)) sel.remove(id)
+            it.copy(selectedPlaylistIds = sel)
+        }
+    }
+
+    fun setAllPlaylists(selected: Boolean) {
+        _ui.update {
+            it.copy(selectedPlaylistIds =
+                if (selected) it.preview?.playlists?.map { p -> p.id }?.toSet() ?: emptySet()
+                else emptySet())
+        }
+    }
+
+    fun toggleLiked() = _ui.update { it.copy(likedSelected = !it.likedSelected) }
+    fun toggleArtists() = _ui.update { it.copy(artistsSelected = !it.artistsSelected) }
+    fun toggleHistory() = _ui.update { it.copy(historySelected = !it.historySelected) }
 
     /** Begin OAuth: fetch the consent URL, open it, and poll until the gateway stores the token. */
     fun startLink() {
@@ -136,9 +207,17 @@ class SpotifyImportViewModel @Inject constructor(
 
     fun startImport() {
         if (_ui.value.busy) return
+        val s = _ui.value
+        if (!s.hasSelection) return
+        val opts = SpotifyImportOptions(
+            playlistIds = s.selectedPlaylistIds.toList(),
+            liked = s.likedSelected,
+            artists = s.artistsSelected,
+            history = s.historySelected
+        )
         _ui.update { it.copy(busy = true, message = "") }
         viewModelScope.launch {
-            val progress = navidromeRepository.spotifyStartImport()
+            val progress = navidromeRepository.spotifyStartImport(opts)
             if (progress == null) {
                 // Couldn't reach the gateway / not linked — don't pretend an import is running.
                 _ui.update {
@@ -165,8 +244,13 @@ class SpotifyImportViewModel @Inject constructor(
                 when (p.state) {
                     "done" -> {
                         _ui.update { it.copy(phase = Phase.DONE) }
-                        // Pull the freshly-created playlists into the app immediately.
+                        // Pull the new playlists in immediately, then kick a full library sync so
+                        // the imported artists + taste-driven home mixes refresh too (not just
+                        // playlists — that was the gap where "nothing but the playlist" showed up).
                         runCatching { navidromeRepository.syncPlaylists() }
+                        runCatching {
+                            WorkManager.getInstance(context).enqueue(SyncWorker.fullSyncWork())
+                        }
                         return@launch
                     }
                     "error" -> {

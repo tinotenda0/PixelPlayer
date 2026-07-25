@@ -451,8 +451,12 @@ class NavidromeApiService @Inject constructor(
 
     suspend fun unlinkSpotify(): Result<JSONObject> = spotifyCall("unlinkSpotify")
 
-    /** Kick off the background import of playlists/liked/taste/history. */
-    suspend fun startSpotifyImport(): Result<JSONObject> = spotifyCall("startSpotifyImport")
+    /** List what's available to import (playlists + counts) for the selection screen. */
+    suspend fun spotifyPreview(): Result<JSONObject> = spotifyCall("spotifyPreview")
+
+    /** Kick off the background import. [params] carries the selection (playlists/liked/artists/history). */
+    suspend fun startSpotifyImport(params: Map<String, String> = emptyMap()): Result<JSONObject> =
+        requestAndParse("startSpotifyImport", params).map { it.optJSONObject("spotify") ?: JSONObject() }
 
     /** Poll the running import's progress. */
     suspend fun spotifyImportStatus(): Result<JSONObject> = spotifyCall("spotifyImportStatus")
