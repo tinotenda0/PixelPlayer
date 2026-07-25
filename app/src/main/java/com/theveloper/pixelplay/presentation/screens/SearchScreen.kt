@@ -626,6 +626,7 @@ fun SearchScreen(
                                     SearchResultsList(
                                         results = searchResults,
                                         searchQuery = searchQuery,
+                                        selectedFilter = currentFilter,
                                         playerViewModel = playerViewModel,
                                         onItemSelected = {
                                             if (searchQuery.isNotBlank()) {
@@ -1122,6 +1123,7 @@ fun EmptySearchResults(searchQuery: String, colorScheme: ColorScheme) {
 fun SearchResultsList(
     results: List<SearchResultItem>,
     searchQuery: String,
+    selectedFilter: SearchFilterType,
     playerViewModel: PlayerViewModel,
     onItemSelected: () -> Unit,
     currentPlayingSongId: String?,
@@ -1192,23 +1194,44 @@ fun SearchResultsList(
         }
     }
 
-    // Order sections by the rank of their best (earliest) member so the
-    // relevance ranking survives grouping: when an artist ranks #1 (e.g.
-    // "daft" → Daft Punk), the Artists section renders above Songs instead
-    // of always being pinned below it.
-    val sectionOrder = remember(results) {
-        val firstIndexByType = LinkedHashMap<SearchFilterType, Int>()
-        results.forEachIndexed { index, item ->
-            val type = when (item) {
+    // YouTube Music–style layout. In the combined ALL view: one best "Top result" (the top-ranked
+    // match, whatever its type — song for "beat it", album for "thriller", artist for "michael
+    // jackson"), then a HANDFUL of each category, the categories ordered by how well their best
+    // member matched (so the relevant type leads). A dedicated filter (Songs/Artists/…) shows that
+    // one category in full.
+    val displaySections: List<Pair<String, List<SearchResultItem>>> =
+        remember(results, selectedFilter) {
+            fun titleFor(t: SearchFilterType) = when (t) {
+                SearchFilterType.SONGS -> "Songs"
+                SearchFilterType.ALBUMS -> "Albums"
+                SearchFilterType.ARTISTS -> "Artists"
+                SearchFilterType.PLAYLISTS -> "Playlists"
+                else -> "Results"
+            }
+            fun typeOf(i: SearchResultItem) = when (i) {
                 is SearchResultItem.SongItem -> SearchFilterType.SONGS
                 is SearchResultItem.AlbumItem -> SearchFilterType.ALBUMS
                 is SearchResultItem.ArtistItem -> SearchFilterType.ARTISTS
                 is SearchResultItem.PlaylistItem -> SearchFilterType.PLAYLISTS
             }
-            firstIndexByType.putIfAbsent(type, index)
+            if (selectedFilter != SearchFilterType.ALL) {
+                listOf(titleFor(selectedFilter) to results)
+            } else {
+                val top = results.firstOrNull()
+                val byType = results.groupBy { typeOf(it) }
+                val firstIndexByType = LinkedHashMap<SearchFilterType, Int>()
+                results.forEachIndexed { idx, it -> firstIndexByType.putIfAbsent(typeOf(it), idx) }
+                buildList {
+                    if (top != null) add("Top result" to listOf(top))
+                    firstIndexByType.entries.sortedBy { it.value }.forEach { (type, _) ->
+                        val items = (byType[type] ?: emptyList())
+                            .let { list -> if (top != null) list.filterNot { it === top } else list }
+                            .take(6)  // a handful per category in the combined view; tap a filter for all
+                        if (items.isNotEmpty()) add(titleFor(type) to items)
+                    }
+                }
+            }
         }
-        firstIndexByType.entries.sortedBy { it.value }.map { it.key }
-    }
 
     val imePadding = WindowInsets.ime.getBottom(localDensity).dp
     val systemBarPaddingBottom = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() + 94.dp
@@ -1227,20 +1250,10 @@ fun SearchResultsList(
             bottom = if (imePadding <= 8.dp) (MiniPlayerHeight + systemBarPaddingBottom) else imePadding
         )
     ) {
-        sectionOrder.forEach { filterType ->
-            val itemsForSection = groupedResults[filterType] ?: emptyList()
-
+        displaySections.forEach { (sectionTitle, itemsForSection) ->
             if (itemsForSection.isNotEmpty()) {
-                item(key = "header_${filterType.name}") {
-                    SearchResultSectionHeader(
-                        title = when (filterType) {
-                            SearchFilterType.SONGS -> "Songs"
-                            SearchFilterType.ALBUMS -> "Albums"
-                            SearchFilterType.ARTISTS -> "Artists"
-                            SearchFilterType.PLAYLISTS -> "Playlists"
-                            else -> "Results"
-                        }
-                    )
+                item(key = "header_$sectionTitle") {
+                    SearchResultSectionHeader(title = sectionTitle)
                 }
 
                 items(
@@ -1251,10 +1264,10 @@ fun SearchResultsList(
                         // can legitimately return the same track twice. A duplicate LazyColumn
                         // key is a hard crash, so identity must never depend on the data alone.
                         when (item) {
-                            is SearchResultItem.SongItem -> "song_${item.song.id}_$index"
-                            is SearchResultItem.AlbumItem -> "album_${item.album.id}_$index"
-                            is SearchResultItem.ArtistItem -> "artist_${item.artist.id}_$index"
-                            is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}_$index"
+                            is SearchResultItem.SongItem -> "${sectionTitle}_song_${item.song.id}_$index"
+                            is SearchResultItem.AlbumItem -> "${sectionTitle}_album_${item.album.id}_$index"
+                            is SearchResultItem.ArtistItem -> "${sectionTitle}_artist_${item.artist.id}_$index"
+                            is SearchResultItem.PlaylistItem -> "${sectionTitle}_playlist_${item.playlist.id}_$index"
                         }
                     },
                     contentType = { index ->

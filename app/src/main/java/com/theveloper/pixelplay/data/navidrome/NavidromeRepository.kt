@@ -669,6 +669,79 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
+    /** Songs, artists and albums for a query in a SINGLE gateway round-trip. */
+    data class LiveSearchResults(
+        val songs: List<Song>,
+        val artists: List<Artist>,
+        val albums: List<Album>,
+    )
+
+    /**
+     * One search3 call that returns songs + artists + albums together, instead of the three
+     * separate searchSongs/searchArtists/searchAlbums calls the UI used to fire in parallel.
+     * search3 already returns all three arrays, so those three calls were three full YouTube
+     * Music searches on the gateway for the same query — the reason search sat on "Searching
+     * everywhere…" for several seconds. This is a single call.
+     */
+    suspend fun searchEverything(
+        query: String,
+        songLimit: Int = 40,
+        artistLimit: Int = 20,
+        albumLimit: Int = 20,
+    ): Result<LiveSearchResults> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) {
+            var lastError: Throwable? = null
+            // Retry once. The gateway does a LIVE YouTube Music search per call; under rapid or
+            // concurrent searches an individual call occasionally errors or comes back empty even
+            // though the query has results. One quick retry turns those "No results" flukes into
+            // real results — this is the "sometimes it doesn't fetch anything" report.
+            for (attempt in 0..1) {
+                try {
+                    val response = api.search3(
+                        query,
+                        artistCount = artistLimit,
+                        albumCount = albumLimit,
+                        songCount = songLimit,
+                    ).getOrThrow()
+                    val sr = response.optJSONObject("searchResult3")
+                    fun arr(name: String): List<JSONObject> {
+                        val a = sr?.optJSONArray(name) ?: return emptyList()
+                        return (0 until a.length()).mapNotNull { a.optJSONObject(it) }
+                    }
+                    // Parse each type independently, and each item within it — one malformed
+                    // artist/album must never blank the songs (or vice versa). The old three-call
+                    // search got this isolation for free by being three separate try/catch calls;
+                    // folding them into one call HAS to keep it, or a single bad item empties the
+                    // whole search.
+                    val songs = runCatching {
+                        NavidromeResponseParser.parseSongs(arr("song"))
+                            .mapNotNull { runCatching { it.toSong() }.getOrNull() }
+                    }.getOrDefault(emptyList())
+                    val artists = runCatching {
+                        NavidromeResponseParser.parseArtists(arr("artist"))
+                            .mapNotNull { runCatching { it.toAppArtist() }.getOrNull() }
+                    }.getOrDefault(emptyList())
+                    val albums = runCatching {
+                        NavidromeResponseParser.parseAlbums(arr("album"))
+                            .mapNotNull { runCatching { it.toAppAlbum() }.getOrNull() }
+                    }.getOrDefault(emptyList())
+                    val result = LiveSearchResults(songs, artists, albums)
+                    // Accept a non-empty result immediately; retry once if the first attempt came
+                    // back completely empty (likely a transient upstream hiccup, not a real miss).
+                    if (attempt == 1 || songs.isNotEmpty() || artists.isNotEmpty() || albums.isNotEmpty()) {
+                        return@withContext Result.success(result)
+                    }
+                } catch (e: Exception) {
+                    lastError = e
+                    Timber.e(e, "$TAG: searchEverything attempt $attempt failed")
+                }
+                kotlinx.coroutines.delay(600)
+            }
+            Result.failure(lastError ?: Exception("searchEverything returned no results"))
+        }
+    }
+
     /** Artist detail fetched live for a gateway `yt-artist-…` id: the artist + its top songs. */
     suspend fun getArtistDetail(artistId: String): Result<GatewayArtistDetail> {
         if (!isLoggedIn) return Result.failure(Exception("Not logged in"))

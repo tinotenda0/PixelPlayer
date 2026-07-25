@@ -129,7 +129,17 @@ object NavidromeResponseParser {
      * Parse a list of songs from JSON array.
      */
     fun parseSongs(jsonArray: List<JSONObject>): List<NavidromeSong> {
-        return jsonArray.map { parseSong(it) }
+        // Per-item try/catch (like parseSongsFromAlbumResponse / …PlaylistResponse): one malformed
+        // song must not throw away the whole result set. A bare map() here meant a single bad
+        // entry made searchSongs return failure → the entire Songs section vanished.
+        return jsonArray.mapNotNull { json ->
+            try {
+                parseSong(json)
+            } catch (e: Exception) {
+                Timber.w(e, "$TAG: Failed to parse search song")
+                null
+            }
+        }
     }
 
     /**

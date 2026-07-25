@@ -47,6 +47,7 @@ import com.theveloper.pixelplay.data.model.LyricsSourcePreference
 import com.theveloper.pixelplay.data.model.SearchFilterType
 import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
+import com.theveloper.pixelplay.data.model.ArtistRef
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.model.SortOption
 import com.theveloper.pixelplay.data.model.toLibraryTabIdOrNull
@@ -2520,48 +2521,36 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun triggerArtistNavigationFromPlayer(artistId: Long) {
-        if (artistId == 0L) {
-            Log.d("ArtistDebug", "triggerArtistNavigationFromPlayer ignored invalid artistId=$artistId")
-            return
-        }
+    /**
+     * Navigate to the SPECIFIC credited artist the user tapped in the player.
+     *
+     * The [ref] carries that credit's own gateway id ([ArtistRef.gatewayId]), so a featured /
+     * second artist opens their real profile. Routing the whole song instead (see the [Song]
+     * overload) always resolved to the primary artist, which is why tapping a feat. artist only
+     * ever opened the first one.
+     */
+    fun triggerArtistNavigationFromPlayer(ref: ArtistRef) {
+        navigateToArtistFromPlayer(ArtistNavigation.routeForRef(ref))
+    }
 
+    /**
+     * Navigate to the song's primary artist — the single-artist tap and the long-press shortcut.
+     * [ArtistNavigation.routeFor] resolves a streamed track by its structured artist identity or a
+     * gateway name lookup, so it works even for a song the server has never cached.
+     */
+    fun triggerArtistNavigationFromPlayer(song: Song) {
+        navigateToArtistFromPlayer(ArtistNavigation.routeFor(song))
+    }
+
+    private fun navigateToArtistFromPlayer(route: String) {
         val existingJob = artistNavigationJob
         if (existingJob != null && existingJob.isActive) {
-            Log.d("ArtistDebug", "triggerArtistNavigationFromPlayer ignored; navigation already in progress for artistId=$artistId")
+            Log.d("ArtistDebug", "artist navigation ignored; already in progress ($route)")
             return
         }
 
         artistNavigationJob?.cancel()
         artistNavigationJob = viewModelScope.launch {
-            var resolvedId = artistId
-            val currentSong = playbackStateHolder.stablePlayerState.value.currentSong
-            
-            if (resolvedId == -1L && currentSong != null) {
-                val idFromName = musicRepository.getArtistIdByName(currentSong.artist)
-                if (idFromName != null) {
-                    resolvedId = idFromName
-                }
-            }
-
-            // Previously this returned here, which is why tapping the artist in the player did
-            // NOTHING for most songs: a streamed track has artistId = -1 and getArtistIdByName
-            // only searches the LOCAL table, which never contains streamed artists. Instead of
-            // giving up, fall back to resolving the artist from the song itself.
-            val route = if (resolvedId > 0L) {
-                Screen.ArtistDetail.createRoute(resolvedId, currentSong?.artist)
-            } else {
-                currentSong?.let { ArtistNavigation.routeFor(it) }
-            }
-            if (route == null) {
-                Log.d("ArtistDebug", "triggerArtistNavigationFromPlayer: no song to resolve from")
-                return@launch
-            }
-
-            Log.d(
-                "ArtistDebug",
-                "triggerArtistNavigationFromPlayer: artistId=$resolvedId, songId=${currentSong?.id}, title=${currentSong?.title}"
-            )
             collapsePlayerSheet()
 
             withTimeoutOrNull(900) {

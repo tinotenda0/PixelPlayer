@@ -83,15 +83,22 @@ class SearchStateHolder @Inject constructor(
         }
         if ((filter == SearchFilterType.ALL || filter == SearchFilterType.ARTISTS) && live.artists.isNotEmpty()) {
             val seen = out.mapNotNull { (it as? SearchResultItem.ArtistItem)?.artist?.name?.lowercase() }.toHashSet()
-            out = out + live.artists.filterNot { it.name.lowercase() in seen }.map { SearchResultItem.ArtistItem(it) }
+            // The gateway floods near-identical artists — a query like "essence" returns ~20 all
+            // named "Essence". Collapse by normalized name; the screen caps how many show per
+            // section in the combined view.
+            val liveArtists = live.artists
+                .distinctBy { it.name.trim().lowercase() }
+                .filterNot { it.name.lowercase() in seen }
+            out = out + liveArtists.map { SearchResultItem.ArtistItem(it) }
         }
         if ((filter == SearchFilterType.ALL || filter == SearchFilterType.ALBUMS) && live.albums.isNotEmpty()) {
             val seen = out.mapNotNull { r ->
                 (r as? SearchResultItem.AlbumItem)?.album?.let { "${it.title.lowercase()}|${it.artist.lowercase()}" }
             }.toHashSet()
-            out = out + live.albums
+            val liveAlbums = live.albums
+                .distinctBy { "${it.title.trim().lowercase()}|${it.artist.trim().lowercase()}" }
                 .filterNot { "${it.title.lowercase()}|${it.artist.lowercase()}" in seen }
-                .map { SearchResultItem.AlbumItem(it) }
+            out = out + liveAlbums.map { SearchResultItem.AlbumItem(it) }
         }
         return out
     }
@@ -186,27 +193,21 @@ class SearchStateHolder @Inject constructor(
                             emit(LiveResults())
                             _isLiveSearching.value = true
                             try {
-                                val live = coroutineScope {
-                                    val songs = async {
-                                        runCatching {
-                                            navidromeRepository.searchSongs(normalizedQuery, limit = 40)
-                                                .getOrDefault(emptyList())
-                                        }.getOrDefault(emptyList())
-                                    }
-                                    val artists = async {
-                                        runCatching {
-                                            navidromeRepository.searchArtists(normalizedQuery, limit = 10)
-                                                .getOrDefault(emptyList())
-                                        }.getOrDefault(emptyList())
-                                    }
-                                    val albums = async {
-                                        runCatching {
-                                            navidromeRepository.searchAlbums(normalizedQuery, limit = 20)
-                                                .getOrDefault(emptyList())
-                                        }.getOrDefault(emptyList())
-                                    }
-                                    LiveResults(songs.await(), artists.await(), albums.await())
-                                }
+                                // ONE gateway round-trip for songs + artists + albums (search3
+                                // returns all three). The old code fired three separate searches
+                                // in parallel — three full YouTube Music queries for one search —
+                                // which is what made search sit on "Searching everywhere…".
+                                val result = runCatching {
+                                    navidromeRepository.searchEverything(
+                                        normalizedQuery,
+                                        songLimit = 40,
+                                        artistLimit = 20,
+                                        albumLimit = 20,
+                                    ).getOrNull()
+                                }.getOrNull()
+                                val live = result?.let {
+                                    LiveResults(it.songs, it.artists, it.albums)
+                                } ?: LiveResults()
                                 if (!live.isEmpty) emit(live)
                             } finally {
                                 _isLiveSearching.value = false
@@ -259,6 +260,7 @@ class SearchStateHolder @Inject constructor(
                     } catch (_: CancellationException) {
                         // Superseded by a newer query; ignore.
                     } catch (e: Exception) {
+                        android.util.Log.e("XPSSEARCH", "search EXC q='$normalizedQuery'", e)
                         if (request.requestId == latestSearchRequestId.get()) {
                             Timber.e(e, "Error performing search for query: $normalizedQuery")
                             _searchResults.value = persistentListOf()

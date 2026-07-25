@@ -459,8 +459,18 @@ class MusicService : MediaLibraryService() {
         engine.addTransitionFinishedListener(transitionFinishedListener)
 
         controller.initialize()
+        // Cast sync calls CastContext.getSharedInstance(), which boots the Cast SDK and its
+        // continuous LAN DiscoveryManager scan (mDNS + DIAL). This MediaLibraryService is bound
+        // by the SYSTEM in the background with no user present — media resumption after boot,
+        // Android Auto, Wear, the assistant browsing the library — and each such bind ran
+        // onCreate and, a second later, started cast discovery. That left the Wi-Fi radio and
+        // CPU scanning for cast devices all day even when the app was never opened or played:
+        // huge multicast packet counts on Wi-Fi, high CPU, and battery drain, silent on mobile
+        // data (multicast is LAN-only). Defer it until playback is actually active — you cannot
+        // cast without first starting playback — so a passive system bind never boots the Cast
+        // SDK. It is torn down again in onDestroy/stop via castSyncCoordinator.stop().
         serviceScope.launch {
-            delay(DEFERRED_SERVICE_STARTUP_WORK_DELAY_MS)
+            PlaybackActivityTracker.isPlaybackActiveFlow.first { it }
             if (!isPlaybackUnloadInProgress && mediaSession != null) {
                 castSyncCoordinator.start()
             }

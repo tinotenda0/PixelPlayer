@@ -38,14 +38,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.size.Size
 import com.theveloper.pixelplay.R
-import com.theveloper.pixelplay.data.model.Artist
+import com.theveloper.pixelplay.data.model.ArtistRef
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.presentation.components.SmartImage
 import com.theveloper.pixelplay.ui.theme.GoogleSansRounded
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 
 private data class PlayerArtistShortcutItem(
-    val artist: Artist,
+    val ref: ArtistRef,
     val isPrimary: Boolean
 )
 
@@ -53,35 +53,25 @@ private data class PlayerArtistShortcutItem(
 @Composable
 internal fun PlayerArtistPickerBottomSheet(
     song: Song,
-    artists: List<Artist>,
+    artists: List<ArtistRef>,
     sheetState: SheetState,
     onDismiss: () -> Unit,
-    onArtistClick: (Artist) -> Unit
+    onArtistClick: (ArtistRef) -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val shortcutItems = remember(song.id, song.artistId, song.artists, artists) {
-        val primaryArtist = song.primaryArtist
-        val computedItems = artists.mapIndexed { index, artist ->
-            val isPrimary = when {
-                primaryArtist.id != 0L && primaryArtist.id != -1L -> artist.id == primaryArtist.id
-                primaryArtist.name.isNotBlank() -> artist.name.equals(primaryArtist.name, ignoreCase = true)
-                else -> index == 0
+    val shortcutItems = remember(song.id, artists) {
+        // Each ArtistRef already knows whether it is the primary credit and carries its own
+        // gateway id, so no id/name matching against the song is needed. If nothing is flagged
+        // primary (defensive), treat the first entry as primary so the list still highlights one.
+        val hasPrimary = artists.any { it.isPrimary }
+        artists
+            .mapIndexed { index, ref ->
+                PlayerArtistShortcutItem(
+                    ref = ref,
+                    isPrimary = if (hasPrimary) ref.isPrimary else index == 0
+                )
             }
-            PlayerArtistShortcutItem(
-                artist = artist,
-                isPrimary = isPrimary
-            )
-        }
-
-        val hasPrimary = computedItems.any { it.isPrimary }
-        val normalizedItems = if (hasPrimary || computedItems.isEmpty()) {
-            computedItems
-        } else {
-            computedItems.mapIndexed { index, item ->
-                item.copy(isPrimary = index == 0)
-            }
-        }
-        normalizedItems.sortedByDescending { it.isPrimary }
+            .sortedByDescending { it.isPrimary }
     }
 
     val countLabel = when (shortcutItems.size) {
@@ -123,13 +113,13 @@ internal fun PlayerArtistPickerBottomSheet(
             ) {
                 shortcutItems.forEachIndexed { index, item ->
                     PlayerArtistShortcutCard(
-                        artist = item.artist,
+                        name = item.ref.name,
                         isPrimary = item.isPrimary,
                         shape = artistShortcutShape(
                             index = index,
                             count = shortcutItems.size
                         ),
-                        onClick = { onArtistClick(item.artist) }
+                        onClick = { onArtistClick(item.ref) }
                     )
                 }
             }
@@ -141,7 +131,7 @@ internal fun PlayerArtistPickerBottomSheet(
 
 @Composable
 private fun PlayerArtistShortcutCard(
-    artist: Artist,
+    name: String,
     isPrimary: Boolean,
     shape: RoundedCornerShape,
     onClick: () -> Unit
@@ -196,9 +186,11 @@ private fun PlayerArtistShortcutCard(
                     .background(avatarBackground),
                 contentAlignment = Alignment.Center
             ) {
+                // Credited-artist refs don't carry an image URL, so the picker shows the artist
+                // glyph. The tap still opens the real profile (with its artwork) via the gateway id.
                 SmartImage(
-                    model = artist.effectiveImageUrl,
-                    contentDescription = artist.name,
+                    model = null,
+                    contentDescription = name,
                     modifier = Modifier.fillMaxSize(),
                     placeholderResId = R.drawable.rounded_artist_24,
                     errorResId = R.drawable.rounded_artist_24,
@@ -214,7 +206,7 @@ private fun PlayerArtistShortcutCard(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = artist.name,
+                    text = name,
                     style = MaterialTheme.typography.titleMedium,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,

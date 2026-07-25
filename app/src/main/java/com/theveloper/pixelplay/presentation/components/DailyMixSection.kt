@@ -51,6 +51,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.theveloper.pixelplay.R
+import com.theveloper.pixelplay.data.model.ArtistRef
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.presentation.components.resolveNavBarOccupiedHeight
 import com.theveloper.pixelplay.presentation.components.subcomps.EnhancedSongListItem
@@ -72,6 +73,7 @@ fun DailyMixSection(
     onClickOpen: () -> Unit = {},
     onNavigateToAlbum: (Song) -> Unit = {},
     onNavigateToArtist: (Song) -> Unit = {},
+    onNavigateToArtistByRef: (ArtistRef) -> Unit = {},
     onNavigateToGenre: (Song) -> Unit = {},
 ) {
     val playlistViewModel: PlaylistViewModel = hiltViewModel()
@@ -136,6 +138,10 @@ fun DailyMixSection(
             },
             onNavigateToArtist = {
                 onNavigateToArtist(song)
+                showSongInfoSheet = false
+            },
+            onNavigateToArtistById = { ref ->
+                onNavigateToArtistByRef(ref)
                 showSongInfoSheet = false
             },
             onNavigateToGenre = {

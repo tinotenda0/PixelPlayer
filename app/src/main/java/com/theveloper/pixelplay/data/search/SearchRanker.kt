@@ -35,9 +35,30 @@ object SearchRanker {
     private const val FLOOR = 300 // retrieved but weakly matched — keep, don't drop
 
     private const val PRIMARY_FIELD_BONUS = 500 // matched the item's own name, not a secondary field
-    private const val ARTIST_STRONG_BONUS = 300 // a strongly-matching artist edges out same-tier songs
-    private const val ALBUM_STRONG_BONUS = 100
+    // No blanket artist boost. An artist already outranks a song that only matches via its artist
+    // field ("daft" → Daft Punk) because that song matches on a SECONDARY field and misses
+    // PRIMARY_FIELD_BONUS. The boost only ever mattered when a song ALSO matched on its own title
+    // ("beat it" → the song, not an obscure artist literally named "Beat It!"), and there the user
+    // wants the SONG — so equal exact matches fall through to merge order (songs first), while an
+    // exact-title ALBUM still wins its collision ("thriller" → the album) via ALBUM_STRONG_BONUS.
+    private const val ARTIST_STRONG_BONUS = 0
+    // Also 0: an exact-title bonus let junk albums ("Beat it" by some workout label) beat the real
+    // recording. The gateway (YouTube Music) already returns each category best/most-popular first,
+    // so equal exact matches fall through to that order (songs before artists before albums) —
+    // which surfaces the canonical song ("beat it" → Michael Jackson) instead of a look-alike.
+    private const val ALBUM_STRONG_BONUS = 0
     private const val PLAY_BONUS_CAP = 400      // < 1000, so it never crosses a tier
+
+    // Covers / karaoke / workout / remix versions pollute music search — the gateway returns the
+    // real recording first, but with every "Beat It" tying on exact-title an obscure workout edit
+    // could still float up. Sink these beneath the real thing (unless the user actually asked for
+    // the variant). Big enough to lose the tie, small enough to stay retrievable (well above FLOOR).
+    private const val VARIANT_PENALTY = 450
+    private val VARIANT_WORDS = listOf(
+        "karaoke", "tribute", "cover", "instrumental", "workout", "remix",
+        "8 bit", "8-bit", "sped up", "nightcore", "lo-fi", "lofi",
+        "made famous", "originally performed", "as made famous", "in the style of",
+    )
 
     // Upstream (YouTube Music / the gateway) returns results popularity-ordered. Closeness alone
     // would bury a hugely popular track under an obscure one whose title matches a character
@@ -160,7 +181,21 @@ object SearchRanker {
 
         // Micro-ordering within a tier by closeness (0..99).
         s += ((best?.quality ?: 0.0) * 99).toInt().coerceIn(0, 99)
+
+        // Demote cover/karaoke/workout/remix variants unless the user asked for them.
+        s -= variantPenalty(nq, item)
         return s
+    }
+
+    /** Penalty for cover/karaoke/etc variants whose keyword the query did not itself contain. */
+    private fun variantPenalty(nq: String, item: SearchResultItem): Int {
+        val hay = when (item) {
+            is SearchResultItem.SongItem -> "${item.song.title} ${item.song.displayArtist}"
+            is SearchResultItem.AlbumItem -> "${item.album.title} ${item.album.artist}"
+            is SearchResultItem.ArtistItem -> item.artist.name
+            is SearchResultItem.PlaylistItem -> item.playlist.name
+        }.lowercase()
+        return VARIANT_WORDS.sumOf { w -> if (hay.contains(w) && !nq.contains(w)) VARIANT_PENALTY else 0 }
     }
 
     /** Linear decay over the first [SOURCE_BONUS_DEPTH] results; 0 thereafter. */

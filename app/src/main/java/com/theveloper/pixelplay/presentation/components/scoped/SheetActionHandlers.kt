@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavHostController
+import com.theveloper.pixelplay.data.model.ArtistRef
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
@@ -26,6 +27,7 @@ internal data class SheetActionHandlers(
     val onLaunchSaveQueueOverlay: (List<Song>, String, (String, Set<String>) -> Unit) -> Unit,
     val onNavigateToAlbum: (Song) -> Unit,
     val onNavigateToArtist: (Song) -> Unit,
+    val onNavigateToArtistByRef: (ArtistRef) -> Unit,
     val onNavigateToGenre: (Song) -> Unit
 )
 
@@ -109,6 +111,23 @@ internal fun rememberSheetActionHandlers(
             Unit
         }
     }
+    val onNavigateToArtistByRef = remember(scope, navController) {
+        { ref: ArtistRef ->
+            scope.launch {
+                sheetMotionControllerState.value.snapCollapsed(sheetCollapsedTargetYState.value)
+            }
+            playerViewModelState.value.collapsePlayerSheet()
+            queueSheetControllerState.value.animate(false)
+            sheetModalOverlayControllerState.value.updateSelectedSongForInfo(null)
+            // routeForRef targets the SPECIFIC credit tapped (by its own gateway id), so a
+            // featured artist opens their profile instead of collapsing to the primary.
+            navController.navigateSafelyReplacing(
+                route = ArtistNavigation.routeForRef(ref),
+                patternToPop = Screen.ArtistDetail.route
+            )
+            Unit
+        }
+    }
     val onNavigateToGenre = remember(scope, navController) {
         { song: Song ->
             scope.launch {
@@ -137,6 +156,7 @@ internal fun rememberSheetActionHandlers(
         onLaunchSaveQueueOverlay = onLaunchSaveQueueOverlay,
         onNavigateToAlbum = onNavigateToAlbum,
         onNavigateToArtist = onNavigateToArtist,
+        onNavigateToArtistByRef = onNavigateToArtistByRef,
         onNavigateToGenre = onNavigateToGenre
     )
 }

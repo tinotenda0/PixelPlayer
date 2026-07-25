@@ -162,7 +162,6 @@ fun SongInfoBottomSheet(
     var pendingTonePermissionSong by remember { mutableStateOf<Song?>(null) }
     var pendingTonePermissionTarget by remember { mutableStateOf<ToneTarget?>(null) }
     val audioMeta by songInfoViewModel.audioMeta.collectAsStateWithLifecycle()
-    val resolvedArtists by songInfoViewModel.resolvedArtists.collectAsStateWithLifecycle()
     val isPixelPlayWatchAvailable by songInfoViewModel.isPixelPlayWatchAvailable.collectAsStateWithLifecycle()
     val isWatchAvailabilityResolved by songInfoViewModel.isWatchAvailabilityResolved.collectAsStateWithLifecycle()
     val isSendingToWatch by songInfoViewModel.isSendingToWatch.collectAsStateWithLifecycle()
@@ -784,24 +783,18 @@ fun SongInfoBottomSheet(
     )
 
     val artistPickerSheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    if (showArtistPicker && resolvedArtists.isNotEmpty()) {
+    if (showArtistPicker && song.artists.isNotEmpty()) {
         com.theveloper.pixelplay.presentation.components.player.PlayerArtistPickerBottomSheet(
             song = song,
-            artists = resolvedArtists,
+            // song.artists carries each credit's own gateway id; feeding it straight through means
+            // the tapped ref keeps that id (previously it was rebuilt from a locally-resolved
+            // Artist whose navidromeId was null for streamed songs, so it fell back to a name search).
+            artists = song.artists,
             sheetState = artistPickerSheetState,
             onDismiss = { showArtistPicker = false },
-            onArtistClick = { artist ->
+            onArtistClick = { ref ->
                 showArtistPicker = false
-                // Artist.navidromeId is the gateway identity; Artist.id is a local row and is
-                // meaningless for streamed content.
-                onNavigateToArtistById(
-                    ArtistRef(
-                        id = artist.id,
-                        name = artist.name,
-                        isPrimary = true,
-                        gatewayId = artist.navidromeId
-                    )
-                )
+                onNavigateToArtistById(ref)
             }
         )
     }

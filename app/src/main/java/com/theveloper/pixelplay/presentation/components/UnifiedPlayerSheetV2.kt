@@ -860,6 +860,7 @@ fun UnifiedPlayerSheetV2(
                 onLaunchSaveQueueOverlay = sheetActionHandlers.onLaunchSaveQueueOverlay,
                 onNavigateToAlbum = sheetActionHandlers.onNavigateToAlbum,
                 onNavigateToArtist = sheetActionHandlers.onNavigateToArtist,
+                onNavigateToArtistByRef = sheetActionHandlers.onNavigateToArtistByRef,
                 onNavigateToGenre = sheetActionHandlers.onNavigateToGenre,
                 queuePredictiveBackProgress = queuePredictiveBackProgress,
                 queuePredictiveBackSwipeEdge = queuePredictiveBackSwipeEdgeState

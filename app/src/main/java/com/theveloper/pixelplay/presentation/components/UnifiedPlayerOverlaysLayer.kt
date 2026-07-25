@@ -36,6 +36,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.theveloper.pixelplay.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
+import com.theveloper.pixelplay.data.model.ArtistRef
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.PlaylistViewModel
@@ -185,6 +186,7 @@ internal fun UnifiedPlayerSongInfoLayer(
     onDismissSongInfo: () -> Unit,
     onNavigateToAlbum: (Song) -> Unit,
     onNavigateToArtist: (Song) -> Unit,
+    onNavigateToArtistByRef: (ArtistRef) -> Unit,
     onNavigateToGenre: (Song) -> Unit
 ) {
     selectedSongForInfo?.let { staticSong ->
@@ -237,6 +239,7 @@ internal fun UnifiedPlayerSongInfoLayer(
                 },
                 onNavigateToAlbum = { onNavigateToAlbum(liveSong) },
                 onNavigateToArtist = { onNavigateToArtist(liveSong) },
+                onNavigateToArtistById = { ref -> onNavigateToArtistByRef(ref) },
                 onNavigateToGenre = { onNavigateToGenre(liveSong) },
                 onEditSong = { title, artist, album, albumArtist, composer, genre, lyrics, trackNumber, discNumber, replayGainTrackGainDb, replayGainAlbumGainDb, coverArtUpdate ->
                     playerViewModel.editSongMetadata(
@@ -302,6 +305,7 @@ internal fun UnifiedPlayerQueueAndSongInfoHost(
     onLaunchSaveQueueOverlay: (List<Song>, String, (String, Set<String>) -> Unit) -> Unit,
     onNavigateToAlbum: (Song) -> Unit,
     onNavigateToArtist: (Song) -> Unit,
+    onNavigateToArtistByRef: (ArtistRef) -> Unit,
     onNavigateToGenre: (Song) -> Unit,
     queuePredictiveBackProgress: Animatable<Float, AnimationVector1D>,
     queuePredictiveBackSwipeEdge: State<Int?>
@@ -449,6 +453,7 @@ internal fun UnifiedPlayerQueueAndSongInfoHost(
                 onDismissSongInfo = { onSelectedSongForInfoChange(null) },
                 onNavigateToAlbum = onNavigateToAlbum,
                 onNavigateToArtist = onNavigateToArtist,
+                onNavigateToArtistByRef = onNavigateToArtistByRef,
                 onNavigateToGenre = onNavigateToGenre
             )
         }

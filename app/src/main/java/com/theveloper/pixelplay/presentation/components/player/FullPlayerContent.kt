@@ -402,11 +402,13 @@ fun FullPlayerContent(
     }
 
     val onSongMetadataArtistClick = {
-        val resolvedArtistId = currentSongArtists.firstOrNull { it.id != 0L && it.id != -1L }?.id ?: song.artistId
-        if (currentSongArtists.size > 1) {
+        // Decide from the song's structured credits (song.artists), NOT the local Room lookup
+        // (currentSongArtists), which is empty for every streamed track — that emptiness is why
+        // the picker never opened for a feat. song and it silently went to the primary artist.
+        if (song.artists.size > 1) {
             showArtistPicker = true
         } else {
-            playerViewModel.triggerArtistNavigationFromPlayer(resolvedArtistId)
+            playerViewModel.triggerArtistNavigationFromPlayer(song)
         }
     }
 
@@ -984,14 +986,16 @@ fun FullPlayerContent(
     }
 
     val artistPickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    if (showArtistPicker && currentSongArtists.isNotEmpty()) {
+    if (showArtistPicker && song.artists.isNotEmpty()) {
         PlayerArtistPickerBottomSheet(
             song = song,
-            artists = currentSongArtists,
+            artists = song.artists,
             sheetState = artistPickerSheetState,
             onDismiss = { showArtistPicker = false },
-            onArtistClick = { artist ->
-                playerViewModel.triggerArtistNavigationFromPlayer(artist.id)
+            onArtistClick = { ref ->
+                // Route the EXACT credit that was tapped (carries its own gateway id), so a
+                // featured artist opens their profile instead of the song's primary artist.
+                playerViewModel.triggerArtistNavigationFromPlayer(ref)
                 showArtistPicker = false
             }
         )
@@ -1478,6 +1482,7 @@ private fun SongMetadataDisplaySection(
             PlayerSongInfo(
                 title = currentSong.title,
                 artist = currentSong.displayArtist,
+                song = currentSong,
                 artistId = currentSong.artistId,
                 artists = currentSongArtists,
                 expansionFractionProvider = expansionFractionProvider,
@@ -2133,6 +2138,7 @@ private data class DelayedContentFrame(
 private fun PlayerSongInfo(
     title: String,
     artist: String,
+    song: Song,
     artistId: Long,
     artists: List<Artist>,
     expansionFractionProvider: () -> Float,
@@ -2146,9 +2152,6 @@ private fun PlayerSongInfo(
 ) {
     val coroutineScope = rememberCoroutineScope()
     var isNavigatingToArtist by remember { mutableStateOf(false) }
-    val resolvedArtistId by remember(artists, artistId) {
-        derivedStateOf { artists.firstOrNull { it.id != 0L && it.id != -1L }?.id ?: artistId }
-    }
     val titleStyle = MaterialTheme.typography.headlineSmall.copy(
         fontWeight = FontWeight.Bold,
         fontFamily = GoogleSansRounded,
@@ -2216,7 +2219,9 @@ private fun PlayerSongInfo(
                     coroutineScope.launch {
                         isNavigatingToArtist = true
                         try {
-                            playerViewModel.triggerArtistNavigationFromPlayer(resolvedArtistId)
+                            // Long-press = quick jump to the primary artist (routeFor resolves a
+                            // streamed track by its structured identity, not the -1 local id).
+                            playerViewModel.triggerArtistNavigationFromPlayer(song)
                         } finally {
                             isNavigatingToArtist = false
                         }

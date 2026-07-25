@@ -451,6 +451,12 @@ fun HomeScreen(
                                     patternToPop = Screen.ArtistDetail.route
                                 )
                             },
+                            onNavigateToArtistByRef = { ref ->
+                                navController.navigateSafelyReplacing(
+                                    route = ArtistNavigation.routeForRef(ref),
+                                    patternToPop = Screen.ArtistDetail.route
+                                )
+                            },
                             onNavigateToGenre = { song ->
                                 song.genre?.let {
                                     navController.navigateSafely(Screen.GenreDetail.createRoute(java.net.URLEncoder.encode(it, "UTF-8")))
