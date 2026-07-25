@@ -186,18 +186,25 @@ class MediaFileHttpServerService : Service() {
         var lastFailureMessage: String? = null
         @Volatile
         private var castAccessPolicy: CastAccessPolicy = CastAccessPolicy.EMPTY
+        // The exact Song objects being cast, keyed by Song.id. The cast HTTP server resolves
+        // requested songs from HERE first, so cloud tracks (navidrome_<id>, yt-…) — whose ids are
+        // NOT in the local Long-keyed Room DB — resolve to a real stream URL instead of 404-ing and
+        // making the Chromecast auto-skip through the whole queue.
+        @Volatile
+        private var castSongRegistry: Map<String, Song> = emptyMap()
         private const val SERVER_START_PORT_RETRY_LIMIT = 3
         private const val ISO_BMFF_CODEC_PROBE_BYTES = 1024 * 1024
         private const val TRANSCODE_RANGE_WAIT_TIMEOUT_MINUTES = 10L
         private const val TRANSCODE_STREAM_IDLE_TIMEOUT_MS = 45_000L
 
         internal fun configureCastSessionAccess(
-            allowedSongIds: Collection<String>,
+            songs: Collection<Song>,
             castDeviceIpHint: String?
         ): CastAccessPolicy {
+            castSongRegistry = songs.associateBy { it.id }
             val updatedPolicy = CastSessionSecurity.buildAccessPolicy(
                 existingToken = castAccessPolicy.authToken,
-                allowedSongIds = allowedSongIds,
+                allowedSongIds = songs.map { it.id },
                 castDeviceIpHint = castDeviceIpHint,
                 // Always whitelist the server's own LAN IP so that on-device services
                 // (widget updates, notification art) that connect to http://serverIp:PORT/...
@@ -210,8 +217,12 @@ class MediaFileHttpServerService : Service() {
 
         internal fun currentCastAccessPolicy(): CastAccessPolicy = castAccessPolicy
 
+        /** The Song being cast under this id, if any (cloud tracks the local DB can't resolve). */
+        internal fun castSongById(songId: String): Song? = castSongRegistry[songId]
+
         internal fun clearCastSessionAccess() {
             castAccessPolicy = CastAccessPolicy.EMPTY
+            castSongRegistry = emptyMap()
         }
     }
 
@@ -1375,6 +1386,9 @@ class MediaFileHttpServerService : Service() {
     }
 
     private suspend fun resolveSongForServing(songId: String): Song? {
+        // Cast queue songs (including cloud ids the local DB can't resolve) come from here first.
+        castSongById(songId)?.let { return it }
+
         val repositorySong = musicRepository.getSong(songId).firstOrNull()
         if (repositorySong != null) {
             return repositorySong

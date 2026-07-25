@@ -591,7 +591,7 @@ class CastTransferStateHolder @Inject constructor(
             }
 
             val accessPolicy = MediaFileHttpServerService.configureCastSessionAccess(
-                allowedSongIds = currentQueue.map(Song::id),
+                songs = currentQueue,
                 castDeviceIpHint = castDeviceIpHint
             )
             val preflightSong = currentQueue.getOrNull(safeStartIndex)
@@ -887,7 +887,7 @@ class CastTransferStateHolder @Inject constructor(
             ?: lastRemoteStreamPosition.takeIf { it > 0L }
             ?: castStateHolder.remotePosition.value.coerceAtLeast(0L)
         val accessPolicy = MediaFileHttpServerService.configureCastSessionAccess(
-            allowedSongIds = queue.map(Song::id),
+            songs = queue,
             castDeviceIpHint = castDeviceIpHint
         )
 
@@ -1341,7 +1341,7 @@ class CastTransferStateHolder @Inject constructor(
         val castPlayer = castStateHolder.castPlayer
         if (castPlayer != null) {
             val accessPolicy = MediaFileHttpServerService.configureCastSessionAccess(
-                allowedSongIds = songsToPlay.map(Song::id),
+                songs = songsToPlay,
                 castDeviceIpHint = castDeviceIpHint
             )
             val completionDeferred = CompletableDeferred<Boolean>()
