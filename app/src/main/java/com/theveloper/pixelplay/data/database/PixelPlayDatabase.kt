@@ -797,6 +797,15 @@ abstract class PixelPlayDatabase : RoomDatabase() {
                     )
                 """.trimIndent())
 
+                // Some installs reach this migration with a `plex_downloads` table already on
+                // disk in a shape that doesn't match the entity (seen in the wild as a table
+                // Room reads back with zero columns) — CREATE TABLE IF NOT EXISTS then silently
+                // keeps the wrong shape, and Room's post-migration validation crashes on every
+                // future launch. Drop it first so this migration is idempotent regardless of
+                // what's already there; download-pin metadata is a re-derivable cache, not
+                // source-of-truth data, so losing it here is a safe trade against a permanent
+                // crash loop.
+                db.execSQL("DROP TABLE IF EXISTS `plex_downloads`")
                 db.execSQL("""
                     CREATE TABLE IF NOT EXISTS `plex_downloads` (
                         `plex_id` TEXT NOT NULL,
