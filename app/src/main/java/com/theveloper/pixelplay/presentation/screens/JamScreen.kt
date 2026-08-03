@@ -21,7 +21,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.PauseCircle
+import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
@@ -30,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -45,13 +48,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.theveloper.pixelplay.R
+import com.theveloper.pixelplay.data.navidrome.DeviceSession
 import com.theveloper.pixelplay.data.navidrome.JamHost
 import com.theveloper.pixelplay.presentation.components.SmartImage
 import com.theveloper.pixelplay.presentation.viewmodel.JamViewModel
 
 /**
- * The Jam hub: a switch to let the household control THIS device, and a live list of household
- * phones currently playing that you can control. Control-only — audio stays on the host.
+ * The Devices hub: this account's own devices (personal handoff - play here / send, plus remote
+ * control), and a switch + live list for the household (Jam - control-only, audio stays put).
  */
 @Composable
 fun JamScreen(
@@ -59,9 +63,12 @@ fun JamScreen(
     viewModel: JamViewModel = hiltViewModel()
 ) {
     val hosts by viewModel.hosts.collectAsStateWithLifecycle()
+    val devices by viewModel.devices.collectAsStateWithLifecycle()
     val allowControl by viewModel.allowControl.collectAsStateWithLifecycle()
     val selectedId by viewModel.selectedId.collectAsStateWithLifecycle()
+    val selectedDeviceId by viewModel.selectedDeviceId.collectAsStateWithLifecycle()
     val selected = hosts.firstOrNull { it.id == selectedId }
+    val selectedDevice = devices.firstOrNull { it.id == selectedDeviceId }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Column(
@@ -75,18 +82,43 @@ fun JamScreen(
                 modifier = Modifier.padding(start = 64.dp, end = 24.dp, top = 12.dp, bottom = 8.dp)
             )
 
-            if (selected != null) {
+            if (selectedDevice != null) {
+                DeviceControlPanel(device = selectedDevice, viewModel = viewModel)
+            } else if (selected != null) {
                 JamControlPanel(host = selected, viewModel = viewModel)
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
                 ) {
+                    item(key = "my-hdr") {
+                        Text(stringResource(R.string.jam_my_devices_header),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(vertical = 6.dp))
+                    }
+                    if (devices.isEmpty()) {
+                        item(key = "my-empty") {
+                            Text(stringResource(R.string.jam_my_devices_none),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 16.dp))
+                        }
+                    } else {
+                        items(devices, key = { it.id }) { device ->
+                            DeviceRow(
+                                device = device,
+                                onClick = { viewModel.selectDevice(device.id) },
+                                onPlayHere = { viewModel.playHere(device.id) },
+                                onSend = { viewModel.sendTo(device.id) }
+                            )
+                        }
+                    }
                     item(key = "allow") {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surfaceContainer,
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp)
                         ) {
                             Row(
                                 modifier = Modifier.padding(16.dp),
@@ -128,7 +160,13 @@ fun JamScreen(
         }
 
         FilledIconButton(
-            onClick = { if (selected != null) viewModel.clearSelection() else onBack() },
+            onClick = {
+                when {
+                    selectedDevice != null -> viewModel.clearDeviceSelection()
+                    selected != null -> viewModel.clearSelection()
+                    else -> onBack()
+                }
+            },
             colors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.onSurface
@@ -137,6 +175,104 @@ fun JamScreen(
         ) {
             Icon(Icons.AutoMirrored.Rounded.ArrowBack,
                 contentDescription = stringResource(R.string.common_back))
+        }
+    }
+}
+
+@Composable
+private fun DeviceRow(
+    device: DeviceSession,
+    onClick: () -> Unit,
+    onPlayHere: () -> Unit,
+    onSend: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SmartImage(
+            model = device.state.coverArt.takeIf { it.isNotBlank() },
+            contentDescription = null,
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.size(48.dp)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(device.deviceName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(device.state.title.ifBlank { stringResource(R.string.jam_idle) },
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        IconButton(onClick = onPlayHere) {
+            Icon(Icons.Rounded.PhoneAndroid, contentDescription = stringResource(R.string.jam_play_here))
+        }
+        IconButton(onClick = onSend) {
+            Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = stringResource(R.string.jam_send_here))
+        }
+    }
+}
+
+@Composable
+private fun DeviceControlPanel(device: DeviceSession, viewModel: JamViewModel) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        SmartImage(
+            model = device.state.coverArt.takeIf { it.isNotBlank() },
+            contentDescription = null,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.size(220.dp)
+        )
+        Spacer(Modifier.height(24.dp))
+        Text(device.state.title.ifBlank { stringResource(R.string.jam_idle) },
+            style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(device.state.artist, style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(device.deviceName,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp))
+        Spacer(Modifier.height(24.dp))
+        Row(verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            IconButton(onClick = { viewModel.previousDevice() }, modifier = Modifier.size(56.dp)) {
+                Icon(Icons.Rounded.SkipPrevious, contentDescription = "Previous",
+                    modifier = Modifier.size(40.dp))
+            }
+            IconButton(onClick = { viewModel.playPauseDevice() }, modifier = Modifier.size(72.dp)) {
+                Icon(
+                    if (device.state.isPlaying) Icons.Rounded.PauseCircle else Icons.Rounded.PlayCircle,
+                    contentDescription = "Play/Pause",
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            IconButton(onClick = { viewModel.nextDevice() }, modifier = Modifier.size(56.dp)) {
+                Icon(Icons.Rounded.SkipNext, contentDescription = "Next",
+                    modifier = Modifier.size(40.dp))
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = { viewModel.playHere(device.id) }) {
+                Icon(Icons.Rounded.PhoneAndroid, contentDescription = null,
+                    modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.jam_play_here))
+            }
+            OutlinedButton(onClick = { viewModel.sendTo(device.id) }) {
+                Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = null,
+                    modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.jam_send_here))
+            }
         }
     }
 }

@@ -1047,16 +1047,19 @@ class NavidromeRepository @Inject constructor(
 
     // ── Jam: household remote control ─────────────────────────────────────────
 
-    suspend fun registerJamDevice(deviceName: String, platform: String, sessionId: String): Boolean {
+    suspend fun registerJamDevice(
+        deviceName: String, platform: String, sessionId: String, householdVisible: Boolean
+    ): Boolean {
         if (!isLoggedIn) return false
         return withContext(Dispatchers.IO) {
-            api.registerDevice(deviceName, platform, sessionId).isSuccess
+            api.registerDevice(deviceName, platform, sessionId, householdVisible).isSuccess
         }
     }
 
     /** Host: publish state, get back any commands controllers queued. */
     suspend fun jamHeartbeat(
-        sessionId: String, state: JamState, queueIds: List<String>
+        sessionId: String, state: JamState, queueIds: List<String>,
+        queueIndex: Int, householdVisible: Boolean
     ): List<JamCommand> {
         if (!isLoggedIn) return emptyList()
         return withContext(Dispatchers.IO) {
@@ -1067,7 +1070,9 @@ class NavidromeRepository @Inject constructor(
                 "positionMs" to state.positionMs.toString(),
                 "durationMs" to state.durationMs.toString(),
                 "isPlaying" to state.isPlaying.toString(),
-                "queue" to queueIds.joinToString(",")
+                "queueIndex" to queueIndex.toString(),
+                "queue" to queueIds.joinToString(","),
+                "householdVisible" to householdVisible.toString()
             )
             val o = api.deviceHeartbeat(params).getOrNull() ?: return@withContext emptyList()
             val arr = o.optJSONArray("commands")
@@ -1078,6 +1083,8 @@ class NavidromeRepository @Inject constructor(
                     JamCommand(
                         action = c.optString("action"),
                         positionMs = payload?.optLong("positionMs")?.takeIf { payload.has("positionMs") },
+                        volume = payload?.optDouble("volume")?.takeIf { payload.has("volume") }
+                            ?.toFloat(),
                         songIds = (0 until (ids?.length() ?: 0)).mapNotNull { j -> ids?.optString(j) }
                     )
                 }
@@ -1125,6 +1132,82 @@ class NavidromeRepository @Inject constructor(
                 if (songIds.isNotEmpty()) put("songIds", songIds.joinToString(","))
             }
             api.jamControl(params).getOrNull()?.optBoolean("accepted", false) ?: false
+        }
+    }
+
+    // ── Personal handoff (same-account devices) ────────────────────────────
+
+    /** This account's other live devices — the pick-list for remote control and transfer. */
+    suspend fun getDevices(sessionId: String): List<DeviceSession> {
+        if (!isLoggedIn) return emptyList()
+        return withContext(Dispatchers.IO) {
+            val o = api.getDevices(sessionId).getOrNull() ?: return@withContext emptyList()
+            val arr = o.optJSONArray("device")
+            (0 until (arr?.length() ?: 0)).mapNotNull { i -> arr?.optJSONObject(i)?.let(::parseDeviceSession) }
+        }
+    }
+
+    /** Send a command to one of this account's own devices (remote control or transfer). */
+    suspend fun controlDevice(
+        targetId: String, action: String, positionMs: Long? = null,
+        volume: Float? = null, songIds: List<String> = emptyList()
+    ): Boolean {
+        if (!isLoggedIn) return false
+        return withContext(Dispatchers.IO) {
+            val params = buildMap {
+                put("targetId", targetId); put("action", action)
+                positionMs?.let { put("positionMs", it.toString()) }
+                volume?.let { put("volume", it.toString()) }
+                if (songIds.isNotEmpty()) put("songIds", songIds.joinToString(","))
+            }
+            api.controlDevice(params).getOrNull()?.optBoolean("accepted", false) ?: false
+        }
+    }
+
+    /** Full state of another of this account's devices, so this one can resume where it left off. */
+    suspend fun getHandoffSnapshot(targetId: String): DeviceSession? {
+        if (!isLoggedIn) return null
+        return withContext(Dispatchers.IO) {
+            val o = api.getHandoff(targetId).getOrNull() ?: return@withContext null
+            if (o.optString("id").isBlank()) null else parseDeviceSession(o)
+        }
+    }
+
+    private fun parseDeviceSession(o: org.json.JSONObject): DeviceSession {
+        val s = o.optJSONObject("state") ?: org.json.JSONObject()
+        val rawQueue = s.optString("queue")
+        return DeviceSession(
+            id = o.optString("id"),
+            deviceName = o.optString("deviceName", "Device"),
+            platform = o.optString("platform", ""),
+            lastSeen = o.optLong("lastSeen"),
+            state = DeviceSnapshotState(
+                songId = s.optString("songId"), title = s.optString("title"),
+                artist = s.optString("artist"), album = s.optString("album"),
+                coverArt = s.optString("coverArt"),
+                positionMs = s.optLong("positionMs"), durationMs = s.optLong("durationMs"),
+                isPlaying = s.optBoolean("isPlaying"), queueIndex = s.optInt("queueIndex"),
+                queue = rawQueue.split(",").filter { it.isNotBlank() }
+            )
+        )
+    }
+
+    /**
+     * Resolves song ids back into full [Song]s via the network, regardless of whether this
+     * device has ever cached them locally — needed to rebuild a queue handed off (or Jammed)
+     * from another device. Matches music-pwa's `songsByIds`.
+     */
+    suspend fun getSongsByIds(ids: List<String>): List<Song> {
+        if (!isLoggedIn || ids.isEmpty()) return emptyList()
+        return withContext(Dispatchers.IO) {
+            val bySongId = coroutineScope {
+                ids.map { id -> async { id to api.getSong(id).getOrNull() } }.awaitAll()
+            }.toMap()
+            // Preserve caller order and drop any id the server couldn't resolve.
+            ids.mapNotNull { id ->
+                bySongId[id]?.takeIf { it.has("id") }
+                    ?.let { NavidromeResponseParser.parseSong(it).toSong() }
+            }
         }
     }
 
@@ -1619,7 +1702,31 @@ data class JamHost(
 data class JamCommand(
     val action: String,
     val positionMs: Long? = null,
+    val volume: Float? = null,
     val songIds: List<String> = emptyList()
+)
+
+/** Full playback state of a personal-handoff device — enough to resume it elsewhere. */
+data class DeviceSnapshotState(
+    val songId: String = "",
+    val title: String = "",
+    val artist: String = "",
+    val album: String = "",
+    val coverArt: String = "",
+    val positionMs: Long = 0,
+    val durationMs: Long = 0,
+    val isPlaying: Boolean = false,
+    val queueIndex: Int = 0,
+    val queue: List<String> = emptyList()
+)
+
+/** One of this account's own devices (personal handoff — as opposed to a household Jam host). */
+data class DeviceSession(
+    val id: String,
+    val deviceName: String,
+    val platform: String,
+    val lastSeen: Long,
+    val state: DeviceSnapshotState
 )
 
 /** Spotify link + import status for the current user. */

@@ -6,12 +6,15 @@ import android.os.Build
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import com.theveloper.pixelplay.data.navidrome.DeviceSession
+import com.theveloper.pixelplay.data.navidrome.JamCommand
 import com.theveloper.pixelplay.data.navidrome.JamHost
 import com.theveloper.pixelplay.data.navidrome.JamState
 import com.theveloper.pixelplay.data.navidrome.NavidromeRepository
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.service.MusicService
 import com.theveloper.pixelplay.data.service.PlaybackActivityTracker
+import com.theveloper.pixelplay.utils.MediaItemBuilder
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,9 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -34,16 +35,24 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * The "Jam" (Spotify-Jam style) coordinator.
+ * Cross-device playback: both "Jam" (Spotify-Jam-style household control) and personal handoff
+ * (Plexamp/Spotify-Connect-style, same account only) share one session and one heartbeat loop,
+ * because the gateway's session store is a single per-device record either kind of command can be
+ * queued against — see backend `handoff.py`.
  *
- * HOST role (automatic): while this device is playing AND "Allow household control" is on, it
- * heartbeats its now-playing state to the gateway and applies any commands other household phones
- * send (play/pause/next/previous/seek). Runs whether or not the UI is open, via an app-scoped
- * MediaController bound to [MusicService], so a controller can drive the phone while it's in a
- * pocket driving the car.
+ * SESSION role (automatic): once this device has played something in this process, it heartbeats
+ * its now-playing state to the gateway and applies any commands queued for it — by a household
+ * guest (Jam) or by another of this account's own devices (personal handoff): play/pause/next/
+ * previous/seek/volume, and queue-loading (a command carrying song ids replaces the local queue
+ * before the action is applied — this is how a transfer/cast actually moves music, not just a
+ * position). Runs whether or not the UI is open, via an app-scoped MediaController bound to
+ * [MusicService]. Registration does not require the "allow household control" preference — that
+ * preference only controls whether this session is *advertised* to Jam ([householdVisible]); a
+ * personal handoff between your own devices should always work.
  *
- * GUEST role (on demand): [startDiscovery] polls the gateway for household devices currently
- * playing and exposes them as [hosts]; [control] sends a command to one.
+ * GUEST role (on demand): [startDiscovery] polls for household devices currently playing (Jam);
+ * [startDeviceDiscovery] polls for this account's other devices, playing or not (personal).
+ * [control] / [controlDevice] send a command to one; [transferTo] / [pullFrom] move playback.
  */
 @Singleton
 class JamManager @Inject constructor(
@@ -62,38 +71,48 @@ class JamManager @Inject constructor(
     /** Household devices currently playing (excludes this device). Updated while discovering. */
     val hosts: StateFlow<List<JamHost>> = _hosts.asStateFlow()
 
+    private val _devices = MutableStateFlow<List<DeviceSession>>(emptyList())
+    /** This account's other live devices, playing or idle. Updated while discovering. */
+    val devices: StateFlow<List<DeviceSession>> = _devices.asStateFlow()
+
     @Volatile
     private var controller: MediaController? = null
     private var discoveryJob: Job? = null
+    private var deviceDiscoveryJob: Job? = null
 
-    /** Start the host role. Called once, app-scoped, from PixelPlayApplication. */
+    /** Start the session role. Called once, app-scoped, from PixelPlayApplication. */
     fun start() {
         scope.launch {
-            combine(
-                PlaybackActivityTracker.isPlaybackActiveFlow,
-                userPreferencesRepository.allowHouseholdControlFlow
-            ) { active, allow -> active && allow }
-                .distinctUntilChanged()
-                .collectLatest { hosting ->
-                    if (!hosting) return@collectLatest
-                    navidromeRepository.registerJamDevice(deviceName, "android", sessionId)
-                    // collectLatest cancels this loop the moment hosting flips false.
-                    while (true) {
-                        runCatching {
-                            val snapshot = readState()
-                            if (snapshot != null) {
-                                val (state, queue) = snapshot
-                                val commands = navidromeRepository.jamHeartbeat(sessionId, state, queue)
-                                commands.forEach { applyCommand(it.action, it.positionMs) }
-                            }
-                        }
-                        delay(HOST_HEARTBEAT_MS)
-                    }
+            // Wait for this process's first real playback before registering at all - registering
+            // eagerly on a cold, idle launch would bind (and thus start) MusicService just for
+            // handoff visibility, which is a background-service lifetime cost nobody asked for.
+            // Once that has happened, this device stays a valid handoff target - paused included -
+            // until the process dies, which matches how Spotify Connect behaves.
+            PlaybackActivityTracker.isPlaybackActiveFlow.first { it }
+            navidromeRepository.registerJamDevice(
+                deviceName, "android", sessionId, householdVisible()
+            )
+            while (true) {
+                var playing = false
+                runCatching {
+                    val snapshot = readState()
+                    val state = snapshot?.state ?: JamState()
+                    playing = state.isPlaying
+                    val commands = navidromeRepository.jamHeartbeat(
+                        sessionId, state, snapshot?.queueIds.orEmpty(),
+                        snapshot?.queueIndex ?: 0, householdVisible()
+                    )
+                    commands.forEach { applyCommand(it) }
                 }
+                delay(if (playing) HOST_HEARTBEAT_MS else HOST_IDLE_HEARTBEAT_MS)
+            }
         }
     }
 
-    // ── Guest role ───────────────────────────────────────────────────────────
+    private suspend fun householdVisible(): Boolean =
+        userPreferencesRepository.allowHouseholdControlFlow.first()
+
+    // ── Jam guest role (household) ─────────────────────────────────────────
     fun startDiscovery() {
         if (discoveryJob?.isActive == true) return
         discoveryJob = scope.launch {
@@ -112,7 +131,61 @@ class JamManager @Inject constructor(
     suspend fun control(hostId: String, action: String, positionMs: Long? = null): Boolean =
         navidromeRepository.jamControl(hostId, action, positionMs)
 
-    // ── Host MediaController plumbing (main-thread only) ──────────────────────
+    // ── Personal handoff guest role (same account) ──────────────────────────
+    fun startDeviceDiscovery() {
+        if (deviceDiscoveryJob?.isActive == true) return
+        deviceDiscoveryJob = scope.launch {
+            while (true) {
+                _devices.value = navidromeRepository.getDevices(sessionId)
+                delay(GUEST_POLL_MS)
+            }
+        }
+    }
+
+    fun stopDeviceDiscovery() {
+        deviceDiscoveryJob?.cancel()
+        deviceDiscoveryJob = null
+    }
+
+    suspend fun controlDevice(
+        targetId: String, action: String, positionMs: Long? = null,
+        volume: Float? = null, songIds: List<String> = emptyList()
+    ): Boolean = navidromeRepository.controlDevice(targetId, action, positionMs, volume, songIds)
+
+    /** Push this device's current queue+position to [targetId], then pause playback here. */
+    suspend fun transferTo(targetId: String): Boolean {
+        val snapshot = readState() ?: return false
+        val remaining = snapshot.queueIds.drop(snapshot.queueIndex)
+        if (remaining.isEmpty()) return false
+        val ok = navidromeRepository.controlDevice(
+            targetId, "play", positionMs = snapshot.state.positionMs, songIds = remaining
+        )
+        if (ok) withContext(Dispatchers.Main) { controller?.pause() }
+        return ok
+    }
+
+    /** Pull [targetId]'s current queue+position into this device, then pause it at the source. */
+    suspend fun pullFrom(targetId: String): Boolean {
+        val snapshot = navidromeRepository.getHandoffSnapshot(targetId) ?: return false
+        val ids = snapshot.state.queue
+        if (ids.isEmpty()) return false
+        val startIndex = snapshot.state.queueIndex.coerceIn(0, ids.size - 1)
+        val songs = navidromeRepository.getSongsByIds(ids.drop(startIndex))
+        if (songs.isEmpty()) return false
+        withContext(Dispatchers.Main) {
+            val c = ensureController() ?: return@withContext
+            c.setMediaItems(
+                songs.map { MediaItemBuilder.build(it) }, 0,
+                snapshot.state.positionMs.coerceAtLeast(0)
+            )
+            c.prepare()
+            if (snapshot.state.isPlaying) c.play()
+        }
+        navidromeRepository.controlDevice(targetId, "pause")
+        return true
+    }
+
+    // ── MediaController plumbing (main-thread only) ────────────────────────
     private suspend fun ensureController(): MediaController? {
         controller?.let { return it }
         return withContext(Dispatchers.Main) {
@@ -123,7 +196,9 @@ class JamManager @Inject constructor(
         }
     }
 
-    private suspend fun readState(): Pair<JamState, List<String>>? = withContext(Dispatchers.Main) {
+    private data class LocalSnapshot(val state: JamState, val queueIds: List<String>, val queueIndex: Int)
+
+    private suspend fun readState(): LocalSnapshot? = withContext(Dispatchers.Main) {
         val c = ensureController() ?: return@withContext null
         val item = c.currentMediaItem ?: return@withContext null
         val md = item.mediaMetadata
@@ -138,19 +213,30 @@ class JamManager @Inject constructor(
             isPlaying = c.isPlaying
         )
         val queueIds = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }
-        state to queueIds
+        LocalSnapshot(state, queueIds, c.currentMediaItemIndex.coerceAtLeast(0))
     }
 
-    private suspend fun applyCommand(action: String, positionMs: Long?) = withContext(Dispatchers.Main) {
+    private suspend fun applyCommand(cmd: JamCommand) = withContext(Dispatchers.Main) {
         val c = ensureController() ?: return@withContext
-        when (action) {
+        if (cmd.songIds.isNotEmpty()) {
+            val songs = navidromeRepository.getSongsByIds(cmd.songIds)
+            if (songs.isNotEmpty()) {
+                c.setMediaItems(
+                    songs.map { MediaItemBuilder.build(it) }, 0,
+                    (cmd.positionMs ?: 0L).coerceAtLeast(0L)
+                )
+                c.prepare()
+            }
+        }
+        when (cmd.action) {
             "playpause" -> if (c.isPlaying) c.pause() else c.play()
             "play" -> c.play()
             "pause" -> c.pause()
             "next" -> c.seekToNextMediaItem()
             "previous" -> c.seekToPreviousMediaItem()
-            "seek" -> positionMs?.let { c.seekTo(it) }
-            else -> Unit  // "enqueue" reserved for a later version
+            "seek" -> if (cmd.songIds.isEmpty()) cmd.positionMs?.let { c.seekTo(it) }
+            "volume" -> cmd.volume?.let { c.volume = it.coerceIn(0f, 1f) }
+            else -> Unit
         }
     }
 
@@ -170,6 +256,7 @@ class JamManager @Inject constructor(
 
     companion object {
         private const val HOST_HEARTBEAT_MS = 4000L
+        private const val HOST_IDLE_HEARTBEAT_MS = 15000L
         private const val GUEST_POLL_MS = 3000L
     }
 }

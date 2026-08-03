@@ -335,6 +335,7 @@ class NavidromeApiService @Inject constructor(
      */
     suspend fun getSong(id: String): Result<JSONObject> {
         return requestAndParse("getSong", mapOf("id" to id))
+            .map { it.optJSONObject("song") ?: JSONObject() }
     }
 
     /**
@@ -471,9 +472,11 @@ class NavidromeApiService @Inject constructor(
         requestAndParse(endpoint, params).map { it.optJSONObject(key) ?: JSONObject() }
 
     /** Register this device as a controllable session. */
-    suspend fun registerDevice(deviceName: String, platform: String, sessionId: String) =
-        jamCall("registerDevice", "playerSession",
-            mapOf("deviceName" to deviceName, "platform" to platform, "sessionId" to sessionId))
+    suspend fun registerDevice(
+        deviceName: String, platform: String, sessionId: String, householdVisible: Boolean
+    ) = jamCall("registerDevice", "playerSession",
+        mapOf("deviceName" to deviceName, "platform" to platform, "sessionId" to sessionId,
+            "householdVisible" to householdVisible.toString()))
 
     /** Publish this host's playback state AND collect commands queued by controllers, in one call. */
     suspend fun deviceHeartbeat(params: Map<String, String>) =
@@ -486,6 +489,20 @@ class NavidromeApiService @Inject constructor(
     /** Send a control command to a host device (any household user). */
     suspend fun jamControl(params: Map<String, String>) =
         jamCall("jamControl", "playerCommand", params)
+
+    // ─── Personal handoff (same-account devices) ──────────────────────────
+
+    /** This account's other live devices — the pick-list for remote control and transfer. */
+    suspend fun getDevices(sessionId: String) =
+        jamCall("getDevices", "playerDevices", mapOf("sessionId" to sessionId))
+
+    /** Send a command to one of this account's own devices. */
+    suspend fun controlDevice(params: Map<String, String>) =
+        jamCall("controlDevice", "playerCommand", params)
+
+    /** Full state of another of this account's devices, to resume exactly where it left off. */
+    suspend fun getHandoff(targetId: String) =
+        jamCall("getHandoff", "playerSession", mapOf("targetId" to targetId))
 
     /** Starting pool of recognisable artists for the pairwise taste onboarding. */
     suspend fun getTasteStart(): Result<List<JSONObject>> {
