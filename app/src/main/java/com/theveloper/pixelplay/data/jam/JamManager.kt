@@ -3,6 +3,7 @@ package com.theveloper.pixelplay.data.jam
 import android.content.ComponentName
 import android.content.Context
 import android.os.Build
+import androidx.media3.common.MediaItem
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
@@ -203,7 +204,7 @@ class JamManager @Inject constructor(
         val item = c.currentMediaItem ?: return@withContext null
         val md = item.mediaMetadata
         val state = JamState(
-            songId = item.mediaId,
+            songId = item.wireId(),
             title = md.title?.toString().orEmpty(),
             artist = md.artist?.toString().orEmpty(),
             album = md.albumTitle?.toString().orEmpty(),
@@ -212,9 +213,20 @@ class JamManager @Inject constructor(
             durationMs = c.duration.coerceAtLeast(0),
             isPlaying = c.isPlaying
         )
-        val queueIds = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }
+        val queueIds = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).wireId() }
         LocalSnapshot(state, queueIds, c.currentMediaItemIndex.coerceAtLeast(0))
     }
+
+    /**
+     * The id to report over the wire (Jam/handoff), as opposed to [MediaItem.mediaId] — which
+     * for a gateway-sourced song is PixelPlayer's own locally-prefixed "navidrome_<id>" (see
+     * [com.theveloper.pixelplay.data.model.Song.id]), meaningless to any other client. The raw
+     * gateway id is already carried separately in the metadata extras for exactly this kind of
+     * external use; fall back to mediaId for sources with no gateway id (nothing outside this
+     * device could resolve those anyway).
+     */
+    private fun MediaItem.wireId(): String =
+        mediaMetadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_NAVIDROME_ID) ?: mediaId
 
     private suspend fun applyCommand(cmd: JamCommand) = withContext(Dispatchers.Main) {
         val c = ensureController() ?: return@withContext
@@ -255,8 +267,13 @@ class JamManager @Inject constructor(
     private fun UUID.hex(): String = toString().replace("-", "")
 
     companion object {
-        private const val HOST_HEARTBEAT_MS = 4000L
-        private const val HOST_IDLE_HEARTBEAT_MS = 15000L
+        // A command posts instantly regardless of these - they only bound how long THIS device
+        // takes to notice one on its next poll. Matches music-pwa's mitigation (was 4000/15000;
+        // the idle tier in particular was the dominant source of reported >10s control lag,
+        // since a paused-but-open device sits on it, not the active one). A real fix is push
+        // (WebSocket/SSE) instead of polling at all.
+        private const val HOST_HEARTBEAT_MS = 2000L
+        private const val HOST_IDLE_HEARTBEAT_MS = 5000L
         private const val GUEST_POLL_MS = 3000L
     }
 }
