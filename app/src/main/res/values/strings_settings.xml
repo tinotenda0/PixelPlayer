@@ -328,6 +328,7 @@
     <string name="jam_allow_subtitle">While you\'re playing, others can see it and control playback (skip, pause). Turn off to stay private.</string>
     <string name="jam_my_devices_header">My devices</string>
     <string name="jam_my_devices_none">No other devices are signed in right now.</string>
+    <string name="jam_playing_on_format">Playing on %1$s</string>
     <string name="jam_play_here">Play here</string>
     <string name="jam_send_here">Send</string>
     <string name="jam_devices_header">Household</string>

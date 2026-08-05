@@ -46,6 +46,8 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import okhttp3.sse.EventSource
+import okhttp3.sse.EventSourceListener
 import timber.log.Timber
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -1045,9 +1047,14 @@ class NavidromeRepository @Inject constructor(
             message = o.optString("message", "")
         )
 
-    // ── Jam: household remote control ─────────────────────────────────────────
+    // ── Cross-device playback: one canonical session per user, pushed over SSE ─────────────
+    // Replaces the old poll-everything design: instead of N devices each independently
+    // reporting their own state, there's exactly one canonical "what's playing" per account.
+    // A device publishes itself active (publishState); everyone interested - this account's
+    // other devices, and (if visible) household members watching Jam - hears about it
+    // instantly over subscribeSession's push stream, not by polling.
 
-    suspend fun registerJamDevice(
+    suspend fun registerDevice(
         deviceName: String, platform: String, sessionId: String, householdVisible: Boolean
     ): Boolean {
         if (!isLoggedIn) return false
@@ -1056,12 +1063,13 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
-    /** Host: publish state, get back any commands controllers queued. */
-    suspend fun jamHeartbeat(
-        sessionId: String, state: JamState, queueIds: List<String>,
-        queueIndex: Int, householdVisible: Boolean
-    ): List<JamCommand> {
-        if (!isLoggedIn) return emptyList()
+    /** Publishes this device's playback state, making it the account's one active device. Any
+     *  device that was previously active gets pushed a `superseded` command over its own
+     *  subscribeSession stream - a real takeover, not just a state overwrite. */
+    suspend fun publishState(
+        sessionId: String, state: JamState, queueIds: List<String>, queueIndex: Int
+    ): Boolean {
+        if (!isLoggedIn) return false
         return withContext(Dispatchers.IO) {
             val params = mapOf(
                 "sessionId" to sessionId,
@@ -1071,73 +1079,13 @@ class NavidromeRepository @Inject constructor(
                 "durationMs" to state.durationMs.toString(),
                 "isPlaying" to state.isPlaying.toString(),
                 "queueIndex" to queueIndex.toString(),
-                "queue" to queueIds.joinToString(","),
-                "householdVisible" to householdVisible.toString()
+                "queue" to queueIds.joinToString(",")
             )
-            val o = api.deviceHeartbeat(params).getOrNull() ?: return@withContext emptyList()
-            val arr = o.optJSONArray("commands")
-            (0 until (arr?.length() ?: 0)).mapNotNull { i ->
-                arr?.optJSONObject(i)?.let { c ->
-                    val payload = c.optJSONObject("payload")
-                    val ids = payload?.optJSONArray("songIds")
-                    JamCommand(
-                        action = c.optString("action"),
-                        positionMs = payload?.optLong("positionMs")?.takeIf { payload.has("positionMs") },
-                        volume = payload?.optDouble("volume")?.takeIf { payload.has("volume") }
-                            ?.toFloat(),
-                        songIds = (0 until (ids?.length() ?: 0)).mapNotNull { j -> ids?.optString(j) }
-                    )
-                }
-            }
+            api.publishState(params).isSuccess
         }
     }
 
-    /** Guest: household devices currently playing (auto-discovered hosts). */
-    suspend fun getJamHosts(sessionId: String): List<JamHost> {
-        if (!isLoggedIn) return emptyList()
-        return withContext(Dispatchers.IO) {
-            val o = api.getJamHosts(sessionId).getOrNull() ?: return@withContext emptyList()
-            val arr = o.optJSONArray("host")
-            (0 until (arr?.length() ?: 0)).mapNotNull { i ->
-                arr?.optJSONObject(i)?.let { h ->
-                    val s = h.optJSONObject("state") ?: org.json.JSONObject()
-                    JamHost(
-                        id = h.optString("id"),
-                        user = h.optString("user"),
-                        deviceName = h.optString("deviceName", "Device"),
-                        platform = h.optString("platform", ""),
-                        state = JamState(
-                            songId = s.optString("songId"), title = s.optString("title"),
-                            artist = s.optString("artist"), album = s.optString("album"),
-                            coverArt = s.optString("coverArt"),
-                            positionMs = s.optLong("positionMs"),
-                            durationMs = s.optLong("durationMs"),
-                            isPlaying = s.optBoolean("isPlaying")
-                        )
-                    )
-                }
-            }
-        }
-    }
-
-    /** Guest: send a control command to a host. */
-    suspend fun jamControl(
-        targetId: String, action: String, positionMs: Long? = null, songIds: List<String> = emptyList()
-    ): Boolean {
-        if (!isLoggedIn) return false
-        return withContext(Dispatchers.IO) {
-            val params = buildMap {
-                put("targetId", targetId); put("action", action)
-                positionMs?.let { put("positionMs", it.toString()) }
-                if (songIds.isNotEmpty()) put("songIds", songIds.joinToString(","))
-            }
-            api.jamControl(params).getOrNull()?.optBoolean("accepted", false) ?: false
-        }
-    }
-
-    // ── Personal handoff (same-account devices) ────────────────────────────
-
-    /** This account's other live devices — the pick-list for remote control and transfer. */
+    /** This account's other registered devices - the pick-list for transfer, playing or not. */
     suspend fun getDevices(sessionId: String): List<DeviceSession> {
         if (!isLoggedIn) return emptyList()
         return withContext(Dispatchers.IO) {
@@ -1147,48 +1095,116 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
-    /** Send a command to one of this account's own devices (remote control or transfer). */
-    suspend fun controlDevice(
-        targetId: String, action: String, positionMs: Long? = null,
-        volume: Float? = null, songIds: List<String> = emptyList()
+    /** This account's one canonical active session, or null if nothing is playing anywhere. */
+    suspend fun getMySession(): ActiveSession? {
+        if (!isLoggedIn) return null
+        return withContext(Dispatchers.IO) {
+            val o = api.getSession().getOrNull() ?: return@withContext null
+            if (o.optString("activeDeviceId").isBlank()) null else parseActiveSession(o)
+        }
+    }
+
+    /** Every other household member's active, visible session - the auto-discovered Jam list. */
+    suspend fun getHouseholdSessions(): List<ActiveSession> {
+        if (!isLoggedIn) return emptyList()
+        return withContext(Dispatchers.IO) {
+            val o = api.getHouseholdSessions().getOrNull() ?: return@withContext emptyList()
+            val arr = o.optJSONArray("session")
+            (0 until (arr?.length() ?: 0)).mapNotNull { i -> arr?.optJSONObject(i)?.let(::parseActiveSession) }
+        }
+    }
+
+    /** Sends a command, targeting it one of two ways: targetSessionId names a specific one of
+     *  the caller's own devices (possibly idle - transfer/cast); targetUser resolves to
+     *  "whichever device is currently active for this user" (ordinary remote control -
+     *  yourself, or another household member via Jam, gated by their household_visible flag
+     *  server-side). */
+    suspend fun sendCommand(
+        action: String, positionMs: Long? = null, volume: Float? = null,
+        songIds: List<String> = emptyList(), targetUser: String? = null,
+        targetSessionId: String? = null
     ): Boolean {
         if (!isLoggedIn) return false
         return withContext(Dispatchers.IO) {
             val params = buildMap {
-                put("targetId", targetId); put("action", action)
+                put("action", action)
                 positionMs?.let { put("positionMs", it.toString()) }
                 volume?.let { put("volume", it.toString()) }
                 if (songIds.isNotEmpty()) put("songIds", songIds.joinToString(","))
+                targetUser?.let { put("targetUser", it) }
+                targetSessionId?.let { put("targetSessionId", it) }
             }
-            api.controlDevice(params).getOrNull()?.optBoolean("accepted", false) ?: false
+            api.sendCommand(params).getOrNull()?.optBoolean("accepted", false) ?: false
         }
     }
 
-    /** Full state of another of this account's devices, so this one can resume where it left off. */
-    suspend fun getHandoffSnapshot(targetId: String): DeviceSession? {
-        if (!isLoggedIn) return null
-        return withContext(Dispatchers.IO) {
-            val o = api.getHandoff(targetId).getOrNull() ?: return@withContext null
-            if (o.optString("id").isBlank()) null else parseDeviceSession(o)
-        }
+    /** Opens this device's live push channel: session changes (this account's own, and
+     *  household members' if visible) and commands sent to it. Returns the EventSource handle
+     *  - OkHttp does not auto-reconnect, unlike a browser's EventSource, so the caller owns
+     *  noticing [onClosed] and reconnecting with backoff. */
+    fun subscribeSession(
+        sessionId: String,
+        onSession: (ActiveSession) -> Unit,
+        onCommand: (JamCommand) -> Unit,
+        onClosed: () -> Unit,
+    ): EventSource {
+        return api.subscribeSession(sessionId, object : EventSourceListener() {
+            override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
+                try {
+                    val json = org.json.JSONObject(data)
+                    when (type) {
+                        "session" -> onSession(parseActiveSession(json))
+                        "command" -> onCommand(parseJamCommand(json))
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "$TAG: failed to parse subscribeSession event type=$type")
+                }
+            }
+
+            override fun onClosed(eventSource: EventSource) = onClosed()
+
+            override fun onFailure(eventSource: EventSource, t: Throwable?, response: okhttp3.Response?) {
+                Timber.w(t, "$TAG: subscribeSession connection failed")
+                onClosed()
+            }
+        })
     }
 
-    private fun parseDeviceSession(o: org.json.JSONObject): DeviceSession {
+    private fun parseJamCommand(c: org.json.JSONObject): JamCommand {
+        val payload = c.optJSONObject("payload")
+        val ids = payload?.optJSONArray("songIds")
+        return JamCommand(
+            action = c.optString("action"),
+            positionMs = payload?.optLong("positionMs")?.takeIf { payload.has("positionMs") },
+            volume = payload?.optDouble("volume")?.takeIf { payload.has("volume") }?.toFloat(),
+            songIds = (0 until (ids?.length() ?: 0)).mapNotNull { j -> ids?.optString(j) }
+        )
+    }
+
+    private fun parseDeviceSession(o: org.json.JSONObject): DeviceSession = DeviceSession(
+        id = o.optString("id"),
+        deviceName = o.optString("deviceName", "Device"),
+        platform = o.optString("platform", ""),
+        lastSeen = o.optLong("lastSeen")
+    )
+
+    private fun parseActiveSession(o: org.json.JSONObject): ActiveSession {
         val s = o.optJSONObject("state") ?: org.json.JSONObject()
-        val rawQueue = s.optString("queue")
-        return DeviceSession(
-            id = o.optString("id"),
+        val queueArr = s.optJSONArray("queue")
+        return ActiveSession(
+            user = o.optString("user"),
+            activeDeviceId = o.optString("activeDeviceId"),
             deviceName = o.optString("deviceName", "Device"),
             platform = o.optString("platform", ""),
-            lastSeen = o.optLong("lastSeen"),
-            state = DeviceSnapshotState(
+            state = PlayerSessionState(
                 songId = s.optString("songId"), title = s.optString("title"),
                 artist = s.optString("artist"), album = s.optString("album"),
                 coverArt = s.optString("coverArt"),
                 positionMs = s.optLong("positionMs"), durationMs = s.optLong("durationMs"),
                 isPlaying = s.optBoolean("isPlaying"), queueIndex = s.optInt("queueIndex"),
-                queue = rawQueue.split(",").filter { it.isNotBlank() }
-            )
+                queue = (0 until (queueArr?.length() ?: 0)).mapNotNull { i -> queueArr?.optString(i) }
+            ),
+            updatedAt = o.optLong("updatedAt")
         )
     }
 
@@ -1677,7 +1693,7 @@ data class YtmLink(
     val intervalSeconds: Int = 5
 )
 
-/** A Jam host's current playback state (for the guest's now-playing view). */
+/** This device's local playback state, as published to the server. */
 data class JamState(
     val songId: String = "",
     val title: String = "",
@@ -1689,16 +1705,8 @@ data class JamState(
     val isPlaying: Boolean = false
 )
 
-/** A household device currently playing, offered as a controllable Jam host. */
-data class JamHost(
-    val id: String,
-    val user: String,
-    val deviceName: String,
-    val platform: String,
-    val state: JamState
-)
-
-/** A control command handed to a host on its heartbeat. */
+/** A command pushed to this device over its live subscribeSession connection - remote control,
+ *  or (when songIds is non-empty) a transfer/cast handing it a whole new queue to play. */
 data class JamCommand(
     val action: String,
     val positionMs: Long? = null,
@@ -1706,8 +1714,9 @@ data class JamCommand(
     val songIds: List<String> = emptyList()
 )
 
-/** Full playback state of a personal-handoff device — enough to resume it elsewhere. */
-data class DeviceSnapshotState(
+/** One account's canonical active session — the "who/what/where" a device publishing itself
+ *  active produces, and every observer (own devices, Jam) receives. */
+data class PlayerSessionState(
     val songId: String = "",
     val title: String = "",
     val artist: String = "",
@@ -1720,13 +1729,22 @@ data class DeviceSnapshotState(
     val queue: List<String> = emptyList()
 )
 
-/** One of this account's own devices (personal handoff — as opposed to a household Jam host). */
+data class ActiveSession(
+    val user: String,
+    val activeDeviceId: String,
+    val deviceName: String,
+    val platform: String,
+    val state: PlayerSessionState,
+    val updatedAt: Long
+)
+
+/** One of this account's registered devices — identity and reachability only. Playback state
+ *  lives on the account's one canonical ActiveSession instead, not per device. */
 data class DeviceSession(
     val id: String,
     val deviceName: String,
     val platform: String,
-    val lastSeen: Long,
-    val state: DeviceSnapshotState
+    val lastSeen: Long
 )
 
 /** Spotify link + import status for the current user. */

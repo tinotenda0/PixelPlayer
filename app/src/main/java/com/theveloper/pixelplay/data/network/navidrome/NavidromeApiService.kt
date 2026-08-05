@@ -8,6 +8,9 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.sse.EventSource
+import okhttp3.sse.EventSourceListener
+import okhttp3.sse.EventSources
 import org.json.JSONObject
 import timber.log.Timber
 import java.security.MessageDigest
@@ -47,6 +50,14 @@ class NavidromeApiService @Inject constructor(
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS) // Longer timeout for streaming
         .writeTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+    // subscribeSession is a long-lived connection, not a request/response - the regular
+    // client's 30s read timeout would fire between the server's ~20s keepalive pings. No
+    // timeout at all here; EventSource's own listener callbacks are how we notice it's gone.
+    private val sseClient: OkHttpClient = baseOkHttpClient.newBuilder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)
         .build()
 
     // ─── Credentials Management ─────────────────────────────────────────
@@ -462,47 +473,59 @@ class NavidromeApiService @Inject constructor(
     /** Poll the running import's progress. */
     suspend fun spotifyImportStatus(): Result<JSONObject> = spotifyCall("spotifyImportStatus")
 
-    // ─── Jam: household remote control (custom XPS endpoints) ────────────
+    // ─── Cross-device playback: one canonical session per user, pushed over SSE ───
+    // (custom XPS endpoints). Replaces the old poll-everything design: instead of N devices
+    // each independently reporting their own state, there's exactly one canonical "what's
+    // playing" per account, and a live push channel (subscribeSession) instead of polling for
+    // both state changes and commands.
 
-    private suspend fun jamCall(
+    private suspend fun xpsCall(
         endpoint: String,
         key: String,
         params: Map<String, String> = emptyMap()
     ): Result<JSONObject> =
         requestAndParse(endpoint, params).map { it.optJSONObject(key) ?: JSONObject() }
 
-    /** Register this device as a controllable session. */
+    /** Registers (or re-registers) this device's identity. Playback state is published
+     *  separately (see publishState), not folded into this call. */
     suspend fun registerDevice(
         deviceName: String, platform: String, sessionId: String, householdVisible: Boolean
-    ) = jamCall("registerDevice", "playerSession",
+    ) = xpsCall("registerDevice", "playerSession",
         mapOf("deviceName" to deviceName, "platform" to platform, "sessionId" to sessionId,
             "householdVisible" to householdVisible.toString()))
 
-    /** Publish this host's playback state AND collect commands queued by controllers, in one call. */
-    suspend fun deviceHeartbeat(params: Map<String, String>) =
-        jamCall("deviceHeartbeat", "playerSession", params)
+    /** Publishes this device's playback state, making it the account's one active device. Any
+     *  device that was previously active gets pushed a `superseded` command over its own
+     *  subscribeSession stream. */
+    suspend fun publishState(params: Map<String, String>) =
+        xpsCall("publishState", "playerSession", params)
 
-    /** Household devices currently playing — the auto-discovered hosts a guest can control. */
-    suspend fun getJamHosts(sessionId: String) =
-        jamCall("getJamHosts", "jamHosts", mapOf("sessionId" to sessionId))
-
-    /** Send a control command to a host device (any household user). */
-    suspend fun jamControl(params: Map<String, String>) =
-        jamCall("jamControl", "playerCommand", params)
-
-    // ─── Personal handoff (same-account devices) ──────────────────────────
-
-    /** This account's other live devices — the pick-list for remote control and transfer. */
+    /** This account's other registered devices — the pick-list for transfer, playing or not. */
     suspend fun getDevices(sessionId: String) =
-        jamCall("getDevices", "playerDevices", mapOf("sessionId" to sessionId))
+        xpsCall("getDevices", "playerDevices", mapOf("sessionId" to sessionId))
 
-    /** Send a command to one of this account's own devices. */
-    suspend fun controlDevice(params: Map<String, String>) =
-        jamCall("controlDevice", "playerCommand", params)
+    /** This account's one canonical active session, or empty if nothing is playing anywhere. */
+    suspend fun getSession() = xpsCall("getSession", "playerSession")
 
-    /** Full state of another of this account's devices, to resume exactly where it left off. */
-    suspend fun getHandoff(targetId: String) =
-        jamCall("getHandoff", "playerSession", mapOf("targetId" to targetId))
+    /** Every other household member's active, visible session — the auto-discovered Jam list. */
+    suspend fun getHouseholdSessions() = xpsCall("getHouseholdSessions", "householdSessions")
+
+    /** Sends a command, targeting either targetSessionId (a specific — possibly idle — one of
+     *  this account's own devices; transfer/cast) or targetUser (whichever device is currently
+     *  active for that user; ordinary remote control). */
+    suspend fun sendCommand(params: Map<String, String>) =
+        xpsCall("sendCommand", "playerCommand", params)
+
+    /** Opens this device's live push channel: session changes (this account's own, and
+     *  household members' if visible) and commands sent to it. Call [EventSource.cancel] when
+     *  done — OkHttp's EventSource does not auto-reconnect, unlike the browser's; the caller is
+     *  responsible for noticing [EventSourceListener.onClosed]/[EventSourceListener.onFailure]
+     *  and reconnecting with backoff. */
+    fun subscribeSession(sessionId: String, listener: EventSourceListener): EventSource {
+        val url = buildApiUrl("subscribeSession", mapOf("sessionId" to sessionId))
+        val request = Request.Builder().url(url).header("Accept", "text/event-stream").build()
+        return EventSources.createFactory(sseClient).newEventSource(request, listener)
+    }
 
     /** Starting pool of recognisable artists for the pairwise taste onboarding. */
     suspend fun getTasteStart(): Result<List<JSONObject>> {

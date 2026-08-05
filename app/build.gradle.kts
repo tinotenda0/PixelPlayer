@@ -309,6 +309,7 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.converter.gson)
     implementation(libs.okhttp)
+    implementation(libs.okhttp.sse)
     implementation(libs.logging.interceptor)
     implementation(libs.gson)
     implementation(libs.kotlinx.serialization.json)
