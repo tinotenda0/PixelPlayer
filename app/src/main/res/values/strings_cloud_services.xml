@@ -2,7 +2,7 @@
 <resources>
     <!-- Subsonic/Navidrome dashboard -->
     <string name="subsonic_dashboard_title">Subsonic</string>
-    <string name="subsonic_dashboard_quick_actions_subtitle">Manage Navidrome, Airsonic and other Subsonic-compatible servers.</string>
+    <string name="subsonic_dashboard_quick_actions_subtitle">Sync your library or disconnect from the XPS gateway.</string>
 
     <!-- Cloud dashboard generic -->
     <string name="cloud_dashboard_playlists_synced_count">%1$d playlists synced</string>

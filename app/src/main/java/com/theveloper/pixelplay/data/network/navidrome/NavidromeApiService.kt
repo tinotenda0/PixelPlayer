@@ -21,10 +21,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Navidrome/Subsonic API client.
+ * Client for the XPS gateway's Navidrome/Subsonic-protocol API.
  *
- * Implements the Subsonic API protocol with token-based authentication.
- * Compatible with Navidrome, Gonic, Airsonic, and other Subsonic-compatible servers.
+ * Implements the Subsonic API protocol with token-based authentication. PixelPlayer is a
+ * dedicated client for our one gateway, not a general Subsonic app — see
+ * NavidromeRepository.GATEWAY_URL.
  *
  * API Reference: http://www.subsonic.org/pages/api.jsp
  */

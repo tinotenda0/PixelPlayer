@@ -2,7 +2,7 @@
 <resources>
     <!-- Subsonic/Navidrome dashboard -->
     <string name="subsonic_dashboard_title">Subsonic</string>
-    <string name="subsonic_dashboard_quick_actions_subtitle">Kelola Navidrome, Airsonic, dan server lain yang kompatibel dengan Subsonic.</string>
+    <string name="subsonic_dashboard_quick_actions_subtitle">Sinkronkan pustaka Anda atau putuskan sambungan dari gateway XPS.</string>
 
     <!-- Cloud dashboard generic -->
     <string name="cloud_dashboard_playlists_synced_count">%1$d playlist disinkronkan</string>

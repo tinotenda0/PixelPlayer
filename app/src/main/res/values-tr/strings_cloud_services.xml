@@ -2,7 +2,7 @@
 <resources>
     <!-- Subsonic/Navidrome dashboard -->
     <string name="subsonic_dashboard_title">Subsonic</string>
-    <string name="subsonic_dashboard_quick_actions_subtitle">Navidrome, Airsonic ve diğer Subsonic uyumlu sunucuları yönetin.</string>
+    <string name="subsonic_dashboard_quick_actions_subtitle">Kitaplığınızı senkronize edin veya XPS ağ geçidinden bağlantıyı kesin.</string>
 
     <!-- Cloud dashboard generic -->
     <string name="cloud_dashboard_playlists_synced_count">%1$d çalma listesi senkronize edildi</string>

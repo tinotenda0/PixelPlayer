@@ -2,7 +2,7 @@
 <resources>
     <!-- Subsonic/Navidrome dashboard -->
     <string name="subsonic_dashboard_title">Subsonic</string>
-    <string name="subsonic_dashboard_quick_actions_subtitle">Navidrome, Airsonic 및 기타 Subsonic 호환 서버를 관리합니다.</string>
+    <string name="subsonic_dashboard_quick_actions_subtitle">라이브러리를 동기화하거나 XPS 게이트웨이 연결을 해제하세요.</string>
 
     <!-- Cloud dashboard generic -->
     <string name="cloud_dashboard_playlists_synced_count">%1$d개의 플레이리스트 동기화됨</string>

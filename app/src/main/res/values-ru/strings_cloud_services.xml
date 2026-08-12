@@ -2,7 +2,7 @@
 <resources>
     <!-- Subsonic/Navidrome dashboard -->
     <string name="subsonic_dashboard_title">Subsonic</string>
-    <string name="subsonic_dashboard_quick_actions_subtitle">Управляйте серверами Navidrome, Airsonic и другими совместимыми с Subsonic.</string>
+    <string name="subsonic_dashboard_quick_actions_subtitle">Синхронизируйте библиотеку или отключитесь от шлюза XPS.</string>
 
     <!-- Cloud dashboard generic -->
     <string name="cloud_dashboard_playlists_synced_count">%1$d плейлистов синхронизировано</string>
