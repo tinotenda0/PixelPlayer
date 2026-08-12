@@ -67,7 +67,6 @@ fun PlaylistBottomSheet(
     val songAddedToPlaylistsMessage = stringResource(R.string.playlist_sheet_song_added_to_playlists)
     val commonSavedMessage = stringResource(R.string.common_saved)
     val saveActionText = stringResource(R.string.common_save)
-    val internalStorageText = stringResource(R.string.playlist_sheet_internal_storage)
 
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
 
@@ -175,13 +174,7 @@ fun PlaylistBottomSheet(
                     showSortButton = false,
                     showImportButton = false,
                     onSortClick = { },
-                    isPlaylistTab = true,
-                    isFoldersTab = false,
-                    currentFolder = null,
-                    folderRootPath = "",
-                    folderRootLabel = internalStorageText,
-                    onFolderClick = { },
-                    onNavigateBack = { }
+                    isPlaylistTab = true
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))

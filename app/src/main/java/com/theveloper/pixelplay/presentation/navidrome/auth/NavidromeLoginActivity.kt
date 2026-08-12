@@ -7,7 +7,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,7 +23,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.CloudQueue
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Visibility
@@ -103,7 +101,6 @@ fun NavidromeLoginScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val focusManager = LocalFocusManager.current
 
-    var serverUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
@@ -283,26 +280,6 @@ fun NavidromeLoginScreen(
 
                     Spacer(modifier = Modifier.height(18.dp))
 
-                    ExpressiveLoginField(
-                        value = serverUrl,
-                        onValueChange = { serverUrl = it },
-                        label = stringResource(R.string.auth_server_url_label),
-                        placeholder = stringResource(R.string.auth_navidrome_url_placeholder),
-                        supportingText = stringResource(R.string.auth_navidrome_url_hint),
-                        leadingIcon = Icons.Rounded.CloudQueue,
-                        enabled = !isLoading,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Uri,
-                            imeAction = ImeAction.Next
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                        ),
-                        shape = inputShape
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
                      ExpressiveLoginField(
                         value = username,
                         onValueChange = { username = it },
@@ -343,8 +320,8 @@ fun NavidromeLoginScreen(
                         keyboardActions = KeyboardActions(
                             onDone = {
                                 focusManager.clearFocus()
-                                if (serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank()) {
-                                    viewModel.login(serverUrl, username, password)
+                                if (username.isNotBlank() && password.isNotBlank()) {
+                                    viewModel.login(username, password)
                                 }
                             }
                         ),
@@ -363,25 +340,6 @@ fun NavidromeLoginScreen(
                         },
                         shape = inputShape
                     )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    FilledTonalButton(
-                        onClick = {
-                            if (serverUrl.isBlank()) {
-                                serverUrl = "https://"
-                            }
-                        },
-                        enabled = !isLoading && serverUrl.isBlank(),
-                        shape = inputShape,
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.auth_navidrome_prefill_https_action),
-                            fontFamily = GoogleSansRounded,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
                 }
             }
 
@@ -391,9 +349,9 @@ fun NavidromeLoginScreen(
             Button(
                 onClick = {
                     focusManager.clearFocus()
-                    viewModel.login(serverUrl, username, password)
+                    viewModel.login(username, password)
                 },
-                enabled = !isLoading && serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank(),
+                enabled = !isLoading && username.isNotBlank() && password.isNotBlank(),
                 shape = AbsoluteSmoothCornerShape(18.dp, 60),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -428,7 +386,7 @@ fun NavidromeLoginScreen(
 }
 
 @Composable
-private fun ExpressiveLoginField(
+internal fun ExpressiveLoginField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,

@@ -11,12 +11,14 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import androidx.work.WorkManager
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import com.theveloper.pixelplay.data.navidrome.NavidromeRepository
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
+import com.theveloper.pixelplay.data.worker.StatsHistoryMigrationWorker
 import com.theveloper.pixelplay.data.diagnostics.AdvancedPerformanceDiagnosticsController
 import com.theveloper.pixelplay.data.repository.ArtistImageRepository
-import com.theveloper.pixelplay.data.telegram.TelegramRepository
 import com.theveloper.pixelplay.presentation.viewmodel.LibraryStateHolder
 import com.theveloper.pixelplay.presentation.viewmodel.ThemeStateHolder
 import com.theveloper.pixelplay.utils.AlbumArtCacheManager
@@ -44,16 +46,7 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
     lateinit var imageLoader: dagger.Lazy<ImageLoader>
 
     @Inject
-    lateinit var telegramCoilFetcherFactory: dagger.Lazy<com.theveloper.pixelplay.data.image.TelegramCoilFetcher.Factory>
-
-    @Inject
     lateinit var navidromeCoilFetcherFactory: dagger.Lazy<com.theveloper.pixelplay.data.image.NavidromeCoilFetcher.Factory>
-
-    @Inject
-    lateinit var jellyfinCoilFetcherFactory: dagger.Lazy<com.theveloper.pixelplay.data.image.JellyfinCoilFetcher.Factory>
-
-    @Inject
-    lateinit var plexCoilFetcherFactory: dagger.Lazy<com.theveloper.pixelplay.data.image.PlexCoilFetcher.Factory>
 
     @Inject
     lateinit var localArtworkCoilFetcherFactory: dagger.Lazy<com.theveloper.pixelplay.data.image.LocalArtworkCoilFetcher.Factory>
@@ -63,9 +56,6 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
 
     @Inject
     lateinit var artistImageRepository: dagger.Lazy<ArtistImageRepository>
-
-    @Inject
-    lateinit var telegramRepository: dagger.Lazy<TelegramRepository>
 
     @Inject
     lateinit var libraryStateHolder: dagger.Lazy<LibraryStateHolder>
@@ -83,13 +73,7 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
     lateinit var jamManager: dagger.Lazy<com.theveloper.pixelplay.data.jam.JamManager>
 
     @Inject
-    lateinit var plexRepository: dagger.Lazy<com.theveloper.pixelplay.data.plex.PlexRepository>
-
-    @Inject
-    lateinit var plexCompanionTarget: dagger.Lazy<com.theveloper.pixelplay.data.plex.companion.PlexCompanionTarget>
-
-    @Inject
-    lateinit var plexConnectClient: dagger.Lazy<com.theveloper.pixelplay.data.plex.connect.PlexConnectClient>
+    lateinit var navidromeRepository: dagger.Lazy<NavidromeRepository>
 
     private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -100,22 +84,9 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
             private set
     }
 
-    private val appForeground = kotlinx.coroutines.flow.MutableStateFlow(false)
-    private var lastPlexGateAccountId: String? = null
-    private var plexGateRunning = false
-    private var plexGateTeardownJob: kotlinx.coroutines.Job? = null
-
-    /** How long a backgrounded, non-playing session stays remotely reachable. */
-    private val plexGateTeardownGraceMs = 10L * 60 * 1000
-
     private val appLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
-            appForeground.value = true
             libraryStateHolder.get().restoreAfterTrimIfNeeded()
-        }
-
-        override fun onStop(owner: LifecycleOwner) {
-            appForeground.value = false
         }
     }
 
@@ -170,50 +141,19 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
             }
         }
 
-        // Advertise this install as a Plex Companion player and keep the
-        // Connect client attached — but ONLY while it can matter: app in the
-        // foreground or audio actually playing. These integrations poll and
-        // hold sockets; running them 24/7 kept the process alive in the
-        // background and burned hours of CPU + mobile data per day.
+        // One-time upload of this device's pre-gateway-Stats local history, once a gateway
+        // account is signed in. Covers both "just logged in" and "was already logged in when
+        // this update landed" — collecting a StateFlow immediately replays its current value.
         startupScope.launch {
-            kotlinx.coroutines.flow.combine(
-                plexRepository.get().activeAccountFlow,
-                appForeground,
-                com.theveloper.pixelplay.data.service.PlaybackActivityTracker.isPlaybackActiveFlow
-            ) { account, foreground, playing ->
-                Pair(account?.id, account != null && (foreground || playing))
-            }
-                .distinctUntilChanged()
-                .collect { (accountId, enabled) ->
-                    if (enabled) {
-                        // Cancel any pending teardown — quick background/foreground
-                        // flaps must not churn sockets or re-POST to plex.tv.
-                        plexGateTeardownJob?.cancel()
-                        plexGateTeardownJob = null
-                        if (!plexGateRunning || accountId != lastPlexGateAccountId) {
-                            if (plexGateRunning) {
-                                plexCompanionTarget.get().stop()
-                            }
-                            lastPlexGateAccountId = accountId
-                            plexCompanionTarget.get().start()
-                            // NOTE: PlexConnectClient (the Connect broker sessions)
-                            // is intentionally NOT started. With the library served
-                            // by Navidrome and multiple phones on one Plex user, the
-                            // shared-session claiming caused playback to jump
-                            // between devices. The code stays for a possible
-                            // opt-in later, but it no longer runs.
-                            plexGateRunning = true
-                        }
-                    } else if (plexGateRunning && plexGateTeardownJob == null) {
-                        // Grace period: a paused-in-background session must stay
-                        // remotely resumable (Plexamp can still reach us); only
-                        // tear down after it has clearly been abandoned.
-                        plexGateTeardownJob = startupScope.launch {
-                            kotlinx.coroutines.delay(plexGateTeardownGraceMs)
-                            plexCompanionTarget.get().stop()
-                            plexGateRunning = false
-                            plexGateTeardownJob = null
-                        }
+            // StateFlow is already conflated/distinct-by-equality — no distinctUntilChanged
+            // needed (applying it to a StateFlow is a compile-time error in this project's
+            // coroutines version).
+            navidromeRepository.get().isLoggedInFlow
+                .collect { loggedIn ->
+                    if (loggedIn && !userPreferencesRepository.get().isStatsMigrationCompleted()) {
+                        StatsHistoryMigrationWorker.enqueue(
+                            WorkManager.getInstance(this@PixelPlayApplication)
+                        )
                     }
                 }
         }
@@ -223,10 +163,7 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
         return imageLoader.get().newBuilder()
             .components {
                 add(localArtworkCoilFetcherFactory.get())
-                add(telegramCoilFetcherFactory.get())
                 add(navidromeCoilFetcherFactory.get())
-                add(jellyfinCoilFetcherFactory.get())
-                add(plexCoilFetcherFactory.get())
             }
             .build()
     }
@@ -251,7 +188,6 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
             level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
         ) {
             artistImageRepository.get().clearCache()
-            telegramRepository.get().clearMemoryCache()
             MediaMetadataRetrieverPool.clear()
         }
 

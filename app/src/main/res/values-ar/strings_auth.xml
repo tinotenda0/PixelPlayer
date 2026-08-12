@@ -29,31 +29,12 @@
     <string name="cd_navidrome_logo">شعار Navidrome</string>
     <string name="cd_subsonic_logo">شعار Subsonic</string>
 
-    <!-- Jellyfin -->
-    <string name="auth_jellyfin_title">Jellyfin</string>
-    <string name="auth_jellyfin_info_card">يتصل بخوادم Jellyfin. يتم دعم كل من HTTP وHTTPS للوصول عبر الشبكة المحلية.</string>
-    <string name="auth_jellyfin_subtitle">اتصل بخادم وسائط Jellyfin الخاص بك</string>
-    <string name="auth_jellyfin_connection_subtitle">أدخل رابط خادم Jellyfin وبيانات اعتماد الحساب.</string>
-    <string name="auth_jellyfin_server_placeholder">http://192.168.1.100:8096</string>
-    <string name="auth_jellyfin_server_url_hint">الرابط الكامل لخادم Jellyfin الخاص بك، شاملاً منفذ الاتصال (Port).</string>
-    <string name="auth_jellyfin_username_hint">اسم المستخدم لحساب Jellyfin الخاص بك.</string>
-    <string name="auth_jellyfin_password_hint">كلمة المرور لحساب Jellyfin الخاص بك.</string>
     <string name="auth_prefill_http">ملء تلقائي لـ //:http</string>
-    <string name="auth_jellyfin_footer">يتصل بخوادم Jellyfin لبث مكتبتك الموسيقية</string>
-    <string name="cd_jellyfin_logo">شعار Jellyfin</string>
 
-    <!-- Google Drive -->
-    <string name="auth_gdrive_toast_connected">تم توصيل Google Drive بنجاح!</string>
-    <string name="auth_gdrive_title">Google Drive</string>
-
-    <!-- Web login (NetEase / QQ Music) — shared -->
-    <string name="auth_web_exit_confirm_title_netease">الخروج من تسجيل دخول NetEase؟</string>
-    <string name="auth_web_exit_confirm_title_qq">الخروج من تسجيل دخول QQ Music؟</string>
+    <!-- Web login — shared -->
     <string name="auth_web_exit_confirm_body">يمكنك العودة لاحقاً. سيتم تجاهل حالة الصفحة الحالية عند الإغلاق.</string>
     <string name="auth_exit">خروج</string>
     <string name="auth_stay">بقاء</string>
-    <string name="auth_login_netease_title">تسجيل الدخول إلى NetEase Music</string>
-    <string name="auth_login_qq_title">تسجيل الدخول إلى QQ Music</string>
     <string name="auth_web_cd_web_back">رجوع للخلف في الويب</string>
     <string name="auth_web_cd_web_forward">تقدم للأمام في الويب</string>
     <string name="auth_web_cd_refresh">تحديث</string>
@@ -66,9 +47,5 @@
     <string name="auth_error_cookies_unreadable">تعذر قراءة ملفات تعريف الارتباط (Cookies) الخاصة بالجلسة.</string>
     <string name="auth_page_slow">تستغرق الصفحة وقتاً طويلاً للتحميل. استخدم التحديث أو جرب شبكة أخرى.</string>
     <string name="auth_webview_load_failed">فشل تحميل WebView.</string>
-    <string name="auth_http_error_loading_netease">خطأ HTTP %1$d أثناء تحميل NetEase.</string>
-    <string name="auth_http_error_loading_qq">خطأ HTTP %1$d أثناء تحميل QQ Music.</string>
     <string name="auth_error_no_cookies">لم يتم العثور على ملفات تعريف الارتباط. سجل الدخول أولاً.</string>
-    <string name="auth_error_netease_login_incomplete">لم يتم رصد تسجيل الدخول بعد. أكمل تسجيل الدخول إلى NetEase قبل الضغط على "تم".</string>
-    <string name="auth_error_qq_login_incomplete">لم يتم رصد تسجيل الدخول بعد. أكمل تسجيل الدخول إلى QQ Music قبل الضغط على "تم".</string>
 </resources>

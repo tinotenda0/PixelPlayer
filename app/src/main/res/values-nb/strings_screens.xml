@@ -12,13 +12,13 @@
     <string name="setup_beta_symbol">β</string>
     <string name="setup_beta_label">Beta</string>
     <string name="setup_intro_body">La oss sette opp alt for deg.</string>
-    <string name="setup_permission_media_title">Medietilgang</string>
-    <string name="setup_permission_media_description">PixelPlayer trenger tilgang til lydfilene dine for å bygge biblioteket.</string>
     <string name="setup_permission_granted">Tillatelse gitt</string>
-    <string name="setup_grant_media_permission">Gi medietilgang</string>
     <string name="setup_permission_notifications_title">Varslinger</string>
     <string name="setup_permission_notifications_description">Aktiver varslinger for å styre musikken fra låst skjerm.</string>
     <string name="setup_enable_notifications">Aktiver varslinger</string>
+    <string name="setup_gateway_signin_title">Koble til kontoen din</string>
+    <string name="setup_gateway_signin_subtitle">Logg inn for å synkronisere biblioteket, spillelistene og musikksmaken din.</string>
+    <string name="setup_gateway_signin_connected">Du er tilkoblet</string>
     <string name="setup_backup_have_title">Har du en sikkerhetskopi?</string>
     <string name="setup_backup_have_description">Hvis du allerede har en PixelPlayer-sikkerhetskopi, kan du gjenopprette den nå.</string>
     <string name="setup_import_backup">Importer sikkerhetskopi</string>
@@ -34,10 +34,6 @@
     <string name="setup_backup_unknown_version">Ukjent versjon</string>
     <string name="setup_restore_selected">Gjenopprett valgte</string>
     <string name="setup_restoring">Gjenoppretter</string>
-    <string name="setup_excluded_folders_title">Ekskluderte mapper</string>
-    <string name="setup_excluded_folders_description">Alle mapper skannes som standard. Velg steder du vil ignorere.</string>
-    <string name="setup_choose_folders_ignore">Velg mapper som skal ignoreres</string>
-    <string name="setup_toast_grant_storage_first">Gi lagringstilgang først</string>
     <string name="setup_theme_title">App-tema</string>
     <string name="setup_theme_subtitle">Velg utseendet du ønsker før du begynner.</string>
     <string name="setup_theme_dark_title">Mørkt</string>

@@ -141,26 +141,40 @@ import com.theveloper.pixelplay.presentation.components.PermissionIconCollage
 import com.theveloper.pixelplay.presentation.components.BackupModuleSelectionDialog
 import com.theveloper.pixelplay.presentation.components.subcomps.MaterialYouVectorDrawable
 import com.theveloper.pixelplay.presentation.components.subcomps.SineWaveLine
-import com.theveloper.pixelplay.presentation.components.FileExplorerDialog
-import com.theveloper.pixelplay.presentation.viewmodel.DirectoryEntry
 import com.theveloper.pixelplay.presentation.viewmodel.SetupEvent
 import com.theveloper.pixelplay.presentation.viewmodel.SetupUiState
 import com.theveloper.pixelplay.presentation.viewmodel.SetupViewModel
 import com.theveloper.pixelplay.ui.theme.ExpTitleTypography
 import com.theveloper.pixelplay.ui.theme.GoogleSansRounded
-import com.theveloper.pixelplay.utils.StorageInfo
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import com.theveloper.pixelplay.presentation.navidrome.auth.ExpressiveLoginField
 
 @OptIn(ExperimentalPermissionsApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -171,13 +185,6 @@ fun SetupScreen(
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val uiState by setupViewModel.uiState.collectAsStateWithLifecycle()
-    val currentPath by setupViewModel.currentPath.collectAsStateWithLifecycle()
-    val directoryChildren by setupViewModel.currentDirectoryChildren.collectAsStateWithLifecycle()
-    val availableStorages by setupViewModel.availableStorages.collectAsStateWithLifecycle()
-    val selectedStorageIndex by setupViewModel.selectedStorageIndex.collectAsStateWithLifecycle()
-    val isExplorerPriming by setupViewModel.isExplorerPriming.collectAsStateWithLifecycle()
-    val isExplorerReady by setupViewModel.isExplorerReady.collectAsStateWithLifecycle()
-    val isCurrentDirectoryResolved by setupViewModel.isCurrentDirectoryResolved.collectAsStateWithLifecycle()
     var selectedBackupUri by remember { mutableStateOf<Uri?>(null) }
     
     var showCornerRadiusOverlay by remember { mutableStateOf(false) }
@@ -221,7 +228,6 @@ fun SetupScreen(
         }
     }
 
-    val directorySelectionPageIndex = remember(pages) { pages.indexOf(SetupPage.DirectorySelection) }
     val batteryOptimizationPageIndex = remember(pages) { pages.indexOf(SetupPage.BatteryOptimization) }
     val finishPageIndex = remember(pages) { pages.indexOf(SetupPage.Finish) }
 
@@ -268,10 +274,6 @@ fun SetupScreen(
             }
         }
         previousPageIndex = pagerState.currentPage
-
-        if (pagerState.currentPage == directorySelectionPageIndex) {
-            setupViewModel.loadMusicDirectories()
-        }
     }
     BackHandler {
         if (pagerState.currentPage > 0) {
@@ -329,9 +331,13 @@ fun SetupScreen(
             ) {
                 when (page) {
                     SetupPage.Welcome -> WelcomePage()
-                    SetupPage.MediaPermission -> MediaPermissionPage(
+                    SetupPage.GatewaySignIn -> GatewaySignInPage(
                         uiState = uiState,
-                        onPermissionStateUpdated = { setupViewModel.checkPermissions(context) }
+                        onSignIn = setupViewModel::signInToGateway,
+                        onClearError = setupViewModel::clearGatewaySignInError,
+                        onSkip = {
+                            navigateToPage(pagerState.currentPage + 1)
+                        }
                     )
                     SetupPage.BackupRestore -> BackupRestorePage(
                         uiState = uiState,
@@ -341,29 +347,6 @@ fun SetupScreen(
                             selectedBackupUri = null
                             navigateToPage(pagerState.currentPage + 1)
                         }
-                    )
-                    SetupPage.DirectorySelection -> DirectorySelectionPage(
-                        uiState = uiState,
-                        currentPath = currentPath,
-                        directoryChildren = directoryChildren,
-                        availableStorages = availableStorages,
-                        selectedStorageIndex = selectedStorageIndex,
-                        isExplorerPriming = isExplorerPriming,
-                        isExplorerReady = isExplorerReady,
-                        isCurrentDirectoryResolved = isCurrentDirectoryResolved,
-                        isAtRoot = setupViewModel.isAtRoot(),
-                        explorerRoot = setupViewModel.explorerRoot(),
-                        onOpenExplorer = setupViewModel::openExplorer,
-                        onNavigateTo = setupViewModel::loadDirectory,
-                        onNavigateUp = setupViewModel::navigateUp,
-                        onRefresh = setupViewModel::refreshCurrentDirectory,
-                        onPrimeExplorer = setupViewModel::primeExplorer,
-                        onSkip = {
-                            navigateToPage(pagerState.currentPage + 1)
-                        },
-                        onToggleAllowed = setupViewModel::toggleDirectoryAllowed,
-                        onSelectionFinished = setupViewModel::applyPendingDirectoryRuleChanges,
-                        onStorageSelected = setupViewModel::selectStorage
                     )
                     SetupPage.NotificationsPermission -> NotificationsPermissionPage(
                         uiState = uiState,
@@ -446,101 +429,10 @@ fun SetupScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DirectorySelectionPage(
-    uiState: SetupUiState,
-    currentPath: File,
-    directoryChildren: List<DirectoryEntry>,
-    availableStorages: List<StorageInfo>,
-    selectedStorageIndex: Int,
-    isExplorerPriming: Boolean,
-    isExplorerReady: Boolean,
-    isCurrentDirectoryResolved: Boolean,
-    isAtRoot: Boolean,
-    explorerRoot: File,
-    onOpenExplorer: () -> Unit,
-    onNavigateTo: (File) -> Unit,
-    onNavigateUp: () -> Unit,
-    onRefresh: () -> Unit,
-    onPrimeExplorer: () -> Unit,
-    onSkip: () -> Unit,
-    onToggleAllowed: (File) -> Unit,
-    onSelectionFinished: () -> Unit,
-    onStorageSelected: (Int) -> Unit
-) {
-    var showDirectoryPicker by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-
-    val hasMediaPermission = uiState.mediaPermissionGranted
-    val canOpenDirectoryPicker = hasMediaPermission
-
-    LaunchedEffect(canOpenDirectoryPicker) {
-        if (canOpenDirectoryPicker) {
-            onPrimeExplorer()
-        }
-    }
-
-    PermissionPageLayout(
-        title = stringResource(R.string.setup_excluded_folders_title),
-        description = stringResource(R.string.setup_excluded_folders_description),
-        buttonText = stringResource(R.string.setup_choose_folders_ignore),
-        buttonEnabled = canOpenDirectoryPicker,
-        onGrantClicked = {
-            if (canOpenDirectoryPicker) {
-                showDirectoryPicker = true
-                onOpenExplorer()
-            } else {
-                Toast.makeText(context, context.getString(R.string.setup_toast_grant_storage_first), Toast.LENGTH_SHORT).show()
-            }
-        },
-        icons = persistentListOf(
-            R.drawable.rounded_folder_24,
-            R.drawable.rounded_music_note_24,
-            R.drawable.rounded_create_new_folder_24,
-            R.drawable.rounded_folder_open_24,
-            R.drawable.rounded_audio_file_24
-        )
-    ) {
-        TextButton(onClick = onSkip) {
-            Text(stringResource(R.string.setup_skip_for_now), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-
-    FileExplorerDialog(
-        visible = showDirectoryPicker,
-        currentPath = currentPath,
-        directoryChildren = directoryChildren,
-        availableStorages = availableStorages,
-        selectedStorageIndex = selectedStorageIndex,
-        isLoading = uiState.isLoadingDirectories,
-        isPriming = isExplorerPriming,
-        isReady = isExplorerReady,
-        isCurrentDirectoryResolved = isCurrentDirectoryResolved,
-        isAtRoot = isAtRoot,
-        rootDirectory = explorerRoot,
-        onNavigateTo = onNavigateTo,
-        onNavigateUp = onNavigateUp,
-        onNavigateHome = { onNavigateTo(explorerRoot) },
-        onToggleAllowed = onToggleAllowed,
-        onRefresh = onRefresh,
-        onStorageSelected = onStorageSelected,
-        onDone = {
-            onSelectionFinished()
-            showDirectoryPicker = false
-        },
-        onDismiss = {
-            onSelectionFinished()
-            showDirectoryPicker = false
-        }
-    )
-}
-
 sealed class SetupPage {
     object Welcome : SetupPage()
-    object MediaPermission : SetupPage()
+    object GatewaySignIn : SetupPage()
     object BackupRestore : SetupPage()
-    object DirectorySelection : SetupPage()
     object ThemeSelection : SetupPage()
     object NotificationsPermission : SetupPage()
     object AlarmsPermission : SetupPage()
@@ -552,9 +444,12 @@ sealed class SetupPage {
 
 private fun buildSetupPages(sdkInt: Int): List<SetupPage> {
     // Local media browsing is retired — the MediaPermission and DirectorySelection steps
-    // are gone; the library is served by the XPS gateway (configured under Accounts).
+    // are gone; the library is served by the XPS gateway, and signing into it is now a
+    // first-class step in the pager rather than something the user has to discover later
+    // under Accounts.
     val pages = mutableListOf<SetupPage>(
-        SetupPage.Welcome
+        SetupPage.Welcome,
+        SetupPage.GatewaySignIn
     )
 
     if (sdkInt >= Build.VERSION_CODES.TIRAMISU) {
@@ -594,9 +489,6 @@ private fun isPermissionGateSatisfied(
     uiState: SetupUiState
 ): Boolean {
     return when (page) {
-        SetupPage.MediaPermission -> {
-            uiState.mediaPermissionGranted || hasMediaPermissionNow(context)
-        }
         SetupPage.NotificationsPermission -> {
             uiState.notificationsPermissionGranted ||
                 Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
@@ -616,15 +508,6 @@ private fun allRequiredPermissionsGrantedNow(context: Context): Boolean {
             context,
             Manifest.permission.POST_NOTIFICATIONS
         ) == PackageManager.PERMISSION_GRANTED
-}
-
-private fun hasMediaPermissionNow(context: Context): Boolean {
-    val mediaPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Manifest.permission.READ_MEDIA_AUDIO
-    } else {
-        Manifest.permission.READ_EXTERNAL_STORAGE
-    }
-    return ContextCompat.checkSelfPermission(context, mediaPermission) == PackageManager.PERMISSION_GRANTED
 }
 
 private fun hasExactAlarmPermissionNow(context: Context): Boolean {
@@ -757,48 +640,6 @@ fun WelcomePage() {
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun MediaPermissionPage(
-    uiState: SetupUiState,
-    onPermissionStateUpdated: () -> Unit
-) {
-    val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        listOf(Manifest.permission.READ_MEDIA_AUDIO)
-    } else {
-        listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-    }
-    val permissionState = rememberMultiplePermissionsState(permissions = permissions)
-    val mediaIcons = persistentListOf(
-        R.drawable.rounded_music_note_24,
-        R.drawable.rounded_album_24,
-        R.drawable.rounded_library_music_24,
-        R.drawable.rounded_artist_24,
-        R.drawable.rounded_playlist_play_24
-    )
-
-    // Sync the granted state with the ViewModel
-    val isGranted = uiState.mediaPermissionGranted || permissionState.allPermissionsGranted
-
-    LaunchedEffect(permissionState.allPermissionsGranted) {
-        onPermissionStateUpdated()
-    }
-
-    PermissionPageLayout(
-        title = stringResource(R.string.setup_permission_media_title),
-        granted = isGranted,
-        description = stringResource(R.string.setup_permission_media_description),
-        buttonText = if (isGranted) stringResource(R.string.setup_permission_granted) else stringResource(R.string.setup_grant_media_permission),
-        buttonEnabled = !isGranted,
-        icons = mediaIcons,
-        onGrantClicked = {
-            if (!isGranted) {
-                permissionState.launchMultiplePermissionRequest()
-            }
-        }
-    )
-}
-
-@OptIn(ExperimentalPermissionsApi::class)
-@Composable
 fun NotificationsPermissionPage(
     uiState: SetupUiState,
     onPermissionStateUpdated: () -> Unit
@@ -875,6 +716,281 @@ fun AlarmsPermissionPage(
                 Text(stringResource(R.string.setup_skip_for_now), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+    }
+}
+
+@Composable
+fun GatewaySignInPage(
+    uiState: SetupUiState,
+    onSignIn: (String, String) -> Unit,
+    onClearError: () -> Unit,
+    onSkip: () -> Unit
+) {
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val inputShape = AbsoluteSmoothCornerShape(18.dp, 60)
+    val isLoading = uiState.isSigningIntoGateway
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Color.White,
+                modifier = Modifier.size(64.dp),
+                tonalElevation = 2.dp,
+                shadowElevation = 2.dp
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = ImageVector.vectorResource(id = R.drawable.ic_navidrome),
+                        contentDescription = stringResource(R.string.auth_navidrome_title),
+                        tint = Color.Unspecified,
+                        modifier = Modifier.size(42.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(24.dp))
+            Surface(
+                shape = CircleShape,
+                color = Color.White,
+                modifier = Modifier.size(64.dp),
+                tonalElevation = 2.dp,
+                shadowElevation = 2.dp
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = ImageVector.vectorResource(id = R.drawable.ic_subsonic),
+                        contentDescription = stringResource(R.string.auth_subsonic_title),
+                        tint = Color.Unspecified,
+                        modifier = Modifier.size(42.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = stringResource(R.string.setup_gateway_signin_title),
+            style = MaterialTheme.typography.displaySmall.copy(
+                fontFamily = GoogleSansRounded,
+                fontSize = 28.sp
+            ),
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = stringResource(R.string.setup_gateway_signin_subtitle),
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        if (uiState.isGatewayConnected) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = AbsoluteSmoothCornerShape(28.dp, 60),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = stringResource(R.string.setup_gateway_signin_connected),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontFamily = GoogleSansRounded
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = onSkip,
+                shape = AbsoluteSmoothCornerShape(18.dp, 60),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                Text(
+                    stringResource(R.string.common_next),
+                    fontFamily = GoogleSansRounded,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        } else {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = AbsoluteSmoothCornerShape(28.dp, 60),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                )
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Text(
+                        text = stringResource(R.string.auth_details_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontFamily = GoogleSansRounded,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = stringResource(R.string.auth_details_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = GoogleSansRounded,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    ExpressiveLoginField(
+                        value = username,
+                        onValueChange = {
+                            username = it
+                            if (uiState.gatewaySignInError != null) onClearError()
+                        },
+                        label = stringResource(R.string.auth_username_label),
+                        placeholder = stringResource(R.string.auth_username_placeholder),
+                        supportingText = stringResource(R.string.auth_navidrome_username_hint),
+                        leadingIcon = Icons.Rounded.Person,
+                        enabled = !isLoading,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                        ),
+                        shape = inputShape
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    ExpressiveLoginField(
+                        value = password,
+                        onValueChange = {
+                            password = it
+                            if (uiState.gatewaySignInError != null) onClearError()
+                        },
+                        label = stringResource(R.string.auth_password_label),
+                        placeholder = stringResource(R.string.auth_password_placeholder),
+                        supportingText = stringResource(R.string.auth_navidrome_password_hint),
+                        leadingIcon = Icons.Rounded.Lock,
+                        enabled = !isLoading,
+                        visualTransformation = if (passwordVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                focusManager.clearFocus()
+                                if (username.isNotBlank() && password.isNotBlank()) {
+                                    onSignIn(username, password)
+                                }
+                            }
+                        ),
+                        trailingContent = {
+                            IconButton(
+                                onClick = { passwordVisible = !passwordVisible },
+                                enabled = !isLoading
+                            ) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                    contentDescription = stringResource(
+                                        if (passwordVisible) R.string.auth_hide_pwd_action else R.string.auth_show_pwd_action
+                                    )
+                                )
+                            }
+                        },
+                        shape = inputShape
+                    )
+
+                    if (uiState.gatewaySignInError != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = uiState.gatewaySignInError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontFamily = GoogleSansRounded
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = {
+                    focusManager.clearFocus()
+                    onSignIn(username, password)
+                },
+                enabled = !isLoading && username.isNotBlank() && password.isNotBlank(),
+                shape = AbsoluteSmoothCornerShape(18.dp, 60),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.auth_connecting_msg), fontFamily = GoogleSansRounded)
+                } else {
+                    Text(
+                        stringResource(R.string.auth_connect_action),
+                        fontFamily = GoogleSansRounded,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            TextButton(onClick = onSkip, enabled = !isLoading) {
+                Text(stringResource(R.string.setup_skip_for_now), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 

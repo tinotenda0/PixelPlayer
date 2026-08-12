@@ -20,7 +20,6 @@ import com.theveloper.pixelplay.PixelPlayApplication
 import com.theveloper.pixelplay.data.database.AlbumArtThemeDao
 import com.theveloper.pixelplay.data.database.EngagementDao
 import com.theveloper.pixelplay.data.database.FavoritesDao
-import com.theveloper.pixelplay.data.database.GDriveDao
 import com.theveloper.pixelplay.data.database.LyricsDao
 import com.theveloper.pixelplay.data.database.AiCacheDao
 import com.theveloper.pixelplay.data.database.AiUsageDao
@@ -34,18 +33,14 @@ import com.theveloper.pixelplay.data.preferences.PlaylistPreferencesRepository
 import com.theveloper.pixelplay.data.preferences.dataStore
 import com.theveloper.pixelplay.data.media.SongMetadataEditor
 import com.theveloper.pixelplay.data.network.deezer.DeezerApiService
-import com.theveloper.pixelplay.data.network.netease.NeteaseApiService
 import com.theveloper.pixelplay.data.network.lyrics.LrcLibApiService
 import com.theveloper.pixelplay.data.repository.ArtistImageRepository
 import com.theveloper.pixelplay.data.repository.LyricsRepository
 import com.theveloper.pixelplay.data.repository.LyricsRepositoryImpl
-import com.theveloper.pixelplay.data.repository.MediaStoreSongRepository
 import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.repository.MusicRepositoryImpl
-import com.theveloper.pixelplay.data.repository.SongRepository
 import com.theveloper.pixelplay.data.repository.TransitionRepository
 import com.theveloper.pixelplay.data.repository.TransitionRepositoryImpl
-import com.theveloper.pixelplay.data.repository.FolderTreeBuilder
 import dagger.Module
 import dagger.Provides
 import dagger.Lazy
@@ -171,7 +166,14 @@ object AppModule {
             PixelPlayDatabase.MIGRATION_44_45,
             PixelPlayDatabase.MIGRATION_45_46,
             PixelPlayDatabase.MIGRATION_46_47,
-            PixelPlayDatabase.MIGRATION_47_48
+            PixelPlayDatabase.MIGRATION_47_48,
+            PixelPlayDatabase.MIGRATION_48_49,
+            PixelPlayDatabase.MIGRATION_49_50,
+            PixelPlayDatabase.MIGRATION_50_51,
+            PixelPlayDatabase.MIGRATION_51_52,
+            PixelPlayDatabase.MIGRATION_52_53,
+            PixelPlayDatabase.MIGRATION_53_54,
+            PixelPlayDatabase.MIGRATION_54_55
         )
             .addCallback(PixelPlayDatabase.createRuntimeArtifactsCallback())
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
@@ -230,20 +232,8 @@ object AppModule {
 
     @Singleton
     @Provides
-    fun provideGDriveDao(database: PixelPlayDatabase): GDriveDao {
-        return database.gdriveDao()
-    }
-
-    @Singleton
-    @Provides
     fun provideLocalPlaylistDao(database: PixelPlayDatabase): LocalPlaylistDao {
         return database.localPlaylistDao()
-    }
-
-    @Singleton
-    @Provides
-    fun provideQqMusicDao(database: PixelPlayDatabase): com.theveloper.pixelplay.data.database.QqMusicDao {
-        return database.qqmusicDao()
     }
 
     @Singleton
@@ -265,24 +255,6 @@ object AppModule {
 
     @Singleton
     @Provides
-    fun provideJellyfinDao(database: PixelPlayDatabase): com.theveloper.pixelplay.data.database.JellyfinDao {
-        return database.jellyfinDao()
-    }
-
-    @Singleton
-    @Provides
-    fun providePlexDao(database: PixelPlayDatabase): com.theveloper.pixelplay.data.database.PlexDao {
-        return database.plexDao()
-    }
-
-    @Singleton
-    @Provides
-    fun providePlexDownloadDao(database: PixelPlayDatabase): com.theveloper.pixelplay.data.database.PlexDownloadDao {
-        return database.plexDownloadDao()
-    }
-
-    @Singleton
-    @Provides
     fun provideNavidromeDownloadDao(database: PixelPlayDatabase): com.theveloper.pixelplay.data.database.NavidromeDownloadDao {
         return database.navidromeDownloadDao()
     }
@@ -292,27 +264,7 @@ object AppModule {
     fun provideImageLoader(
         @ApplicationContext context: Context
     ): ImageLoader {
-        // Add interceptor for QQ Music images
-        val okHttpClient = OkHttpClient.Builder()
-            .addInterceptor { chain ->
-                val request = chain.request()
-                val url = request.url.toString()
-
-                // Add Referer header for QQ Music images
-                val newRequest = if (url.contains("y.qq.com")) {
-                    request.newBuilder()
-                        .header("Referer", "https://y.qq.com/")
-                        .build()
-                } else {
-                    request
-                }
-
-                chain.proceed(newRequest)
-            }
-            .build()
-
         return ImageLoader.Builder(context)
-            .okHttpClient(okHttpClient)
             .dispatcher(Dispatchers.Default) // Use CPU-bound dispatcher for decoding
             .allowHardware(true) // Re-enable hardware bitmaps for better performance
             .memoryCache {
@@ -346,7 +298,6 @@ object AppModule {
         lrcLibApiService: LrcLibApiService,
         lyricsDao: LyricsDao,
         okHttpClient: OkHttpClient,
-        neteaseRepository: Lazy<com.theveloper.pixelplay.data.netease.NeteaseRepository>,
         navidromeRepository: Lazy<com.theveloper.pixelplay.data.navidrome.NavidromeRepository>
     ): LyricsRepository {
         return LyricsRepositoryImpl(
@@ -354,45 +305,8 @@ object AppModule {
             lrcLibApiService = lrcLibApiService,
             lyricsDao = lyricsDao,
             okHttpClient = okHttpClient,
-            neteaseRepositoryProvider = neteaseRepository,
             navidromeRepositoryProvider = navidromeRepository
         )
-    }
-
-    @Provides
-    @Singleton
-    fun provideSongRepository(
-        @ApplicationContext context: Context,
-        mediaStoreObserver: com.theveloper.pixelplay.data.observer.MediaStoreObserver,
-        favoritesDao: FavoritesDao,
-        userPreferencesRepository: UserPreferencesRepository,
-        musicDao: MusicDao
-    ): SongRepository {
-        return MediaStoreSongRepository(
-            context = context,
-            mediaStoreObserver = mediaStoreObserver,
-            favoritesDao = favoritesDao,
-            userPreferencesRepository = userPreferencesRepository,
-            musicDao = musicDao
-        )
-    }
-
-    @Singleton
-    @Provides
-    fun provideTelegramDao(database: PixelPlayDatabase): com.theveloper.pixelplay.data.database.TelegramDao {
-        return database.telegramDao()
-    }
-
-    @Singleton
-    @Provides
-    fun provideNeteaseDao(database: PixelPlayDatabase): com.theveloper.pixelplay.data.database.NeteaseDao {
-        return database.neteaseDao()
-    }
-
-    @Provides
-    @Singleton
-    fun provideFolderTreeBuilder(): FolderTreeBuilder {
-        return FolderTreeBuilder()
     }
 
     @Provides
@@ -404,13 +318,8 @@ object AppModule {
         searchHistoryDao: SearchHistoryDao,
         musicDao: MusicDao,
         lyricsRepository: LyricsRepository,
-        telegramDao: com.theveloper.pixelplay.data.database.TelegramDao,
-        telegramCacheManager: Lazy<com.theveloper.pixelplay.data.telegram.TelegramCacheManager>,
-        telegramRepository: Lazy<com.theveloper.pixelplay.data.telegram.TelegramRepository>,
-        songRepository: SongRepository,
         favoritesDao: FavoritesDao,
         artistImageRepository: ArtistImageRepository,
-        folderTreeBuilder: FolderTreeBuilder,
         engagementDao: EngagementDao,
         navidromeRepository: Lazy<com.theveloper.pixelplay.data.navidrome.NavidromeRepository>
     ): MusicRepository {
@@ -421,13 +330,8 @@ object AppModule {
             searchHistoryDao = searchHistoryDao,
             musicDao = musicDao,
             lyricsRepository = lyricsRepository,
-            telegramDao = telegramDao,
-            telegramCacheManagerProvider = telegramCacheManager,
-            telegramRepositoryProvider = telegramRepository,
-            songRepository = songRepository,
             favoritesDao = favoritesDao,
             artistImageRepository = artistImageRepository,
-            folderTreeBuilder = folderTreeBuilder,
             engagementDao = engagementDao,
             navidromeRepositoryProvider = navidromeRepository
         )
@@ -447,10 +351,9 @@ object AppModule {
     fun provideSongMetadataEditor(
         @ApplicationContext context: Context,
         musicDao: MusicDao,
-        telegramDao: com.theveloper.pixelplay.data.database.TelegramDao,
         userPreferencesRepository: UserPreferencesRepository
     ): SongMetadataEditor {
-        return SongMetadataEditor(context, musicDao, telegramDao, userPreferencesRepository)
+        return SongMetadataEditor(context, musicDao, userPreferencesRepository)
     }
 
     /**
@@ -475,10 +378,6 @@ object AppModule {
             redactHeader("Cookie")
             redactHeader("Set-Cookie")
             redactHeader("x-goog-api-key")
-            redactHeader("X-Emby-Token")
-            redactHeader("X-Emby-Authorization")
-            redactHeader("X-MediaBrowser-Token")
-            redactHeader("X-Plex-Token")
         }
         
         // Connection pool with optimized connections for better performance

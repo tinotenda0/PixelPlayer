@@ -8,17 +8,12 @@
     <string name="presentation_batch_d_sort_by">فرز حسب</string>
     <string name="presentation_batch_d_view_section_cloud">سحابي</string>
     <string name="presentation_batch_d_view_section_view">عرض</string>
-    <string name="presentation_batch_d_telegram_cloud_channels">قنوات Telegram السحابية</string>
     <string name="presentation_batch_d_playlist_view">عرض قوائم التشغيل</string>
     <string name="presentation_batch_d_view_grid">شبكة</string>
     <string name="presentation_batch_d_view_list">قائمة</string>
     <string name="presentation_batch_d_storage_internal">الذاكرة الداخلية</string>
     <string name="presentation_batch_d_storage_sd_card">بطاقة SD</string>
     <string name="presentation_batch_d_sd_card_unavailable">بطاقة SD غير متاحة حالياً.</string>
-    <string name="presentation_batch_d_topics_display">عرض المواضيع</string>
-    <string name="presentation_batch_d_topic_mode_channels">القنوات</string>
-    <string name="presentation_batch_d_topic_mode_topics">المواضيع</string>
-    <string name="presentation_batch_d_topic_mode_both">كلاهما</string>
     <string name="presentation_batch_d_cloud_sources_heading">سحابي</string>
     <string name="presentation_batch_d_cloud_only">سحابي فقط</string>
     <string name="presentation_batch_d_generating_ai_metadata">جاري إنشاء البيانات الوصفية بالذكاء الاصطناعي…</string>

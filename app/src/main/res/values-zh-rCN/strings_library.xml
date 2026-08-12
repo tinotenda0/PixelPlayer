@@ -11,7 +11,6 @@
     <string name="library_tab_albums">专辑</string>
     <string name="library_tab_artists">艺术家</string>
     <string name="library_tab_playlists">播放列表</string>
-    <string name="library_tab_folders">文件夹</string>
     <string name="library_tab_liked">已收藏</string>
 
     <!-- Library Toasts -->
@@ -30,24 +29,10 @@
 
     <!-- Library Multi-Selection & Folders -->
     <string name="library_toast_max_albums_selection">您最多可以选择 %1$d 张专辑</string>
-    <string name="library_folder_name_fallback">文件夹</string>
-    <string name="library_cd_folder">文件夹</string>
-
     <!-- Library Sort & View Bottom Sheet -->
     <string name="library_sort_by_title">排序方式</string>
-    <string name="library_sort_section_view">视图</string>
-    <string name="library_sort_toggle_playlist_view">播放列表视图</string>
     <string name="library_view_mode_grid">网格</string>
     <string name="library_view_mode_list">列表</string>
-    <string name="library_storage_internal">内部存储</string>
-    <string name="library_storage_sd_card">SD 卡</string>
-    <string name="library_storage_sd_card_unavailable">SD 卡目前不可用。</string>
-    <string name="library_sort_section_cloud">云端</string>
-    <string name="library_sort_toggle_telegram_channels">Telegram 云端频道</string>
-    <string name="library_telegram_topics_display_title">话题显示 (Topics)</string>
-    <string name="library_telegram_topic_mode_channels">频道</string>
-    <string name="library_telegram_topic_mode_topics">话题</string>
-    <string name="library_telegram_topic_mode_both">全部</string>
     <string name="library_cloud_sources_heading">云端</string>
     <string name="library_cloud_only_label">仅云端</string>
 
@@ -98,7 +83,7 @@
     <string name="library_empty_songs_offline_title">未找到本地歌曲</string>
     <string name="library_empty_songs_offline_subtitle">尝试其他数据源过滤或重新扫描您的设备媒体库。</string>
     <string name="library_empty_songs_online_title">未找到云端歌曲</string>
-    <string name="library_empty_songs_online_subtitle">同步 Telegram 或网易云音乐歌曲，或切换到本地源。</string>
+    <string name="library_empty_songs_online_subtitle">同步 Navidrome 歌曲，或切换到本地源。</string>
     <string name="library_empty_albums_all_title">暂无专辑</string>
     <string name="library_empty_albums_all_subtitle">一旦您的媒体库对曲目进行分组，专辑就会显示在这里。</string>
     <string name="library_empty_albums_offline_title">未找到本地专辑</string>
@@ -116,9 +101,7 @@
     <string name="library_empty_liked_offline_title">无本地收藏歌曲</string>
     <string name="library_empty_liked_offline_subtitle">切换数据源过滤或收藏您设备中的歌曲。</string>
     <string name="library_empty_liked_online_title">无云端收藏歌曲</string>
-    <string name="library_empty_liked_online_subtitle">收藏 Telegram 或网易云音乐的曲目，即可在此视图中看到它们。</string>
-    <string name="library_empty_folders_title">未找到文件夹</string>
-    <string name="library_empty_folders_subtitle">包含音乐的内部存储文件夹将显示在这里。</string>
+    <string name="library_empty_liked_online_subtitle">收藏 Navidrome 的曲目，即可在此视图中看到它们。</string>
     <string name="library_empty_playlists_title">暂无播放列表</string>
     <string name="library_empty_playlists_subtitle">创建您的第一个播放列表来整理您的媒体库。</string>
 
@@ -142,7 +125,6 @@
     <string name="song_info_cd_queue_next">在队列中下一首播放</string>
     <string name="song_info_cd_add_to_playlist">添加到播放列表</string>
     <string name="song_info_action_delete">删除</string>
-    <string name="song_info_action_delete_all">全部删除</string>
     <string name="song_info_checking_watch">正在检查手表</string>
     <string name="song_info_transferring_percent">正在传输 %1$d%%</string>
     <string name="song_info_transferring_to_watch">正在传至手表</string>
@@ -439,8 +421,6 @@
     <string name="playlist_sheet_search_playlists_hint">搜索播放列表…</string>
     <string name="playlist_sheet_song_added_to_playlists">已将歌曲添加到播放列表</string>
     <string name="playlist_sheet_created_and_songs_added">播放列表已创建并已添加歌曲</string>
-    <string name="playlist_sheet_internal_storage">内部存储</string>
-
     <!-- SongPickerBottomSheet -->
     <string name="song_picker_title">添加歌曲</string>
     <string name="song_picker_cd_confirm_add_songs">添加所选歌曲</string>
@@ -522,25 +502,6 @@
     <string name="artist_detail_not_found">找不到该艺术家</string>
 
     <!-- SongRemovalStateHolder -->
-    <string name="song_removal_cannot_delete_currently_playing">无法删除当前正在播放的歌曲</string>
-    <string name="song_removal_batch_delete_files_deleted_skipped_format">删除了 %1$d 个文件（跳过了 %2$d 个 - 正在播放）</string>
-    <string name="song_removal_batch_delete_partial_format">删除了 %1$d 个（共 %2$d 个）文件</string>
-    <string name="song_removal_delete_files_failed">删除文件失败</string>
-    <string name="song_removal_file_deleted">文件已删除</string>
-    <string name="song_removal_delete_file_not_found">无法删除文件或找不到文件</string>
-    <string name="song_removal_deletion_cancelled">删除已取消</string>
-    <string name="song_removal_dialog_delete_song_title">删除歌曲？</string>
-    <string name="song_removal_dialog_delete_song_message">“%1$s” - %2$s\n\n此歌曲将从您的设备中永久删除，且无法恢复。</string>
-    <string name="song_removal_delete_songs_permanent_message">这些歌曲将从您的设备中永久删除，且无法恢复。</string>
-    <plurals name="song_removal_n_files_deleted">
-        <item quantity="one">删除了 %d 个文件</item>
-        <item quantity="other">删除了 %d 个文件</item>
-    </plurals>
-    <plurals name="song_removal_delete_songs_confirmation_title">
-        <item quantity="one">删除 %d 首歌曲？</item>
-        <item quantity="other">删除 %d 首歌曲？</item>
-    </plurals>
-
     <!-- MetadataEditStateHolder -->
     <string name="metadata_edit_updated_successfully">元数据更新成功</string>
     <string name="metadata_edit_updating_n_songs">正在更新 %1$d 首歌曲…</string>

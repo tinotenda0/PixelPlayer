@@ -84,7 +84,7 @@ class SharedArtworkContentProvider : ContentProvider() {
     }
 
     /**
-     * Serves covers for streaming providers (plex_cover:// etc.) to external
+     * Serves covers for streaming providers (navidrome_cover:// etc.) to external
      * controllers like Android Auto, which cannot load app-internal schemes.
      * The image is fetched through the app's Coil pipeline (already handles all
      * provider schemes and their disk caches) and materialized as a JPEG.
@@ -124,16 +124,13 @@ class SharedArtworkContentProvider : ContentProvider() {
 
         /** Provider cover schemes that the app's Coil pipeline knows how to load. */
         private val CLOUD_COVER_SCHEMES = setOf(
-            "plex_cover",
-            "jellyfin_cover",
-            "navidrome_cover",
-            "telegram_art"
+            "navidrome_cover"
         )
 
         fun authority(packageName: String): String = packageName + AUTHORITY_SUFFIX
 
         /**
-         * Wraps an app-internal provider cover URI (e.g. plex_cover://123) into a
+         * Wraps an app-internal provider cover URI (e.g. navidrome_cover://123) into a
          * content:// URI external controllers can open. Returns null for
          * schemes outside the allowlist.
          */

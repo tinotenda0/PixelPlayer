@@ -131,7 +131,6 @@ import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.PlaylistViewModel
-import com.theveloper.pixelplay.presentation.viewmodel.PlaylistViewModel.Companion.FOLDER_PLAYLIST_PREFIX
 import com.theveloper.pixelplay.presentation.utils.LocalAppHapticsConfig
 import com.theveloper.pixelplay.presentation.utils.performAppCompatHapticFeedback
 import com.theveloper.pixelplay.ui.theme.GoogleSansRounded
@@ -189,7 +188,9 @@ fun PlaylistDetailScreen(
     val toastAddedToQueue = stringResource(R.string.library_toast_added_to_queue)
     val toastPlayingNext = stringResource(R.string.library_toast_playing_next)
     val currentPlaylist = uiState.currentPlaylistDetails
-    val isFolderPlaylist = currentPlaylist?.id?.startsWith(FOLDER_PLAYLIST_PREFIX) == true
+    // Folder-as-playlist pseudo-IDs no longer exist (local media browsing was removed), so this
+    // screen only ever renders real playlists now.
+    val isFolderPlaylist = false
     val songsInPlaylist = uiState.currentPlaylistSongs
     val songInfoViewModel: com.theveloper.pixelplay.presentation.viewmodel.SongInfoBottomSheetViewModel =
         androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel()
@@ -1024,7 +1025,6 @@ fun PlaylistDetailScreen(
                 onAddToPlayList = {
                     showPlaylistBottomSheet = true;
                 },
-                onDeleteFromDevice = playerViewModel::deleteFromDevice,
                 onNavigateToAlbum = {
                     navController.navigateSafelyReplacing(
                         route = Screen.AlbumDetail.createRoute(currentSong.albumId),
@@ -1071,9 +1071,6 @@ fun PlaylistDetailScreen(
                         replayGainAlbumGainDb,
                         coverArtUpdate
                     )
-                },
-                removeFromListTrigger = {
-                    playlistViewModel.removeSongFromPlaylist(playlistId, currentSong.id)
                 }
             )
             if (showPlaylistBottomSheet) {

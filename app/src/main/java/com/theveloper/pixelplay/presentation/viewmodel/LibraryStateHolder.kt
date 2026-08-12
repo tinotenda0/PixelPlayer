@@ -11,7 +11,6 @@ import android.util.Log
 import com.theveloper.pixelplay.data.model.Album
 import com.theveloper.pixelplay.data.model.Artist
 import com.theveloper.pixelplay.data.model.LibraryTabId
-import com.theveloper.pixelplay.data.model.MusicFolder
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.model.SortOption
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
@@ -32,14 +31,13 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val ENABLE_FOLDERS_STORAGE_FILTER = false
 private data class GenreSeed(
     val id: String,
     val name: String
 )
 
 /**
- * Manages the data state of the music library: Songs, Albums, Artists, Folders.
+ * Manages the data state of the music library: Songs, Albums, Artists.
  * Handles loading from Repository and applying SortOptions.
  */
 @Singleton
@@ -60,9 +58,6 @@ class LibraryStateHolder @Inject constructor(
 
     private val _artists = MutableStateFlow<ImmutableList<Artist>>(persistentListOf())
     val artists = _artists.asStateFlow()
-
-    private val _musicFolders = MutableStateFlow<ImmutableList<MusicFolder>>(persistentListOf())
-    val musicFolders = _musicFolders.asStateFlow()
 
     private val _isLoadingLibrary = MutableStateFlow(false)
     val isLoadingLibrary = _isLoadingLibrary.asStateFlow()
@@ -91,16 +86,6 @@ class LibraryStateHolder @Inject constructor(
             if (hideLocal) com.theveloper.pixelplay.data.model.StorageFilter.ONLINE else filter
         }
 
-    private fun effectiveFoldersStorageFilter(
-        selectedFilter: com.theveloper.pixelplay.data.model.StorageFilter
-    ): com.theveloper.pixelplay.data.model.StorageFilter {
-        return if (ENABLE_FOLDERS_STORAGE_FILTER) {
-            selectedFilter
-        } else {
-            com.theveloper.pixelplay.data.model.StorageFilter.OFFLINE
-        }
-    }
-
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val songsPagingFlow: kotlinx.coroutines.flow.Flow<androidx.paging.PagingData<Song>> =
         kotlinx.coroutines.flow.combine(_currentSongSortOption, effectiveStorageFilter) { sort, filter ->
@@ -115,9 +100,6 @@ class LibraryStateHolder @Inject constructor(
 
     private val _currentArtistSortOption = MutableStateFlow<SortOption>(SortOption.ArtistNameAZ)
     val currentArtistSortOption = _currentArtistSortOption.asStateFlow()
-
-    private val _currentFolderSortOption = MutableStateFlow<SortOption>(SortOption.FolderNameAZ)
-    val currentFolderSortOption = _currentFolderSortOption.asStateFlow()
 
     private val _currentFavoriteSortOption = MutableStateFlow<SortOption>(SortOption.LikedSongDateLiked)
     val currentFavoriteSortOption = _currentFavoriteSortOption.asStateFlow()
@@ -212,9 +194,6 @@ class LibraryStateHolder @Inject constructor(
             val artistSortKey = userPreferencesRepository.artistsSortOptionFlow.first()
             _currentArtistSortOption.value = SortOption.ARTISTS.find { it.storageKey == artistSortKey } ?: SortOption.ArtistNameAZ
 
-            val folderSortKey = userPreferencesRepository.foldersSortOptionFlow.first()
-            _currentFolderSortOption.value = SortOption.FOLDERS.find { it.storageKey == folderSortKey } ?: SortOption.FolderNameAZ
-
             val likedSortKey = userPreferencesRepository.likedSongsSortOptionFlow.first()
             _currentFavoriteSortOption.value = SortOption.LIKED.find { it.storageKey == likedSortKey } ?: SortOption.LikedSongDateLiked
 
@@ -237,7 +216,6 @@ class LibraryStateHolder @Inject constructor(
     private var songsJob: Job? = null
     private var albumsJob: Job? = null
     private var artistsJob: Job? = null
-    private var foldersJob: Job? = null
     @Volatile
     private var needsReloadAfterTrim: Boolean = false
 
@@ -245,8 +223,7 @@ class LibraryStateHolder @Inject constructor(
         if (
             songsJob?.isActive == true &&
             albumsJob?.isActive == true &&
-            artistsJob?.isActive == true &&
-            foldersJob?.isActive == true
+            artistsJob?.isActive == true
         ) {
             return
         }
@@ -305,17 +282,6 @@ class LibraryStateHolder @Inject constructor(
             }
         }
 
-        foldersJob = scope?.launch {
-            @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-            effectiveStorageFilter.flatMapLatest { filter ->
-                musicRepository.getMusicFolders(effectiveFoldersStorageFilter(filter))
-            }.conflate().collect { folders ->
-                val sortedFolders = withContext(Dispatchers.Default) {
-                    sortFoldersList(folders, _currentFolderSortOption.value).toImmutableList()
-                }
-                _musicFolders.value = sortedFolders
-            }
-        }
     }
 
     // Deprecated imperative loaders - redirected to observer start
@@ -328,10 +294,6 @@ class LibraryStateHolder @Inject constructor(
     }
 
     fun loadArtistsFromRepository() {
-        startObservingLibraryData()
-    }
-
-    fun loadFoldersFromRepository() {
         startObservingLibraryData()
     }
 
@@ -400,23 +362,6 @@ class LibraryStateHolder @Inject constructor(
                 sortArtistsList(_artists.value, sortOption).toImmutableList()
             }
             _artists.value = sorted
-        }
-    }
-
-    fun sortFolders(sortOption: SortOption, persist: Boolean = true) {
-        scope?.launch {
-            if (persist && _currentFolderSortOption.value.storageKey == sortOption.storageKey) {
-                return@launch
-            }
-            if (persist) {
-                userPreferencesRepository.setFoldersSortOption(sortOption.storageKey)
-            }
-            _currentFolderSortOption.value = sortOption
-
-            val sorted = withContext(Dispatchers.Default) {
-                sortFoldersList(_musicFolders.value, sortOption).toImmutableList()
-            }
-            _musicFolders.value = sorted
         }
     }
 
@@ -495,40 +440,6 @@ class LibraryStateHolder @Inject constructor(
         }
     }
 
-    private fun sortFoldersList(folders: Iterable<MusicFolder>, sortOption: SortOption): List<MusicFolder> {
-        return when (sortOption) {
-            SortOption.FolderNameAZ -> folders.sortedWith(
-                compareBy<MusicFolder> { it.name.lowercase() }
-                    .thenBy { it.path }
-            )
-            SortOption.FolderNameZA -> folders.sortedWith(
-                compareByDescending<MusicFolder> { it.name.lowercase() }
-                    .thenBy { it.path }
-            )
-            SortOption.FolderSongCountAsc -> folders.sortedWith(
-                compareBy<MusicFolder> { it.totalSongCount }
-                    .thenBy { it.name.lowercase() }
-                    .thenBy { it.path }
-            )
-            SortOption.FolderSongCountDesc -> folders.sortedWith(
-                compareByDescending<MusicFolder> { it.totalSongCount }
-                    .thenBy { it.name.lowercase() }
-                    .thenBy { it.path }
-            )
-            SortOption.FolderSubdirCountAsc -> folders.sortedWith(
-                compareBy<MusicFolder> { it.totalSubFolderCount }
-                    .thenBy { it.name.lowercase() }
-                    .thenBy { it.path }
-            )
-            SortOption.FolderSubdirCountDesc -> folders.sortedWith(
-                compareByDescending<MusicFolder> { it.totalSubFolderCount }
-                    .thenBy { it.name.lowercase() }
-                    .thenBy { it.path }
-            )
-            else -> folders.toList()
-        }
-    }
-
     fun sortFavoriteSongs(sortOption: SortOption, persist: Boolean = true) {
         scope?.launch {
             if (persist && _currentFavoriteSortOption.value.storageKey == sortOption.storageKey) {
@@ -575,29 +486,24 @@ class LibraryStateHolder @Inject constructor(
         val hasLoadedData =
             _allSongs.value.isNotEmpty() ||
                 _albums.value.isNotEmpty() ||
-                _artists.value.isNotEmpty() ||
-                _musicFolders.value.isNotEmpty()
+                _artists.value.isNotEmpty()
         val hasActiveCollectors =
             songsJob?.isActive == true ||
                 albumsJob?.isActive == true ||
-                artistsJob?.isActive == true ||
-                foldersJob?.isActive == true
+                artistsJob?.isActive == true
         if (!hasLoadedData && !hasActiveCollectors) return
 
         songsJob?.cancel()
         albumsJob?.cancel()
         artistsJob?.cancel()
-        foldersJob?.cancel()
         songsJob = null
         albumsJob = null
         artistsJob = null
-        foldersJob = null
 
         _allSongs.value = persistentListOf()
         _allSongsById.value = emptyMap()
         _albums.value = persistentListOf()
         _artists.value = persistentListOf()
-        _musicFolders.value = persistentListOf()
         _isLoadingLibrary.value = false
         _isLoadingCategories.value = false
         needsReloadAfterTrim = true

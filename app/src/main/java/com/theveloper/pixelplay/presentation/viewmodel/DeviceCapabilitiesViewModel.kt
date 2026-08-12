@@ -6,18 +6,15 @@ import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
-import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
-import android.provider.OpenableColumns
 import androidx.annotation.OptIn
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import com.theveloper.pixelplay.data.database.DeviceCapabilitySongRow
 import com.theveloper.pixelplay.data.database.MusicDao
-import com.theveloper.pixelplay.data.database.SourceType
 import com.theveloper.pixelplay.data.diagnostics.AdvancedPerformanceDiagnostics
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.service.player.ActiveDecoderInfo
@@ -25,7 +22,6 @@ import com.theveloper.pixelplay.data.service.player.DualPlayerEngine
 import com.theveloper.pixelplay.data.service.player.HiFiCapabilityChecker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.File
 import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -76,24 +72,13 @@ data class FormatSupportInfo(
     val librarySongCount: Int
 )
 
-data class LocalMusicStorageSummary(
-    val localSongCount: Int,
-    val cloudSongCount: Int,
-    val knownLocalFileCount: Int,
-    val unavailableLocalFileCount: Int,
-    val localMusicBytes: Long,
+data class LibraryStorageSummary(
+    val songCount: Int,
     val deviceAvailableBytes: Long,
     val deviceTotalBytes: Long
 ) {
     val deviceUsedBytes: Long
         get() = (deviceTotalBytes - deviceAvailableBytes).coerceAtLeast(0L)
-
-    val localMusicStorageFraction: Float
-        get() = if (deviceTotalBytes <= 0L) {
-            0f
-        } else {
-            (localMusicBytes.toDouble() / deviceTotalBytes.toDouble()).coerceIn(0.0, 1.0).toFloat()
-        }
 
     val deviceUsedFraction: Float
         get() = if (deviceTotalBytes <= 0L) {
@@ -108,10 +93,7 @@ data class PlaybackCompatibilitySummary(
     val unsupportedLibrarySongCount: Int,
     val unknownFormatSongCount: Int,
     val unsupportedFormats: List<String>,
-    val localHiResSongCount: Int,
-    val resampledLocalSongCount: Int,
-    val maxLocalSampleRate: Int?,
-    val maxLocalBitrate: Int?
+    val maxBitrate: Int?
 )
 
 data class MemorySummary(
@@ -132,7 +114,7 @@ data class DeviceCapabilitiesState(
     val deviceInfo: Map<String, String> = emptyMap(),
     val audioCapabilities: AudioCapabilities? = null,
     val exoPlayerInfo: ExoPlayerInfo? = null,
-    val storageSummary: LocalMusicStorageSummary? = null,
+    val storageSummary: LibraryStorageSummary? = null,
     val playbackCompatibility: PlaybackCompatibilitySummary? = null,
     val formatSupport: List<FormatSupportInfo> = emptyList(),
     val memorySummary: MemorySummary? = null,
@@ -226,7 +208,7 @@ class DeviceCapabilitiesViewModel @Inject constructor(
                 val deviceInfo = getDeviceInfo()
                 val audioCaps = getAudioCapabilities()
                 val libraryRows = musicDao.getDeviceCapabilitySongRows()
-                val storage = getLocalMusicStorageSummary(libraryRows)
+                val storage = getLibraryStorageSummary(libraryRows)
                 val playback = getPlaybackCompatibilitySummary(libraryRows, audioCaps)
                 val formatSupport = getFormatSupport(libraryRows, audioCaps)
                 val memorySummary = getMemorySummary()
@@ -329,31 +311,11 @@ class DeviceCapabilitiesViewModel @Inject constructor(
         return codecs.sortedBy { it.name }
     }
 
-    private fun getLocalMusicStorageSummary(rows: List<DeviceCapabilitySongRow>): LocalMusicStorageSummary {
-        val localRows = rows.filter { it.sourceType == SourceType.LOCAL }
-        val cloudCount = rows.count { it.sourceType != SourceType.LOCAL }
-        var totalBytes = 0L
-        var knownFiles = 0
-        var unavailableFiles = 0
-
-        localRows.forEach { row ->
-            val bytes = resolveLocalFileSize(row)
-            if (bytes > 0L) {
-                totalBytes += bytes
-                knownFiles += 1
-            } else {
-                unavailableFiles += 1
-            }
-        }
-
+    private fun getLibraryStorageSummary(rows: List<DeviceCapabilitySongRow>): LibraryStorageSummary {
         val storageStats = getDeviceStorageStats()
 
-        return LocalMusicStorageSummary(
-            localSongCount = localRows.size,
-            cloudSongCount = cloudCount,
-            knownLocalFileCount = knownFiles,
-            unavailableLocalFileCount = unavailableFiles,
-            localMusicBytes = totalBytes,
+        return LibraryStorageSummary(
+            songCount = rows.size,
             deviceAvailableBytes = storageStats.first,
             deviceTotalBytes = storageStats.second
         )
@@ -364,7 +326,6 @@ class DeviceCapabilitiesViewModel @Inject constructor(
         audioCapabilities: AudioCapabilities
     ): PlaybackCompatibilitySummary {
         val supportedTypes = audioCapabilities.supportedCodecs.flatMap { it.supportedTypes }.toSet()
-        val localRows = rows.filter { it.sourceType == SourceType.LOCAL }
         var supportedCount = 0
         var unsupportedCount = 0
         var unknownCount = 0
@@ -382,22 +343,14 @@ class DeviceCapabilitiesViewModel @Inject constructor(
             }
         }
 
-        val localSampleRates = localRows.mapNotNull { it.sampleRate }.filter { it > 0 }
-        val maxSampleRate = localSampleRates.maxOrNull()
-        val maxBitrate = localRows.mapNotNull { it.bitrate }.filter { it > 0 }.maxOrNull()
-        val outputRate = audioCapabilities.outputSampleRate.coerceAtLeast(1)
-        val hiResSongCount = localSampleRates.count { it > 48_000 }
-        val resampledSongCount = localSampleRates.count { it > outputRate }
+        val maxBitrate = rows.mapNotNull { it.bitrate }.filter { it > 0 }.maxOrNull()
 
         return PlaybackCompatibilitySummary(
             supportedLibrarySongCount = supportedCount,
             unsupportedLibrarySongCount = unsupportedCount,
             unknownFormatSongCount = unknownCount,
             unsupportedFormats = unsupportedFormats.toList(),
-            localHiResSongCount = hiResSongCount,
-            resampledLocalSongCount = resampledSongCount,
-            maxLocalSampleRate = maxSampleRate,
-            maxLocalBitrate = maxBitrate
+            maxBitrate = maxBitrate
         )
     }
 
@@ -484,47 +437,6 @@ class DeviceCapabilitiesViewModel @Inject constructor(
             val statFs = StatFs(Environment.getExternalStorageDirectory().path)
             statFs.availableBytes to statFs.totalBytes
         }.getOrElse { 0L to 0L }
-    }
-
-    private fun resolveLocalFileSize(row: DeviceCapabilitySongRow): Long {
-        val pathSize = row.filePath
-            .takeIf { it.isNotBlank() }
-            ?.let { path ->
-                runCatching {
-                    val file = File(path)
-                    if (file.exists() && file.isFile) file.length() else 0L
-                }.getOrDefault(0L)
-            }
-            ?: 0L
-
-        if (pathSize > 0L) return pathSize
-
-        val contentSize = resolveContentUriSize(row.contentUriString)
-        if (contentSize > 0L) return contentSize
-
-        return estimateFileSizeFromMetadata(row)
-    }
-
-    private fun resolveContentUriSize(contentUriString: String): Long {
-        val uri = runCatching { Uri.parse(contentUriString) }.getOrNull() ?: return 0L
-        if (uri.scheme != "content") return 0L
-
-        return runCatching {
-            context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                    if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else 0L
-                } else {
-                    0L
-                }
-            } ?: 0L
-        }.getOrDefault(0L)
-    }
-
-    private fun estimateFileSizeFromMetadata(row: DeviceCapabilitySongRow): Long {
-        val bitrate = row.bitrate?.takeIf { it > 0 }?.toLong() ?: return 0L
-        val durationMs = row.duration.takeIf { it > 0 } ?: return 0L
-        return (bitrate * durationMs / 8_000L).coerceAtLeast(0L)
     }
 
     @OptIn(UnstableApi::class)

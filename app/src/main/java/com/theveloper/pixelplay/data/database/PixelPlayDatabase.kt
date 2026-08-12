@@ -15,32 +15,18 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ArtistEntity::class,
         TransitionRuleEntity::class,
         SongArtistCrossRef::class,
-        TelegramSongEntity::class,
-        TelegramChannelEntity::class,
         SongEngagementEntity::class,
         FavoritesEntity::class,
         LyricsEntity::class,
-        NeteaseSongEntity::class,
-        NeteasePlaylistEntity::class,
-        GDriveSongEntity::class,
-        GDriveFolderEntity::class,
         PlaylistEntity::class,
         PlaylistSongEntity::class,
-        QqMusicSongEntity::class,
-        QqMusicPlaylistEntity::class,
         NavidromeSongEntity::class,
         NavidromePlaylistEntity::class,
-        TelegramTopicEntity::class,
-        JellyfinSongEntity::class,
-        JellyfinPlaylistEntity::class,
-        PlexSongEntity::class,
-        PlexPlaylistEntity::class,
-        PlexDownloadEntity::class,
         NavidromeDownloadEntity::class,
         AiCacheEntity::class,
         AiUsageEntity::class
     ],
-    version = 48,
+    version = 55,
     exportSchema = true
 )
 abstract class PixelPlayDatabase : RoomDatabase() {
@@ -48,18 +34,11 @@ abstract class PixelPlayDatabase : RoomDatabase() {
     abstract fun searchHistoryDao(): SearchHistoryDao
     abstract fun musicDao(): MusicDao
     abstract fun transitionDao(): TransitionDao
-    abstract fun telegramDao(): TelegramDao
     abstract fun engagementDao(): EngagementDao
     abstract fun favoritesDao(): FavoritesDao
     abstract fun lyricsDao(): LyricsDao
-    abstract fun neteaseDao(): NeteaseDao
-    abstract fun gdriveDao(): GDriveDao
     abstract fun localPlaylistDao(): LocalPlaylistDao
-    abstract fun qqmusicDao(): QqMusicDao
     abstract fun navidromeDao(): NavidromeDao
-    abstract fun jellyfinDao(): JellyfinDao
-    abstract fun plexDao(): PlexDao
-    abstract fun plexDownloadDao(): PlexDownloadDao
     abstract fun navidromeDownloadDao(): NavidromeDownloadDao
     abstract fun aiCacheDao(): AiCacheDao
     abstract fun aiUsageDao(): AiUsageDao
@@ -887,6 +866,84 @@ abstract class PixelPlayDatabase : RoomDatabase() {
                 db.execSQL(
                     "ALTER TABLE `navidrome_songs` ADD COLUMN `explicit` INTEGER NOT NULL DEFAULT 0"
                 )
+            }
+        }
+
+        /** Google Drive support removed — drop its tables. Any lingering `songs` rows with
+         *  source_type = 3 (the retired GDRIVE constant) are orphaned by this same change;
+         *  they're harmless leftover rows (no code queries that source_type anymore) rather
+         *  than something this migration needs to clean up itself. */
+        val MIGRATION_48_49 = object : Migration(48, 49) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `gdrive_songs`")
+                db.execSQL("DROP TABLE IF EXISTS `gdrive_folders`")
+                // source_type 3 = GDRIVE, retired — purge any songs a user had
+                // favorited/playlisted from Drive so the library doesn't keep
+                // unplayable ghost entries with no engine left to resolve them.
+                db.execSQL("DELETE FROM songs WHERE source_type = 3")
+            }
+        }
+
+        val MIGRATION_49_50 = object : Migration(49, 50) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `plex_songs`")
+                db.execSQL("DROP TABLE IF EXISTS `plex_playlists`")
+                db.execSQL("DROP TABLE IF EXISTS `plex_downloads`")
+                // source_type 7 = PLEX, retired — same ghost-entry cleanup as 48→49.
+                db.execSQL("DELETE FROM songs WHERE source_type = 7")
+            }
+        }
+
+        val MIGRATION_50_51 = object : Migration(50, 51) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `jellyfin_songs`")
+                db.execSQL("DROP TABLE IF EXISTS `jellyfin_playlists`")
+                // source_type 6 = JELLYFIN, retired — same ghost-entry cleanup as 49→50.
+                db.execSQL("DELETE FROM songs WHERE source_type = 6")
+            }
+        }
+
+        val MIGRATION_51_52 = object : Migration(51, 52) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `qqmusic_songs`")
+                db.execSQL("DROP TABLE IF EXISTS `qqmusic_playlists`")
+                // source_type 4 = QQMUSIC, retired — same ghost-entry cleanup as 50→51.
+                db.execSQL("DELETE FROM songs WHERE source_type = 4")
+            }
+        }
+
+        val MIGRATION_52_53 = object : Migration(52, 53) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `netease_songs`")
+                db.execSQL("DROP TABLE IF EXISTS `netease_playlists`")
+                // source_type 2 = NETEASE, retired — same ghost-entry cleanup as 51→52.
+                db.execSQL("DELETE FROM songs WHERE source_type = 2")
+            }
+        }
+
+        val MIGRATION_53_54 = object : Migration(53, 54) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `telegram_songs`")
+                db.execSQL("DROP TABLE IF EXISTS `telegram_channels`")
+                db.execSQL("DROP TABLE IF EXISTS `telegram_topics`")
+                // source_type 1 = TELEGRAM, retired — same ghost-entry cleanup as 52→53.
+                // The songs.telegram_chat_id/telegram_file_id columns are deliberately left in
+                // place (always null going forward) rather than recreating the shared, heavily
+                // indexed `songs` table just to drop two unused columns.
+                db.execSQL("DELETE FROM songs WHERE source_type = 1")
+            }
+        }
+
+        val MIGRATION_54_55 = object : Migration(54, 55) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Local on-device (MediaStore) playback support was removed — the app is a
+                // dedicated Navidrome-gateway client now, not a local music player. Unlike the
+                // seven cloud services retired in earlier migrations, source_type 0 (LOCAL) is
+                // not being retired (it's still the schema's default value, and
+                // SourceType.fromContentUri() still needs a fallback) — only the ghost rows a
+                // prior local scan already wrote are purged, matching the same cleanup every
+                // other removed source got.
+                db.execSQL("DELETE FROM songs WHERE source_type = 0")
             }
         }
 

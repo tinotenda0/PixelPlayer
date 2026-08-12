@@ -20,7 +20,7 @@
     <string name="settings_category_device_capabilities_title">Gerätefähigkeiten</string>
     <string name="settings_category_device_capabilities_subtitle">Codecs, Decoder und Audio-Specs</string>
     <string name="settings_category_accounts_title">Accounts</string>
-    <string name="settings_category_accounts_subtitle">Telegram, Google Drive, Netease und mehr verwalten</string>
+    <string name="settings_category_accounts_subtitle">Navidrome-Konto verwalten</string>
     <string name="settings_category_about_title">Über</string>
     <string name="settings_category_about_subtitle">Version, Credits und mehr</string>
 
@@ -36,8 +36,6 @@
 
     <!-- Music Management category -->
     <string name="settings_library_structure_section">Bibliotheksstruktur</string>
-    <string name="settings_excluded_directories_title">Ausgeschlossene Ordner</string>
-    <string name="settings_excluded_directories_subtitle">Diese Ordner werden beim Scan ignoriert.</string>
     <string name="settings_artists_title">Künstler</string>
     <string name="settings_artists_subtitle">Mehrkünstler-Parsing und Sortierung</string>
     <string name="settings_filtering_section">Filter</string>
@@ -131,21 +129,6 @@
     <string name="delimiter_label_space">Leerzeichen</string>
 
     <!-- Word Delimiters -->
-    <string name="word_delimiters_screen_title">Wort-Trennzeichen</string>
-    <string name="word_delimiter_current_title">Aktuelle Wort-Trennzeichen</string>
-    <string name="word_delimiter_current_subtitle">Diese Schlüsselwörter trennen Künstlernamen, wenn sie von Leerzeichen umgeben sind. Groß-/Kleinschreibung ignoriert. Tippe zum Entfernen.</string>
-    <string name="word_delimiter_empty">Keine Wort-Trennzeichen konfiguriert</string>
-    <string name="word_delimiter_add_title">Neues Wort-Trennzeichen hinzufügen</string>
-    <string name="word_delimiter_add_hint">z. B. feat. oder ft.</string>
-    <string name="word__delimiter_cd_add">Wort-Trennzeichen hinzufügen</string>
-    <string name="word_delimiter_help_title">Wie Wort-Trennzeichen funktionieren</string>
-    <string name="word_delimiter_help_body">Wort-Trennzeichen werden mit Leerzeichen umgeben und ohne Rücksicht auf Groß-/Kleinschreibung gefunden.\n\nEinzelzeichen (wie \"x\") benötigen Leerzeichen auf beiden Seiten, um Fehlzuordnungen zu vermeiden.\n\nBeispiele:\n  \"Drake feat. Rihanna\" -&gt; Drake, Rihanna\n  \"Marshmello x Bastille\" -&gt; Marshmello, Bastille\n  \"A vs. B\" -&gt; A, B</string>
-    <string name="word_delimiter_reset_title">Wort-Trennzeichen zurücksetzen?</string>
-    <string name="word_delimiter_reset_message">Dadurch werden alle deine benutzerdefinierten Wort-Trennzeichen gelöscht und die Standardwerte wiederhergestellt. Diese Aktion kann nicht rückgängig gemacht werden.</string>
-    <string name="word_delimiter_toast_added">Wort-Trennzeichen hinzugefügt</string>
-    <string name="word_delimiter_toast_invalid">Bereits vorhanden oder ungültig</string>
-    <string name="word_delimiter_toast_reset">Wort-Trennzeichen zurückgesetzt</string>
-
     <!-- Library Sync flow -->
     <string name="settings_sync_phase_preparing">Sync wird vorbereitet</string>
     <string name="settings_sync_phase_reading_mediastore">MediaStore wird gelesen</string>
@@ -293,9 +276,6 @@
     <string name="settings_show_queue_history_subtitle">Bereits gespielte Songs in der Queue sichtbar lassen.</string>
 
     <!-- Behavior category -->
-    <string name="settings_folders_section">Ordner</string>
-    <string name="settings_folder_back_gesture_title">Zurück navigiert durch Ordner</string>
-    <string name="settings_folder_back_gesture_subtitle">Im Ordner-Tab geht die Zurück-Geste zuerst eine Ebene hoch, bevor die Bibliothek verlassen wird.</string>
     <string name="settings_player_gestures_section">Player-Gesten</string>
     <string name="settings_tap_bg_closes_title">Hintergrund antippen schließt Player</string>
     <string name="settings_tap_bg_closes_subtitle">Auf den unscharfen Hintergrund tippen, um den Player zu schließen.</string>
@@ -523,18 +503,13 @@
     <string name="settings_devcaps_unknown">--</string>
     <string name="settings_devcaps_metric_formats">Formate</string>
     <string name="settings_devcaps_metric_hw_decoders">HW-Decoder</string>
-    <string name="settings_devcaps_metric_local_music">Lokale Songs</string>
-    <string name="settings_devcaps_storage_title">Lokaler Musikspeicher</string>
-    <string name="settings_devcaps_storage_music_size">Musikgröße</string>
-    <string name="settings_devcaps_storage_music_count">%1$d lokale Songs</string>
+    <string name="settings_devcaps_metric_local_music">Songs</string>
+    <string name="settings_devcaps_storage_title">Gerätespeicher</string>
     <string name="settings_devcaps_storage_available">Verfügbar</string>
     <string name="settings_devcaps_storage_total">%1$s gesamt</string>
-    <string name="settings_devcaps_storage_music_footprint">Speicherbedarf Musik</string>
     <string name="settings_devcaps_storage_device_used">Gerät belegt</string>
     <string name="settings_devcaps_storage_percent">%1$d%%</string>
     <string name="settings_devcaps_storage_less_than_one_percent">&lt;1%</string>
-    <string name="settings_devcaps_storage_cloud_count">%1$d Cloud-Songs</string>
-    <string name="settings_devcaps_storage_unavailable_count">%1$d Dateien nicht lesbar</string>
     <string name="settings_devcaps_playback_path_title">Wiedergabepfad</string>
     <string name="settings_devcaps_status_yes">Ja</string>
     <string name="settings_devcaps_status_no">Nein</string>
@@ -573,8 +548,6 @@
     <string name="settings_devcaps_finding_clear_body">Deine indizierten Titel stimmen mit den von Android gemeldeten Decodern auf diesem Gerät überein.</string>
     <string name="settings_devcaps_finding_unsupported_title">%1$d Titel können möglicherweise nicht nativ decodiert werden</string>
     <string name="settings_devcaps_finding_unsupported_body">Zu überprüfende Formate: %1$s.</string>
-    <string name="settings_devcaps_finding_resample_title">%1$d lokale Titel können resampelt werden</string>
-    <string name="settings_devcaps_finding_resample_body">Die Bibliothek erreicht %1$d Hz, was über der aktuellen Ausgangs-Sample-Rate liegt.</string>
     <string name="settings_devcaps_finding_unknown_title">%1$d Titel haben unbekannte Metadaten</string>
     <string name="settings_devcaps_finding_unknown_body">Ein vollständiger Rescan der Bibliothek kann fehlende MIME-, Bitraten- und Sample-Rate-Daten ergänzen.</string>
     <string name="settings_devcaps_device_info_title">Geräteinfo</string>
@@ -614,7 +587,6 @@
     <string name="accounts_no_linked_subtitle">Einen Anbieter verbinden, um ihn hier zu verwalten.</string>
     <string name="accounts_connect_service">Connect %1$s</string>
     <string name="accounts_service_coming_soon">%1$s (Bald verfügbar)</string>
-    <string name="accounts_google_drive_soon">Google Drive kommt bald.</string>
     <string name="accounts_unable_open_screen">Dieser Bildschirm ist gerade nicht verfügbar.</string>
 
     <!-- About category -->

@@ -419,19 +419,6 @@ class ArtistDetailViewModel @Inject constructor(
         }
     }
 
-    fun removeSongFromAlbumSection(songId: String) {
-        _uiState.update { currentState ->
-            val updatedAlbumSections = currentState.albumSections.map { section ->
-                val updatedSongs = section.songs.filterNot { it.id == songId }
-                section.copy(songs = updatedSongs)
-            }.filter { it.songs.isNotEmpty() }
-
-            currentState.copy(
-                albumSections = updatedAlbumSections,
-                songs = currentState.songs.filterNot { it.id == songId }
-            )
-        }
-    }
 }
 
 private val songDisplayComparator = compareBy<Song> { it.discNumber ?: 1 }

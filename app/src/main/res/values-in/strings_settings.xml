@@ -20,7 +20,7 @@
     <string name="settings_category_device_capabilities_title">Kemampuan Perangkat</string>
     <string name="settings_category_device_capabilities_subtitle">Spek audio, codec, dan info dekoder</string>
     <string name="settings_category_accounts_title">Akun</string>
-    <string name="settings_category_accounts_subtitle">Kelola Telegram, Google Drive, NetEase, dan layanan lainnya</string>
+    <string name="settings_category_accounts_subtitle">Kelola akun Navidrome Anda</string>
     <string name="settings_category_about_title">Tentang</string>
     <string name="settings_category_about_subtitle">Info aplikasi, versi, dan kredit</string>
 
@@ -36,8 +36,6 @@
 
     <!-- Music Management category -->
     <string name="settings_library_structure_section">Struktur Pustaka</string>
-    <string name="settings_excluded_directories_title">Direktori yang Dikecualikan</string>
-    <string name="settings_excluded_directories_subtitle">Folder di sini akan dilewati saat memindai pustaka Anda.</string>
     <string name="settings_artists_title">Artis</string>
     <string name="settings_artists_subtitle">Opsi penguraian dan pengorganisasian multi-artis.</string>
     <string name="settings_filtering_section">Penyaringan</string>
@@ -127,21 +125,6 @@
     <string name="delimiter_label_space">Spasi</string>
 
     <!-- Word Delimiters -->
-    <string name="word_delimiters_screen_title">Pemisah Kata</string>
-    <string name="word_delimiter_current_title">Pemisah Kata Saat Ini</string>
-    <string name="word_delimiter_current_subtitle">Kata kunci ini memisahkan nama artis jika dikelilingi spasi. Tidak peka huruf besar-kecil. Ketuk untuk menghapus.</string>
-    <string name="word_delimiter_empty">Tidak ada pemisah kata yang dikonfigurasi</string>
-    <string name="word_delimiter_add_title">Tambah Pemisah Kata Baru</string>
-    <string name="word_delimiter_add_hint">misalnya, feat. atau ft.</string>
-    <string name="word__delimiter_cd_add">Tambah pemisah kata</string>
-    <string name="word_delimiter_help_title">Cara Kerja Pemisah Kata</string>
-    <string name="word_delimiter_help_body">Pemisah kata dicocokkan tanpa peka huruf besar-kecil dengan spasi di sekelilingnya.\n\nPemisah satu karakter (seperti \"x\") memerlukan spasi di kedua sisi untuk menghindari pencocokan yang salah.\n\nContoh:\n  \"Drake feat. Rihanna\" -&gt; Drake, Rihanna\n  \"Marshmello x Bastille\" -&gt; Marshmello, Bastille\n  \"A vs. B\" -&gt; A, B</string>
-    <string name="word_delimiter_reset_title">Reset Pemisah Kata?</string>
-    <string name="word_delimiter_reset_message">Ini akan menghapus semua pemisah kata kustom Anda dan mengembalikan kata kunci default. Tindakan ini tidak dapat dibatalkan.</string>
-    <string name="word_delimiter_toast_added">Pemisah kata ditambahkan</string>
-    <string name="word_delimiter_toast_invalid">Sudah ada atau tidak valid</string>
-    <string name="word_delimiter_toast_reset">Pemisah kata direset ke default</string>
-
     <!-- Library Sync flow -->
     <string name="settings_sync_phase_preparing">Mempersiapkan sinkronisasi</string>
     <string name="settings_sync_phase_reading_mediastore">Membaca MediaStore</string>
@@ -289,9 +272,6 @@
     <string name="settings_show_queue_history_subtitle">Tampilkan lagu yang diputar sebelumnya di antrean.</string>
 
     <!-- Behavior category -->
-    <string name="settings_folders_section">Folder</string>
-    <string name="settings_folder_back_gesture_title">Gerakan kembali mengontrol folder</string>
-    <string name="settings_folder_back_gesture_subtitle">Di tab Folder, tombol kembali sistem menavigasi tumpukan folder sebelum meninggalkan Pustaka.</string>
     <string name="settings_player_gestures_section">Gerakan Pemutar</string>
     <string name="settings_tap_bg_closes_title">Ketuk latar belakang menutup pemutar</string>
     <string name="settings_tap_bg_closes_subtitle">Ketuk latar belakang yang kabur untuk menutup panel pemutar.</string>
@@ -519,18 +499,13 @@
     <string name="settings_devcaps_unknown">--</string>
     <string name="settings_devcaps_metric_formats">Format</string>
     <string name="settings_devcaps_metric_hw_decoders">Dekoder HW</string>
-    <string name="settings_devcaps_metric_local_music">Lagu lokal</string>
-    <string name="settings_devcaps_storage_title">Penyimpanan Musik Lokal</string>
-    <string name="settings_devcaps_storage_music_size">Ukuran musik</string>
-    <string name="settings_devcaps_storage_music_count">%1$d lagu lokal</string>
+    <string name="settings_devcaps_metric_local_music">Lagu</string>
+    <string name="settings_devcaps_storage_title">Penyimpanan Perangkat</string>
     <string name="settings_devcaps_storage_available">Tersedia</string>
     <string name="settings_devcaps_storage_total">total %1$s</string>
-    <string name="settings_devcaps_storage_music_footprint">Jejak musik</string>
     <string name="settings_devcaps_storage_device_used">Perangkat digunakan</string>
     <string name="settings_devcaps_storage_percent">%1$d%%</string>
     <string name="settings_devcaps_storage_less_than_one_percent">&lt;1%</string>
-    <string name="settings_devcaps_storage_cloud_count">%1$d lagu cloud</string>
-    <string name="settings_devcaps_storage_unavailable_count">%1$d file tidak terbaca</string>
     <string name="settings_devcaps_playback_path_title">Jalur Pemutaran</string>
     <string name="settings_devcaps_status_yes">Ya</string>
     <string name="settings_devcaps_status_no">Tidak</string>
@@ -569,8 +544,6 @@
     <string name="settings_devcaps_finding_clear_body">Trek yang Anda indeks cocok dengan dekoder yang dilaporkan Android di perangkat ini.</string>
     <string name="settings_devcaps_finding_unsupported_title">%1$d trek mungkin tidak didekode secara asli</string>
     <string name="settings_devcaps_finding_unsupported_body">Format untuk ditinjau: %1$s.</string>
-    <string name="settings_devcaps_finding_resample_title">%1$d trek lokal mungkin diresampling</string>
-    <string name="settings_devcaps_finding_resample_body">Pustaka mencapai %1$d Hz, di atas sample rate output saat ini.</string>
     <string name="settings_devcaps_finding_unknown_title">%1$d trek lokal memiliki metadata tidak diketahui</string>
     <string name="settings_devcaps_finding_unknown_body">Pemindaian ulang pustaka lengkap dapat mengisi data MIME, bitrate, dan sample-rate yang hilang.</string>
     <string name="settings_devcaps_device_info_title">Info Perangkat</string>
@@ -610,7 +583,6 @@
     <string name="accounts_no_linked_subtitle">Hubungkan penyedia untuk mengelolanya dari layar ini.</string>
     <string name="accounts_connect_service">Hubungkan %1$s</string>
     <string name="accounts_service_coming_soon">%1$s (Segera hadir)</string>
-    <string name="accounts_google_drive_soon">Google Drive akan segera hadir.</string>
     <string name="accounts_unable_open_screen">Tidak dapat membuka layar ini sekarang.</string>
 
     <!-- About category -->

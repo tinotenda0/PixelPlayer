@@ -15,8 +15,6 @@
     <string name="presentation_batch_b_accounts_no_linked_body">قم بربط أحد المزودين لتتمكن من إدارته من هذه الشاشة.</string>
     <string name="presentation_batch_b_accounts_connect_service">ربط %1$s</string>
     <string name="presentation_batch_b_accounts_service_paren_coming_soon">%1$s (قريباً)</string>
-    <string name="presentation_batch_b_service_telegram">Telegram</string>
-    <string name="presentation_batch_b_service_netease">NetEase Music</string>
 
     <!-- PlaylistDetailScreen -->
     <string name="presentation_batch_b_sort_songs">فرز الأغاني</string>

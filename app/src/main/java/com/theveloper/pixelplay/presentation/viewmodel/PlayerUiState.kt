@@ -3,8 +3,6 @@ package com.theveloper.pixelplay.presentation.viewmodel
 import androidx.compose.runtime.Immutable
 import com.theveloper.pixelplay.data.model.Album
 import com.theveloper.pixelplay.data.model.Artist
-import com.theveloper.pixelplay.data.model.FolderSource
-import com.theveloper.pixelplay.data.model.MusicFolder
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.model.SearchResultItem
 import com.theveloper.pixelplay.data.model.SortOption
@@ -22,7 +20,6 @@ data class PlayerUiState(
     // val artists: ImmutableList<Artist> = persistentListOf(), // REMOVED
     val searchResults: ImmutableList<SearchResultItem> = persistentListOf(),
     val isLiveSearching: Boolean = false,
-    val musicFolders: ImmutableList<MusicFolder> = persistentListOf(),
     val showAiPlaylistSheet: Boolean = false,
     val isGeneratingAiPlaylist: Boolean = false,
     val aiStatus: String? = null,
@@ -37,23 +34,14 @@ data class PlayerUiState(
     val dismissedQueue: ImmutableList<Song> = persistentListOf(),
     val dismissedQueueName: String = "",
     val dismissedPosition: Long = 0L,
-    val currentFolder: MusicFolder? = null,
-    val currentFolderPath: String? = null,
-    val folderSource: FolderSource = FolderSource.INTERNAL,
-    val folderSourceRootPath: String = "",
-    val isSdCardAvailable: Boolean = false,
     val lavaLampColors: ImmutableList<androidx.compose.ui.graphics.Color> = persistentListOf(),
     val undoBarVisibleDuration: Long = 4000L,
-    val isFolderFilterActive: Boolean = false,
-    val isFoldersPlaylistView: Boolean = false,
     val preparingSongId: String? = null,
     val isLoadingLibraryCategories: Boolean = true,
     val isAlbumsListView: Boolean = false,
     val currentFavoriteSortOption: SortOption = SortOption.LikedSongDateLiked,
     val currentAlbumSortOption: SortOption = SortOption.AlbumTitleAZ,
     val currentArtistSortOption: SortOption = SortOption.ArtistNameAZ,
-    val currentFolderSortOption: SortOption = SortOption.FolderNameAZ,
-    val folderBackGestureNavigationEnabled: Boolean = true,
     val currentSongSortOption: SortOption = SortOption.SongTitleAZ,
     // val songCount: Int = 0, // REMOVED
     val searchHistory: ImmutableList<SearchHistoryItem> = persistentListOf(),

@@ -11,7 +11,6 @@
     <string name="library_tab_albums">Álbumes</string>
     <string name="library_tab_artists">Artistas</string>
     <string name="library_tab_playlists">Listas</string>
-    <string name="library_tab_folders">Carpetas</string>
     <string name="library_tab_liked">Me gusta</string>
 
     <!-- Library Toasts -->
@@ -30,24 +29,10 @@
 
     <!-- Library Multi-Selection & Folders -->
     <string name="library_toast_max_albums_selection">Puedes seleccionar hasta %1$d álbumes</string>
-    <string name="library_folder_name_fallback">Carpeta</string>
-    <string name="library_cd_folder">Carpeta</string>
-
     <!-- Library Sort & View Bottom Sheet -->
     <string name="library_sort_by_title">Ordenar por</string>
-    <string name="library_sort_section_view">Vista</string>
-    <string name="library_sort_toggle_playlist_view">Vista de listas</string>
     <string name="library_view_mode_grid">Cuadrícula</string>
     <string name="library_view_mode_list">Lista</string>
-    <string name="library_storage_internal">Interna</string>
-    <string name="library_storage_sd_card">Tarjeta SD</string>
-    <string name="library_storage_sd_card_unavailable">La tarjeta SD no está disponible ahora.</string>
-    <string name="library_sort_section_cloud">Nube</string>
-    <string name="library_sort_toggle_telegram_channels">Canales en la nube de Telegram</string>
-    <string name="library_telegram_topics_display_title">Mostrar temas</string>
-    <string name="library_telegram_topic_mode_channels">Canales</string>
-    <string name="library_telegram_topic_mode_topics">Temas</string>
-    <string name="library_telegram_topic_mode_both">Ambos</string>
     <string name="library_cloud_sources_heading">Nube</string>
     <string name="library_cloud_only_label">Solo nube</string>
 
@@ -98,7 +83,7 @@
     <string name="library_empty_songs_offline_title">No se encontraron canciones locales</string>
     <string name="library_empty_songs_offline_subtitle">Prueba con otro filtro de origen o vuelve a escanear tu biblioteca local.</string>
     <string name="library_empty_songs_online_title">No se encontraron canciones en la nube</string>
-    <string name="library_empty_songs_online_subtitle">Sincroniza canciones de Telegram o NetEase, o cambia a origen local.</string>
+    <string name="library_empty_songs_online_subtitle">Sincroniza canciones de Navidrome, o cambia a origen local.</string>
     <string name="library_empty_albums_all_title">No hay álbumes disponibles</string>
     <string name="library_empty_albums_all_subtitle">Los álbumes aparecerán aquí en cuanto tu biblioteca tenga canciones agrupadas.</string>
     <string name="library_empty_albums_offline_title">No se encontraron álbumes locales</string>
@@ -116,9 +101,7 @@
     <string name="library_empty_liked_offline_title">No hay canciones favoritas locales</string>
     <string name="library_empty_liked_offline_subtitle">Cambia el filtro de origen o marca canciones favoritas en tu dispositivo.</string>
     <string name="library_empty_liked_online_title">No hay canciones favoritas en la nube</string>
-    <string name="library_empty_liked_online_subtitle">Marca canciones de Telegram o NetEase como favoritas para verlas en esta vista.</string>
-    <string name="library_empty_folders_title">No se encontraron carpetas</string>
-    <string name="library_empty_folders_subtitle">Las carpetas del almacenamiento interno con música aparecerán aquí.</string>
+    <string name="library_empty_liked_online_subtitle">Marca canciones de Navidrome como favoritas para verlas en esta vista.</string>
     <string name="library_empty_playlists_title">Aún no hay listas</string>
     <string name="library_empty_playlists_subtitle">Crea tu primera lista para organizar tu biblioteca.</string>
 
@@ -142,7 +125,6 @@
     <string name="song_info_cd_queue_next">Reproducir a continuación en la cola</string>
     <string name="song_info_cd_add_to_playlist">Añadir a la lista de reproducción</string>
     <string name="song_info_action_delete">Eliminar</string>
-    <string name="song_info_action_delete_all">Eliminar todo</string>
     <string name="song_info_checking_watch">Comprobando reloj</string>
     <string name="song_info_transferring_percent">Transfiriendo %1$d%%</string>
     <string name="song_info_transferring_to_watch">Transfiriendo al reloj</string>
@@ -439,8 +421,6 @@
     <string name="playlist_sheet_search_playlists_hint">Buscar listas de reproducción…</string>
     <string name="playlist_sheet_song_added_to_playlists">Canciones añadidas a las listas</string>
     <string name="playlist_sheet_created_and_songs_added">Lista creada y canciones añadidas</string>
-    <string name="playlist_sheet_internal_storage">Almacenamiento interno</string>
-
     <!-- SongPickerBottomSheet -->
     <string name="song_picker_title">Añadir canciones</string>
     <string name="song_picker_cd_confirm_add_songs">Añadir canciones seleccionadas</string>
@@ -522,25 +502,6 @@
     <string name="artist_detail_not_found">No se pudo encontrar el artista</string>
 
     <!-- SongRemovalStateHolder -->
-    <string name="song_removal_cannot_delete_currently_playing">No se puede eliminar la canción que se está reproduciendo actualmente</string>
-    <string name="song_removal_batch_delete_files_deleted_skipped_format">%1$d archivos eliminados (%2$d omitidos - reproduciéndose)</string>
-    <string name="song_removal_batch_delete_partial_format">%1$d de %2$d archivos eliminados</string>
-    <string name="song_removal_delete_files_failed">Error al eliminar archivos</string>
-    <string name="song_removal_file_deleted">Archivo eliminado</string>
-    <string name="song_removal_delete_file_not_found">No se puede eliminar el archivo o archivo no encontrado</string>
-    <string name="song_removal_deletion_cancelled">Eliminación cancelada</string>
-    <string name="song_removal_dialog_delete_song_title">¿Eliminar canción?</string>
-    <string name="song_removal_dialog_delete_song_message">\"%1$s\" de %2$s\n\nEsta canción se eliminará permanentemente de tu dispositivo y no se podrá recuperar.</string>
-    <string name="song_removal_delete_songs_permanent_message">Estas canciones se eliminarán permanentemente de tu dispositivo y no se podrán recuperar.</string>
-    <plurals name="song_removal_n_files_deleted">
-        <item quantity="one">%d archivo eliminado</item>
-        <item quantity="other">%d archivos eliminados</item>
-    </plurals>
-    <plurals name="song_removal_delete_songs_confirmation_title">
-        <item quantity="one">¿Eliminar %d canción?</item>
-        <item quantity="other">¿Eliminar %d canciones?</item>
-    </plurals>
-
     <!-- MetadataEditStateHolder -->
     <string name="metadata_edit_updated_successfully">Metadatos actualizados correctamente</string>
     <string name="metadata_edit_updating_n_songs">Actualizando %1$d canciones…</string>

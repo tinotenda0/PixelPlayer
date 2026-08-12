@@ -233,7 +233,7 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 userPreferencesRepository.setInitialSetupDone(true)
                 Log.i("PixelPlayBenchmark", "Enqueueing benchmark database rebuild")
-                syncManager.rebuildDatabase()
+                syncManager.forceRefresh()
                 delay(1_500L)
                 playerViewModel.prepareBenchmarkPlayerFromLibrary()
             }
@@ -637,15 +637,12 @@ class MainActivity : ComponentActivity() {
                 Screen.Stats.route,
                 Screen.EditTransition.route,
                 Screen.Experimental.route,
-                Screen.ArtistSettings.route,
                 Screen.Equalizer.route,
                 Screen.SettingsCategory.route,
-                Screen.DelimiterConfig.route,
                 Screen.PaletteStyle.route,
                 Screen.RecentlyPlayed.route,
                 Screen.DeviceCapabilities.route,
                 Screen.EasterEgg.route,
-                Screen.WordDelimiterConfig.route,
                 Screen.YtMusicLink.route,
                 Screen.SpotifyImport.route,
                 Screen.Jam.route,
@@ -794,10 +791,6 @@ class MainActivity : ComponentActivity() {
                         DrawerDestination.Equalizer -> navController.navigateSafely(Screen.Equalizer.route)
                         DrawerDestination.Downloads -> navController.navigateSafely(Screen.Downloads.route)
                         DrawerDestination.Settings -> navController.navigateSafely(Screen.Settings.route)
-                        DrawerDestination.Telegram -> {
-                            val intent = Intent(this@MainActivity, com.theveloper.pixelplay.presentation.telegram.auth.TelegramLoginActivity::class.java)
-                            startActivity(intent)
-                        }
                     }
                 }
         ) {
@@ -1083,16 +1076,6 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3ExpressiveApi::class)
     @Composable
     private fun LoadingOverlay(syncProgress: SyncProgress) {
-        // Animate progress smoothly instead of jumping in steps
-        val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
-            targetValue = syncProgress.progress,
-            animationSpec = androidx.compose.animation.core.spring(
-                dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                stiffness = androidx.compose.animation.core.Spring.StiffnessLow
-            ),
-            label = "SyncProgressAnimation"
-        )
-        
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1111,20 +1094,6 @@ class MainActivity : ComponentActivity() {
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground
                 )
-                
-                if (syncProgress.hasProgress) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    androidx.compose.material3.LinearWavyProgressIndicator(
-                        progress = { animatedProgress },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Scanned ${syncProgress.currentCount} of ${syncProgress.totalCount} songs",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
         }
     }

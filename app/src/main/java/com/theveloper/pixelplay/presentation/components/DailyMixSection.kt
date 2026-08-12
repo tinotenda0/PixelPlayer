@@ -131,7 +131,6 @@ fun DailyMixSection(
             onAddToPlayList = {
                 showPlaylistBottomSheet = true
             },
-            onDeleteFromDevice = playerViewModel::deleteFromDevice,
             onNavigateToAlbum = {
                 onNavigateToAlbum(song)
                 showSongInfoSheet = false
@@ -164,8 +163,7 @@ fun DailyMixSection(
                     replayGainAlbumGainDb,
                     coverArtUpdate
                 )
-            },
-            removeFromListTrigger = {}
+            }
         )
 
         if (showPlaylistBottomSheet) {

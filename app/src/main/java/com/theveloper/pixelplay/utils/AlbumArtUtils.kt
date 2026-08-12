@@ -61,7 +61,6 @@ object AlbumArtUtils {
         "music",
         "songs",
         "audio",
-        "telegram audio",
         "studio",
         "gallery",
         "pictures",

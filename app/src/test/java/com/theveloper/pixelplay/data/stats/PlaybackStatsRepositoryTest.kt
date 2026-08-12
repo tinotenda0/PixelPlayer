@@ -1,8 +1,11 @@
 package com.theveloper.pixelplay.data.stats
 
+import androidx.work.WorkManager
 import com.google.common.truth.Truth.assertThat
+import com.theveloper.pixelplay.data.database.MusicDao
 import com.theveloper.pixelplay.data.model.ArtistRef
 import com.theveloper.pixelplay.data.model.Song
+import com.theveloper.pixelplay.data.navidrome.NavidromeRepository
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -229,7 +232,16 @@ class PlaybackStatsRepositoryTest {
         ).toFile()
         val testContext = mockk<android.content.Context>(relaxed = true)
         every { testContext.filesDir } returns uniqueDir
-        return PlaybackStatsRepository(testContext)
+        // These tests only exercise buildSummaryFromEvents (pure aggregation over an explicit
+        // event list) — none of the gateway-backed dependencies are touched, so relaxed mocks
+        // just need to satisfy the constructor.
+        return PlaybackStatsRepository(
+            context = testContext,
+            musicDao = mockk<MusicDao>(relaxed = true),
+            navidromeRepository = mockk<NavidromeRepository>(relaxed = true),
+            outbox = mockk<ListeningEventOutbox>(relaxed = true),
+            workManager = mockk<WorkManager>(relaxed = true)
+        )
     }
 
     private fun song(

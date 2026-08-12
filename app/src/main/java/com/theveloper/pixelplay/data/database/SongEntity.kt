@@ -13,26 +13,21 @@ import com.theveloper.pixelplay.utils.normalizeMetadataTextOrEmpty
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Integer constants for the `source_type` column — faster than LIKE checks on URI scheme. */
+/** Integer constants for the `source_type` column — faster than LIKE checks on URI scheme.
+ *  Values are persisted in the DB; a removed source's number is retired, not reused. */
 object SourceType {
     const val LOCAL = 0
-    const val TELEGRAM = 1
-    const val NETEASE = 2
-    const val GDRIVE = 3
-    const val QQMUSIC = 4
+    // 1 = TELEGRAM, retired (Telegram support removed)
+    // 2 = NETEASE, retired (NetEase support removed)
+    // 3 = GDRIVE, retired (Google Drive support removed)
+    // 4 = QQMUSIC, retired (QQ Music support removed)
     const val NAVIDROME = 5
-    const val JELLYFIN = 6
-    const val PLEX = 7
+    // 6 = JELLYFIN, retired (Jellyfin support removed)
+    // 7 = PLEX, retired (Plex support removed)
 
     /** Derive source type from a content URI string (fallback for migration / conversion). */
     fun fromContentUri(uri: String): Int = when {
-        uri.startsWith("telegram://") -> TELEGRAM
-        uri.startsWith("netease://") -> NETEASE
-        uri.startsWith("gdrive://") -> GDRIVE
-        uri.startsWith("qqmusic://") -> QQMUSIC
         uri.startsWith("navidrome://") -> NAVIDROME
-        uri.startsWith("jellyfin://") -> JELLYFIN
-        uri.startsWith("plex://") -> PLEX
         else -> LOCAL
     }
 }
@@ -94,6 +89,9 @@ data class SongEntity(
     @ColumnInfo(name = "mime_type") val mimeType: String? = null,
     @ColumnInfo(name = "bitrate") val bitrate: Int? = null, // bits per second
     @ColumnInfo(name = "sample_rate") val sampleRate: Int? = null, // Hz
+    // Telegram support was removed; these columns are kept (always null going forward)
+    // since dropping columns from the shared, heavily-indexed `songs` table requires a
+    // full recreate-and-copy migration that isn't worth the risk for two unused fields.
     @ColumnInfo(name = "telegram_chat_id") val telegramChatId: Long? = null,
     @ColumnInfo(name = "telegram_file_id") val telegramFileId: Int? = null,
     @ColumnInfo(name = "artists_json") val artistsJson: String? = null,
@@ -125,30 +123,8 @@ private fun SongEntity.toSongInternal(artists: List<ArtistRef>): Song {
         discNumber = this.discNumber,
         dateAdded = this.dateAdded,
         year = this.year,
-        // Parse Telegram metadata from contentUriString
-        telegramChatId = if (this.contentUriString.startsWith("telegram://")) {
-            this.contentUriString.removePrefix("telegram://").split("/").getOrNull(0)?.toLongOrNull()
-        } else null,
-        telegramFileId = if (this.contentUriString.startsWith("telegram://")) {
-            this.contentUriString.removePrefix("telegram://").split("/").getOrNull(1)?.toIntOrNull()
-        } else null,
-        neteaseId = if (this.contentUriString.startsWith("netease://")) {
-            this.contentUriString.removePrefix("netease://").toLongOrNull()
-        } else null,
-        gdriveFileId = if (this.contentUriString.startsWith("gdrive://")) {
-            this.contentUriString.removePrefix("gdrive://")
-        } else null,
-        qqMusicMid = if (this.contentUriString.startsWith("qqmusic://")) {
-            this.contentUriString.removePrefix("qqmusic://")
-        } else null,
         navidromeId = if (this.contentUriString.startsWith("navidrome://")) {
             this.contentUriString.removePrefix("navidrome://")
-        } else null,
-        jellyfinId = if (this.contentUriString.startsWith("jellyfin://")) {
-            this.contentUriString.removePrefix("jellyfin://")
-        } else null,
-        plexId = if (this.contentUriString.startsWith("plex://")) {
-            this.contentUriString.removePrefix("plex://")
         } else null,
         mimeType = this.mimeType,
         bitrate = this.bitrate,

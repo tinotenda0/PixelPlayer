@@ -11,7 +11,6 @@
     <string name="library_tab_albums">Альбомы</string>
     <string name="library_tab_artists">Исполнители</string>
     <string name="library_tab_playlists">Плейлисты</string>
-    <string name="library_tab_folders">Папки</string>
     <string name="library_tab_liked">Избранное</string>
 
     <!-- Library Toasts -->
@@ -30,24 +29,10 @@
 
     <!-- Library Multi-Selection & Folders -->
     <string name="library_toast_max_albums_selection">Можно выбрать не более %1$d альбомов</string>
-    <string name="library_folder_name_fallback">Папка</string>
-    <string name="library_cd_folder">Папка</string>
-
     <!-- Library Sort & View Bottom Sheet -->
     <string name="library_sort_by_title">Сортировать по</string>
-    <string name="library_sort_section_view">Вид</string>
-    <string name="library_sort_toggle_playlist_view">Режим плейлистов</string>
     <string name="library_view_mode_grid">Сетка</string>
     <string name="library_view_mode_list">Список</string>
-    <string name="library_storage_internal">Внутренняя память</string>
-    <string name="library_storage_sd_card">SD-карта</string>
-    <string name="library_storage_sd_card_unavailable">SD-карта сейчас недоступна.</string>
-    <string name="library_sort_section_cloud">Облако</string>
-    <string name="library_sort_toggle_telegram_channels">Облачные каналы Telegram</string>
-    <string name="library_telegram_topics_display_title">Отображение тем</string>
-    <string name="library_telegram_topic_mode_channels">Каналы</string>
-    <string name="library_telegram_topic_mode_topics">Темы</string>
-    <string name="library_telegram_topic_mode_both">Оба варианта</string>
     <string name="library_cloud_sources_heading">Облако</string>
     <string name="library_cloud_only_label">Только облако</string>
 
@@ -98,7 +83,7 @@
     <string name="library_empty_songs_offline_title">Локальные треки не найдены</string>
     <string name="library_empty_songs_offline_subtitle">Попробуйте другой фильтр источников или повторно просканируйте библиотеку устройства.</string>
     <string name="library_empty_songs_online_title">Облачные треки не найдены</string>
-    <string name="library_empty_songs_online_subtitle">Синхронизируйте Telegram или NetEase либо переключитесь на локальный источник.</string>
+    <string name="library_empty_songs_online_subtitle">Синхронизируйте Navidrome либо переключитесь на локальный источник.</string>
     <string name="library_empty_albums_all_title">Нет доступных альбомов</string>
     <string name="library_empty_albums_all_subtitle">Альбомы появятся здесь после группировки треков в библиотеке.</string>
     <string name="library_empty_albums_offline_title">Локальные альбомы не найдены</string>
@@ -116,9 +101,7 @@
     <string name="library_empty_liked_offline_title">Нет избранных локальных треков</string>
     <string name="library_empty_liked_offline_subtitle">Смените фильтр источника или добавьте в избранное треки с устройства.</string>
     <string name="library_empty_liked_online_title">Нет избранных облачных треков</string>
-    <string name="library_empty_liked_online_subtitle">Добавьте в избранное треки из Telegram или NetEase, чтобы увидеть их здесь.</string>
-    <string name="library_empty_folders_title">Папки не найдены</string>
-    <string name="library_empty_folders_subtitle">Здесь будут отображаться папки с музыкой из внутреннего хранилища.</string>
+    <string name="library_empty_liked_online_subtitle">Добавьте в избранное треки из Navidrome, чтобы увидеть их здесь.</string>
     <string name="library_empty_playlists_title">Пока нет плейлистов</string>
     <string name="library_empty_playlists_subtitle">Создайте свой первый плейлист для организации библиотеки.</string>
 
@@ -142,7 +125,6 @@
     <string name="song_info_cd_queue_next">Воспроизвести следующим</string>
     <string name="song_info_cd_add_to_playlist">Добавить в плейлист</string>
     <string name="song_info_action_delete">Удалить</string>
-    <string name="song_info_action_delete_all">Удалить всё</string>
     <string name="song_info_checking_watch">Проверка часов</string>
     <string name="song_info_transferring_percent">Передача %1$d%%</string>
     <string name="song_info_transferring_to_watch">Передача на часы</string>
@@ -439,8 +421,6 @@
     <string name="playlist_sheet_search_playlists_hint">Поиск плейлистов…</string>
     <string name="playlist_sheet_song_added_to_playlists">Треки добавлены в плейлисты</string>
     <string name="playlist_sheet_created_and_songs_added">Плейлист создан, треки добавлены</string>
-    <string name="playlist_sheet_internal_storage">Внутреннее хранилище</string>
-
     <!-- SongPickerBottomSheet -->
     <string name="song_picker_title">Добавить треки</string>
     <string name="song_picker_cd_confirm_add_songs">Добавить выбранные треки</string>
@@ -522,25 +502,6 @@
     <string name="artist_detail_not_found">Не удалось найти исполнителя</string>
 
     <!-- SongRemovalStateHolder -->
-    <string name="song_removal_cannot_delete_currently_playing">Нельзя удалить воспроизводимый в данный момент трек</string>
-    <string name="song_removal_batch_delete_files_deleted_skipped_format">%1$d файлов удалено (%2$d пропущено — воспроизводятся)</string>
-    <string name="song_removal_batch_delete_partial_format">Удалено %1$d из %2$d файлов</string>
-    <string name="song_removal_delete_files_failed">Не удалось удалить файлы</string>
-    <string name="song_removal_file_deleted">Файл удалён</string>
-    <string name="song_removal_delete_file_not_found">Не удалось удалить файл или файл не найден</string>
-    <string name="song_removal_deletion_cancelled">Удаление отменено</string>
-    <string name="song_removal_dialog_delete_song_title">Удалить трек?</string>
-    <string name="song_removal_dialog_delete_song_message">«%1$s» — %2$s\n\nЭтот трек будет безвозвратно удалён с устройства и не может быть восстановлен.</string>
-    <string name="song_removal_delete_songs_permanent_message">Эти треки будут безвозвратно удалены с устройства и не могут быть восстановлены.</string>
-    <plurals name="song_removal_n_files_deleted">
-        <item quantity="one">%d файл удалён</item>
-        <item quantity="other">%d файлов удалено</item>
-    </plurals>
-    <plurals name="song_removal_delete_songs_confirmation_title">
-        <item quantity="one">Удалить %d трек?</item>
-        <item quantity="other">Удалить %d треков?</item>
-    </plurals>
-
     <!-- MetadataEditStateHolder -->
     <string name="metadata_edit_updated_successfully">Метаданные успешно обновлены</string>
     <string name="metadata_edit_updating_n_songs">Обновление %1$d треков…</string>

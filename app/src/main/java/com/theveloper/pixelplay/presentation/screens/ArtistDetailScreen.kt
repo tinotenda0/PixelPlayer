@@ -597,11 +597,6 @@ fun ArtistDetailScreen(
         }
 
         if (currentSong != null) {
-            val removeFromListTrigger = remember(uiState.songs) {
-                {
-                    viewModel.removeSongFromAlbumSection(currentSong.id)
-                }
-            }
             SongInfoBottomSheet(
                 song = currentSong,
                 isFavorite = isFavorite,
@@ -621,7 +616,6 @@ fun ArtistDetailScreen(
                 onAddToPlayList = {
                     showPlaylistBottomSheet = true
                 },
-                onDeleteFromDevice = playerViewModel::deleteFromDevice,
                 onNavigateToAlbum = {
                     navController.navigateSafelyReplacing(
                         route = Screen.AlbumDetail.createRoute(currentSong.albumId),
@@ -668,8 +662,7 @@ fun ArtistDetailScreen(
                         replayGainAlbumGainDb,
                         coverArtUpdate
                     )
-                },
-                removeFromListTrigger = removeFromListTrigger
+                }
             )
             if (showPlaylistBottomSheet) {
                 val playlistUiState by playlistViewModel.uiState.collectAsStateWithLifecycle()

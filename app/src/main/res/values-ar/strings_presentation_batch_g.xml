@@ -219,7 +219,6 @@
     <!-- Top bar & Player Options -->
     <string name="presentation_batch_g_topbar_beta_letter">β</string>
     <string name="presentation_batch_g_topbar_beta">تجريبي (Beta)</string>
-    <string name="presentation_batch_g_topbar_cd_telegram">تليجرام</string>
     <string name="presentation_batch_g_topbar_cd_changelog">سجل التغييرات</string>
     <string name="presentation_batch_g_topbar_cd_settings">الإعدادات</string>
     <string name="presentation_batch_g_lyrics_mode_synced">متزامنة</string>

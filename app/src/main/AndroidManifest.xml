@@ -11,8 +11,6 @@
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    <!-- Plex GDM discovery: receive multicast M-SEARCH packets from Companion controllers -->
-    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
     <!-- Local on-device music browsing is retired; the library is served by the XPS
          gateway, so no audio/storage read permissions are requested. -->
@@ -78,54 +76,11 @@
         </activity>
 
         <activity
-            android:name=".presentation.telegram.auth.TelegramLoginActivity"
-            android:exported="false"
-            android:label="Telegram Login"
-            android:theme="@style/Theme.PixelPlay"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".presentation.netease.auth.NeteaseLoginActivity"
-            android:exported="false"
-            android:label="Netease Login"
-            android:theme="@style/Theme.PixelPlay"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".presentation.gdrive.auth.GDriveLoginActivity"
-            android:exported="false"
-            android:label="Google Drive Login"
-            android:theme="@style/Theme.PixelPlay"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".presentation.qqmusic.auth.QqMusicLoginActivity"
-            android:exported="false"
-            android:label="QQ Music Login"
-            android:theme="@style/Theme.PixelPlay"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
             android:name=".presentation.navidrome.auth.NavidromeLoginActivity"
             android:exported="false"
             android:label="Navidrome Login"
             android:theme="@style/Theme.PixelPlay"
             android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".presentation.jellyfin.auth.JellyfinLoginActivity"
-            android:exported="false"
-            android:label="Jellyfin Login"
-            android:theme="@style/Theme.PixelPlay"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".presentation.plex.auth.PlexLoginActivity"
-            android:exported="false"
-            android:label="Plex Login"
-            android:theme="@style/Theme.PixelPlay"
-            android:windowSoftInputMode="adjustResize" />
-
 
         <activity
             android:name=".ExternalPlayerActivity"

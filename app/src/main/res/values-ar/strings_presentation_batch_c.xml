@@ -57,7 +57,7 @@
     <string name="lib_empty_songs_offline_title">لم يتم العثور على أغانٍ محلية</string>
     <string name="lib_empty_songs_offline_subtitle">جرّب فلتراً آخر للمصادر أو أعد فحص مكتبة جهازك.</string>
     <string name="lib_empty_songs_online_title">لم يتم العثور على أغانٍ سحابية</string>
-    <string name="lib_empty_songs_online_subtitle">قم بمزامنة أغانٍ من Telegram أو NetEase، أو تحوّل إلى المصدر المحلي.</string>
+    <string name="lib_empty_songs_online_subtitle">قم بمزامنة أغانٍ من Navidrome، أو تحوّل إلى المصدر المحلي.</string>
     <string name="lib_empty_albums_all_title">لا توجد ألبومات متاحة</string>
     <string name="lib_empty_albums_all_subtitle">ستظهر الألبومات هنا بمجرد أن تحتوي مكتبتك على مسارات مجمعة.</string>
     <string name="lib_empty_albums_offline_title">لم يتم العثور على ألبومات محلية</string>
@@ -75,7 +75,7 @@
     <string name="lib_empty_liked_offline_title">لا توجد أغانٍ محلية مفضلة</string>
     <string name="lib_empty_liked_offline_subtitle">قم بتغيير فلتر المصدر أو أضف إعجاباً بالأغاني الموجودة على جهازك.</string>
     <string name="lib_empty_liked_online_title">لا توجد أغانٍ سحابية مفضلة</string>
-    <string name="lib_empty_liked_online_subtitle">أضف إعجاباً بمسارات Telegram أو NetEase لرؤيتها في هذا العرض.</string>
+    <string name="lib_empty_liked_online_subtitle">أضف إعجاباً بمسارات Navidrome لرؤيتها في هذا العرض.</string>
     <string name="lib_empty_folders_title">لم يتم العثور على مجلدات</string>
     <string name="lib_empty_folders_subtitle">ستظهر مجلدات وحدة التخزين الداخلية التي تحتوي على موسيقى هنا.</string>
     <string name="lib_empty_playlists_title">لا توجد قوائم تشغيل بعد</string>

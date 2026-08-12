@@ -30,7 +30,6 @@ import androidx.media3.decoder.SimpleDecoderOutputBuffer
 import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.data.model.Song
-import com.theveloper.pixelplay.data.plex.PlexStreamProxy
 import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.service.cast.CastAudioMimeUtils
 import com.theveloper.pixelplay.data.service.cast.IsoBmffAudioCodecDetector
@@ -100,16 +99,10 @@ class MediaFileHttpServerService : Service() {
     lateinit var musicRepository: MusicRepository
 
     @Inject
-    lateinit var plexStreamProxy: PlexStreamProxy
-
-    @Inject
     lateinit var navidromeStreamProxy: com.theveloper.pixelplay.data.navidrome.NavidromeStreamProxy
 
     @Inject
     lateinit var navidromeRepository: com.theveloper.pixelplay.data.navidrome.NavidromeRepository
-
-    @Inject
-    lateinit var plexRepository: com.theveloper.pixelplay.data.plex.PlexRepository
 
     @Inject
     lateinit var castHttpClient: OkHttpClient
@@ -441,9 +434,10 @@ class MediaFileHttpServerService : Service() {
                                 }
 
                                 try {
-                                    // Cloud (Plex) songs: the phone can't open plex:// locally, so
-                                    // relay the bytes from the provider's reachable stream URL.
-                                    // This branch is what makes casting a Plex library work at all.
+                                    // Cloud songs: the phone can't open the provider's internal
+                                    // scheme locally, so relay the bytes from the provider's
+                                    // reachable stream URL. This branch is what makes casting a
+                                    // cloud library work at all.
                                     val remoteUrl = resolveRemoteStreamUrl(song)
                                     if (remoteUrl != null) {
                                         val cloudContentType = resolveAudioContentType(
@@ -1097,8 +1091,8 @@ class MediaFileHttpServerService : Service() {
     }
 
     /**
-     * For a cloud-backed song (Plex etc.), the direct network-reachable stream
-     * URL that the cast HTTP server can fetch and relay to the Chromecast.
+     * For a cloud-backed song, the direct network-reachable stream URL that
+     * the cast HTTP server can fetch and relay to the Chromecast.
      * Local (content:// / file:// / on-disk) songs return null and take the
      * normal local-file serving path. A Chromecast cannot reach the phone's
      * loopback cloud proxies, so the bytes must flow through this LAN-bound
@@ -1107,7 +1101,6 @@ class MediaFileHttpServerService : Service() {
     private suspend fun resolveRemoteStreamUrl(song: Song): String? {
         val scheme = song.contentUriString.substringBefore(':', "").lowercase(Locale.ROOT)
         return when (scheme) {
-            "plex" -> plexStreamProxy.resolveDirectStreamUrl(song.contentUriString)
             // Navidrome/Subsonic — including the gateway's on-demand "yt-" songs.
             // This is the primary library now, so casting lives or dies here.
             "navidrome" -> navidromeStreamProxy.resolveDirectStreamUrl(song.contentUriString)
@@ -1117,8 +1110,8 @@ class MediaFileHttpServerService : Service() {
 
     /**
      * Network-reachable cover-art URL for a cloud song. The cast /art endpoint
-     * otherwise tries ContentResolver, which cannot open navidrome_cover:// or
-     * plex_cover:// (no provider) — cloud songs showed no artwork on the TV.
+     * otherwise tries ContentResolver, which cannot open navidrome_cover://
+     * (no provider) — cloud songs showed no artwork on the TV.
      */
     private suspend fun resolveRemoteArtUrl(song: Song): String? {
         val artUri = song.albumArtUriString?.takeIf { it.isNotBlank() } ?: return null
@@ -1126,7 +1119,6 @@ class MediaFileHttpServerService : Service() {
         val id = artUri.substringAfter("://", "").trimEnd('/').takeIf { it.isNotBlank() } ?: return null
         return when (scheme) {
             "navidrome_cover" -> runCatching { navidromeRepository.getCoverArtUrl(id, 800) }.getOrNull()
-            "plex_cover" -> runCatching { plexRepository.getImageUrl(id) }.getOrNull()
             else -> null
         }
     }
@@ -1202,8 +1194,8 @@ class MediaFileHttpServerService : Service() {
 
             // Prefer the song-derived audio type (it matches the contentType in
             // the Cast MediaInfo, which the receiver trusts for decoding) and only
-            // take the upstream type when it is a concrete audio/* — Plex sometimes
-            // returns application/octet-stream, which would confuse the receiver.
+            // take the upstream type when it is a concrete audio/* — some servers
+            // return application/octet-stream, which would confuse the receiver.
             val upstreamContentType = resp.header(HttpHeaders.ContentType)
                 ?.let { runCatching { ContentType.parse(it) }.getOrNull() }
                 ?.takeIf { it.contentType.equals("audio", ignoreCase = true) }

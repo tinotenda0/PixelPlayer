@@ -38,7 +38,6 @@ class SortOptionTest {
         assertEquals(SortOption.SongTitleZA, SortOption.SongTitleAZ.flipDirection())
         assertEquals(SortOption.SongTitleAZ, SortOption.SongTitleZA.flipDirection())
         assertEquals(SortOption.LikedSongDateLikedAsc, SortOption.LikedSongDateLiked.flipDirection())
-        assertEquals(SortOption.FolderSongCountAsc, SortOption.FolderSongCountDesc.flipDirection())
         assertEquals(SortOption.SongDefaultOrder, SortOption.SongDefaultOrder.flipDirection())
     }
 

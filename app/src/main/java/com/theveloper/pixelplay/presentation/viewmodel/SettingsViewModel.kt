@@ -37,7 +37,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -50,10 +49,8 @@ import com.theveloper.pixelplay.data.preferences.LaunchTab
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.service.player.HiFiCapabilityChecker
 import com.theveloper.pixelplay.utils.AppLocaleManager
-import java.io.File
 
 data class SettingsUiState(
-    val isLoadingDirectories: Boolean = false,
     val appLanguageTag: String = AppLanguage.SYSTEM.tag,
     val appThemeMode: String = AppThemeMode.FOLLOW_SYSTEM,
     val playerThemePreference: String = ThemePreference.ALBUM_ART,
@@ -78,7 +75,6 @@ data class SettingsUiState(
     val persistentShuffleEnabled: Boolean = false,
     val endlessPlaybackEnabled: Boolean = false,
     val offlineModeEnabled: Boolean = false,
-    val folderBackGestureNavigation: Boolean = true,
     val lyricsSourcePreference: LyricsSourcePreference = LyricsSourcePreference.EMBEDDED_FIRST,
     val autoScanLrcFiles: Boolean = false,
     val autoFetchLyricsOnPlay: Boolean = true,
@@ -167,7 +163,6 @@ private sealed interface SettingsUiUpdate {
         val persistentShuffleEnabled: Boolean,
         val endlessPlaybackEnabled: Boolean,
         val offlineModeEnabled: Boolean,
-        val folderBackGestureNavigation: Boolean,
         val lyricsSourcePreference: LyricsSourcePreference,
         val autoScanLrcFiles: Boolean,
         val blockedDirectories: Set<String>,
@@ -556,19 +551,6 @@ class SettingsViewModel @Inject constructor(
         .map { it ?: 0 }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    private val fileExplorerStateHolder = FileExplorerStateHolder(userPreferencesRepository, viewModelScope, context)
-
-    val currentPath = fileExplorerStateHolder.currentPath
-    val currentDirectoryChildren = fileExplorerStateHolder.currentDirectoryChildren
-    val blockedDirectories = fileExplorerStateHolder.blockedDirectories
-    val availableStorages = fileExplorerStateHolder.availableStorages
-    val selectedStorageIndex = fileExplorerStateHolder.selectedStorageIndex
-    val isLoadingDirectories = fileExplorerStateHolder.isLoading
-    val isExplorerPriming = fileExplorerStateHolder.isPrimingExplorer
-    val isExplorerReady = fileExplorerStateHolder.isExplorerReady
-    val isCurrentDirectoryResolved = fileExplorerStateHolder.isCurrentDirectoryResolved
-    private var hasPendingDirectoryRuleChanges = false
-    private var latestDirectoryRuleUpdateJob: Job? = null
 
     val isSyncing: StateFlow<Boolean> = syncManager.isSyncing
         .stateIn(
@@ -685,7 +667,6 @@ class SettingsViewModel @Inject constructor(
                 userPreferencesRepository.hiFiModeEnabledFlow,
                 userPreferencesRepository.crossfadeDurationFlow,
                 userPreferencesRepository.persistentShuffleEnabledFlow,
-                userPreferencesRepository.folderBackGestureNavigationFlow,
                 userPreferencesRepository.lyricsSourcePreferenceFlow,
                 userPreferencesRepository.autoScanLrcFilesFlow,
                 userPreferencesRepository.blockedDirectoriesFlow,
@@ -709,19 +690,18 @@ class SettingsViewModel @Inject constructor(
                     hiFiModeEnabled = values[6] as Boolean,
                     crossfadeDuration = values[7] as Int,
                     persistentShuffleEnabled = values[8] as Boolean,
-                    folderBackGestureNavigation = values[9] as Boolean,
-                    lyricsSourcePreference = values[10] as LyricsSourcePreference,
-                    autoScanLrcFiles = values[11] as Boolean,
-                    blockedDirectories = @Suppress("UNCHECKED_CAST") (values[12] as Set<String>),
-                    hapticsEnabled = values[13] as Boolean,
-                    immersiveLyricsEnabled = values[14] as Boolean,
-                    immersiveLyricsTimeout = values[15] as Long,
-                    animatedLyricsBlurEnabled = values[16] as Boolean,
-                    animatedLyricsBlurStrength = values[17] as Float,
-                    disableBlurAllOver = values[18] as Boolean,
-                    showScrollbar = values[19] as Boolean,
-                    endlessPlaybackEnabled = values[20] as Boolean,
-                    offlineModeEnabled = values[21] as Boolean
+                    lyricsSourcePreference = values[9] as LyricsSourcePreference,
+                    autoScanLrcFiles = values[10] as Boolean,
+                    blockedDirectories = @Suppress("UNCHECKED_CAST") (values[11] as Set<String>),
+                    hapticsEnabled = values[12] as Boolean,
+                    immersiveLyricsEnabled = values[13] as Boolean,
+                    immersiveLyricsTimeout = values[14] as Long,
+                    animatedLyricsBlurEnabled = values[15] as Boolean,
+                    animatedLyricsBlurStrength = values[16] as Float,
+                    disableBlurAllOver = values[17] as Boolean,
+                    showScrollbar = values[18] as Boolean,
+                    endlessPlaybackEnabled = values[19] as Boolean,
+                    offlineModeEnabled = values[20] as Boolean
                 )
             }.collect { update ->
                 _uiState.update { state ->
@@ -735,7 +715,6 @@ class SettingsViewModel @Inject constructor(
                         hiFiModeEnabled = update.hiFiModeEnabled,
                         crossfadeDuration = update.crossfadeDuration,
                         persistentShuffleEnabled = update.persistentShuffleEnabled,
-                        folderBackGestureNavigation = update.folderBackGestureNavigation,
                         lyricsSourcePreference = update.lyricsSourcePreference,
                         autoScanLrcFiles = update.autoScanLrcFiles,
                         blockedDirectories = update.blockedDirectories,
@@ -781,12 +760,6 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesRepository.beta05CleanInstallDisclaimerDismissedFlow.collect { dismissed ->
                 _uiState.update { it.copy(beta05CleanInstallDisclaimerDismissed = dismissed) }
-            }
-        }
-
-        viewModelScope.launch {
-            fileExplorerStateHolder.isLoading.collect { loading ->
-                _uiState.update { it.copy(isLoadingDirectories = loading) }
             }
         }
 
@@ -851,54 +824,6 @@ class SettingsViewModel @Inject constructor(
             userPreferencesRepository.setBeta05CleanInstallDisclaimerDismissed(dismissed)
         }
     }
-
-    fun toggleDirectoryAllowed(file: File) {
-        hasPendingDirectoryRuleChanges = true
-        latestDirectoryRuleUpdateJob = viewModelScope.launch {
-            fileExplorerStateHolder.toggleDirectoryAllowed(file)
-        }
-    }
-
-    fun applyPendingDirectoryRuleChanges() {
-        if (!hasPendingDirectoryRuleChanges) return
-        hasPendingDirectoryRuleChanges = false
-        viewModelScope.launch {
-            latestDirectoryRuleUpdateJob?.join()
-            syncManager.forceRefresh()
-        }
-    }
-
-    fun loadDirectory(file: File) {
-        fileExplorerStateHolder.loadDirectory(file)
-    }
-
-    fun primeExplorer() {
-        fileExplorerStateHolder.primeExplorerRoot()
-    }
-
-    fun openExplorer() {
-        fileExplorerStateHolder.openExplorerRoot()
-    }
-
-    fun navigateUp() {
-        fileExplorerStateHolder.navigateUp()
-    }
-
-    fun refreshExplorer() {
-        fileExplorerStateHolder.refreshCurrentDirectory()
-    }
-
-    fun selectStorage(index: Int) {
-        fileExplorerStateHolder.selectStorage(index)
-    }
-
-    fun refreshAvailableStorages() {
-        fileExplorerStateHolder.refreshAvailableStorages()
-    }
-
-    fun isAtRoot(): Boolean = fileExplorerStateHolder.isAtRoot()
-
-    fun explorerRoot(): File = fileExplorerStateHolder.rootDirectory()
 
     // Método para guardar la preferencia de tema del reproductor
     fun setPlayerThemePreference(preference: String) {
@@ -1066,12 +991,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setFolderBackGestureNavigation(enabled: Boolean) {
-        viewModelScope.launch {
-            userPreferencesRepository.setFolderBackGestureNavigation(enabled)
-        }
-    }
-
     fun setLyricsSourcePreference(preference: LyricsSourcePreference) {
         viewModelScope.launch {
             userPreferencesRepository.setLyricsSourcePreference(preference)
@@ -1205,24 +1124,10 @@ class SettingsViewModel @Inject constructor(
     fun fullSyncLibrary() {
         viewModelScope.launch {
             if (isSyncing.value) return@launch
-            syncManager.fullSync()
+            syncManager.forceRefresh()
         }
     }
 
-    fun setMinSongDuration(durationMs: Int) {
-        viewModelScope.launch {
-            if (durationMs == _uiState.value.minSongDuration) return@launch
-            userPreferencesRepository.setMinSongDuration(durationMs)
-            // Trigger a library rescan so the change takes effect in the database
-            syncManager.fullSync()
-        }
-    }
-
-    fun setMinTracksPerAlbum(minTracks: Int) {
-        viewModelScope.launch {
-            userPreferencesRepository.setMinTracksPerAlbum(minTracks)
-        }
-    }
 
     fun setReplayGainEnabled(enabled: Boolean) {
         viewModelScope.launch {
@@ -1249,14 +1154,12 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * Completely rebuilds the database from scratch.
-     * Clears all data including user edits (lyrics, favorites) and rescans.
-     * Use when database is corrupted or as a last resort.
+     * Forces a fresh sync from the Navidrome server. Use when songs are missing or out of date.
      */
     fun rebuildDatabase() {
         viewModelScope.launch {
             if (isSyncing.value) return@launch
-            syncManager.rebuildDatabase()
+            syncManager.forceRefresh()
         }
     }
 

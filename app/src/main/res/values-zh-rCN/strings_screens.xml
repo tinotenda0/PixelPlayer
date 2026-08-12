@@ -12,13 +12,13 @@
     <string name="setup_beta_symbol">β</string>
     <string name="setup_beta_label">Beta</string>
     <string name="setup_intro_body">让我们为您完成所有设置。</string>
-    <string name="setup_permission_media_title">媒体权限</string>
-    <string name="setup_permission_media_description">PixelPlayer 需要访问您的音频文件以构建您的音乐库。</string>
     <string name="setup_permission_granted">权限已授予</string>
-    <string name="setup_grant_media_permission">授予媒体权限</string>
     <string name="setup_permission_notifications_title">通知</string>
     <string name="setup_permission_notifications_description">启用通知以便在锁屏和通知栏控制您的音乐。</string>
     <string name="setup_enable_notifications">启用通知</string>
+    <string name="setup_gateway_signin_title">连接您的账户</string>
+    <string name="setup_gateway_signin_subtitle">登录以同步您的音乐库、播放列表和音乐品味。</string>
+    <string name="setup_gateway_signin_connected">您已连接</string>
     <string name="setup_backup_have_title">您有备份文件吗？</string>
     <string name="setup_backup_have_description">如果您已有 PixelPlayer 备份，现在恢复它可以跳过此设备上的大部分剩余设置。</string>
     <string name="setup_import_backup">导入备份</string>
@@ -34,10 +34,6 @@
     <string name="setup_backup_unknown_version">未知版本</string>
     <string name="setup_restore_selected">恢复所选项</string>
     <string name="setup_restoring">正在恢复</string>
-    <string name="setup_excluded_folders_title">排除的文件夹</string>
-    <string name="setup_excluded_folders_description">默认扫描所有文件夹。选择在构建媒体库时要忽略的任何位置。</string>
-    <string name="setup_choose_folders_ignore">选择要忽略的文件夹</string>
-    <string name="setup_toast_grant_storage_first">请先授予存储权限</string>
     <string name="setup_theme_title">应用主题</string>
     <string name="setup_theme_subtitle">在开始探索媒体库之前，选择您喜欢的外观。</string>
     <string name="setup_theme_dark_title">深色</string>

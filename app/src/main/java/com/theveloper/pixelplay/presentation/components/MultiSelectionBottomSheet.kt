@@ -29,7 +29,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
@@ -84,7 +83,6 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
  * @param onAddToPlaylist Open playlist picker for batch add
  * @param onToggleLikeAll Toggle like status - if all are liked, unlike all; otherwise like all
  * @param onShareAll Share all as ZIP file
- * @param onDeleteAll Delete all from device (with confirmation)
  */
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -105,7 +103,6 @@ fun MultiSelectionBottomSheet(
     onAddToPlaylist: () -> Unit,
     onToggleLikeAll: (shouldLike: Boolean) -> Unit,
     onShareAll: () -> Unit,
-    onDeleteAll: (activity: Activity, onResult: (Boolean) -> Unit) -> Unit,
     onBatchEdit: () -> Unit
 ) {
     val context = LocalContext.current
@@ -403,7 +400,7 @@ fun MultiSelectionBottomSheet(
                         }
                     }
                     
-                    // Row 3: Add to Playlist, Delete
+                    // Row 3: Add to Playlist
                     item {
                         Row(
                             modifier = Modifier
@@ -414,7 +411,7 @@ fun MultiSelectionBottomSheet(
                         ) {
                             FilledTonalButton(
                                 modifier = Modifier
-                                    .weight(0.5f)
+                                    .weight(1f)
                                     .heightIn(min = 66.dp),
                                 colors = ButtonDefaults.filledTonalButtonColors(
                                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -434,39 +431,6 @@ fun MultiSelectionBottomSheet(
                                 Spacer(Modifier.width(6.dp))
                                 TightWrapText(
                                     text = stringResource(R.string.common_playlist),
-                                    modifier = Modifier.padding(end = 4.dp),
-                                    overflow = TextOverflow.Ellipsis,
-                                    maxLines = 2,
-                                    lineHeight = 20.sp
-                                )
-                            }
-                            
-                            FilledTonalButton(
-                                modifier = Modifier
-                                    .weight(0.5f)
-                                    .heightIn(min = 66.dp),
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
-                                ),
-                                contentPadding = PaddingValues(horizontal = 10.dp),
-                                shape = CircleShape,
-                                onClick = {
-                                    val activity = (context as? Activity)
-                                    if (activity != null) {
-                                        onDeleteAll(activity) { success ->
-                                            if (success) onDismiss()
-                                        }
-                                    }
-                                }
-                            ) {
-                                Icon(
-                                    Icons.Rounded.Delete,
-                                    contentDescription = stringResource(R.string.song_info_action_delete_all)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                TightWrapText(
-                                    text = stringResource(R.string.song_info_action_delete_all),
                                     modifier = Modifier.padding(end = 4.dp),
                                     overflow = TextOverflow.Ellipsis,
                                     maxLines = 2,

@@ -11,7 +11,6 @@
     <string name="library_tab_albums">Alben</string>
     <string name="library_tab_artists">Künstler</string>
     <string name="library_tab_playlists">Playlists</string>
-    <string name="library_tab_folders">Ordner</string>
     <string name="library_tab_liked">Lieblingssongs</string>
 
     <!-- Library Toasts -->
@@ -30,24 +29,10 @@
 
     <!-- Library Multi-Selection & Folders -->
     <string name="library_toast_max_albums_selection">Bis zu %1$d Alben auswählbar</string>
-    <string name="library_folder_name_fallback">Ordner</string>
-    <string name="library_cd_folder">Ordner</string>
-
     <!-- Library Sort & View Bottom Sheet -->
     <string name="library_sort_by_title">Sortieren nach</string>
-    <string name="library_sort_section_view">Ansicht</string>
-    <string name="library_sort_toggle_playlist_view">Playlist-Ansicht</string>
     <string name="library_view_mode_grid">Raster</string>
     <string name="library_view_mode_list">Liste</string>
-    <string name="library_storage_internal">Intern</string>
-    <string name="library_storage_sd_card">SD-Karte</string>
-    <string name="library_storage_sd_card_unavailable">SD-Karte ist gerade nicht verfügbar.</string>
-    <string name="library_sort_section_cloud">Cloud</string>
-    <string name="library_sort_toggle_telegram_channels">Telegram Cloud-Kanäle</string>
-    <string name="library_telegram_topics_display_title">Themen-Anzeige</string>
-    <string name="library_telegram_topic_mode_channels">Kanäle</string>
-    <string name="library_telegram_topic_mode_topics">Themen</string>
-    <string name="library_telegram_topic_mode_both">Beides</string>
     <string name="library_cloud_sources_heading">Cloud</string>
     <string name="library_cloud_only_label">Nur Cloud</string>
 
@@ -98,7 +83,7 @@
     <string name="library_empty_songs_offline_title">Keine lokalen Songs gefunden</string>
     <string name="library_empty_songs_offline_subtitle">Versuche es mit einem anderen Quellenfilter oder scanne die Gerätebibliothek erneut.</string>
     <string name="library_empty_songs_online_title">Keine Cloud-Songs gefunden</string>
-    <string name="library_empty_songs_online_subtitle">Synchronisiere Telegram- oder NetEase-Songs oder wechsle zu einer lokalen Quelle.</string>
+    <string name="library_empty_songs_online_subtitle">Synchronisiere Navidrome-Songs oder wechsle zu einer lokalen Quelle.</string>
     <string name="library_empty_albums_all_title">Keine Alben verfügbar</string>
     <string name="library_empty_albums_all_subtitle">Alben werden hier angezeigt, sobald deine Bibliothek Titel gruppiert hat.</string>
     <string name="library_empty_albums_offline_title">Keine lokalen Alben gefunden</string>
@@ -116,9 +101,7 @@
     <string name="library_empty_liked_offline_title">Keine lokalen Lieblingssongs</string>
     <string name="library_empty_liked_offline_subtitle">Ändere den Quellenfilter oder markiere Songs von deinem Gerät als Favoriten.</string>
     <string name="library_empty_liked_online_title">Keine Cloud-Lieblingssongs</string>
-    <string name="library_empty_liked_online_subtitle">Markiere Telegram- oder NetEase-Titel als Favoriten, um sie in dieser Ansicht anzuzeigen.</string>
-    <string name="library_empty_folders_title">Keine Ordner gefunden</string>
-    <string name="library_empty_folders_subtitle">Ordner auf dem internen Speicher, die Musik enthalten, werden hier angezeigt.</string>
+    <string name="library_empty_liked_online_subtitle">Markiere Navidrome-Titel als Favoriten, um sie in dieser Ansicht anzuzeigen.</string>
     <string name="library_empty_playlists_title">Noch keine Playlists</string>
     <string name="library_empty_playlists_subtitle">Erstelle deine erste Playlist, um deine Bibliothek zu organisieren.</string>
 
@@ -142,7 +125,6 @@
     <string name="song_info_cd_queue_next">Als nächstes abspielen</string>
     <string name="song_info_cd_add_to_playlist">Zu Playlist hinzufügen</string>
     <string name="song_info_action_delete">Löschen</string>
-    <string name="song_info_action_delete_all">Alle löschen</string>
     <string name="song_info_checking_watch">Uhr wird geprüft</string>
     <string name="song_info_transferring_percent">Übertragung %1$d%%</string>
     <string name="song_info_transferring_to_watch">Wird an Uhr übertragen</string>
@@ -439,8 +421,6 @@
     <string name="playlist_sheet_search_playlists_hint">Playlists suchen…</string>
     <string name="playlist_sheet_song_added_to_playlists">Songs zu Playlists hinzugefügt</string>
     <string name="playlist_sheet_created_and_songs_added">Playlist erstellt und Songs hinzugefügt</string>
-    <string name="playlist_sheet_internal_storage">Interner Speicher</string>
-
     <!-- SongPickerBottomSheet -->
     <string name="song_picker_title">Songs hinzufügen</string>
     <string name="song_picker_cd_confirm_add_songs">Ausgewählte Songs hinzufügen</string>
@@ -522,25 +502,6 @@
     <string name="artist_detail_not_found">Künstler nicht gefunden</string>
 
     <!-- SongRemovalStateHolder -->
-    <string name="song_removal_cannot_delete_currently_playing">Aktuell gespielter Song kann nicht gelöscht werden</string>
-    <string name="song_removal_batch_delete_files_deleted_skipped_format">%1$d Dateien gelöscht (%2$d übersprungen – läuft gerade)</string>
-    <string name="song_removal_batch_delete_partial_format">%1$d von %2$d Dateien gelöscht</string>
-    <string name="song_removal_delete_files_failed">Dateien konnten nicht gelöscht werden</string>
-    <string name="song_removal_file_deleted">Datei gelöscht</string>
-    <string name="song_removal_delete_file_not_found">Datei konnte nicht gelöscht werden oder wurde nicht gefunden</string>
-    <string name="song_removal_deletion_cancelled">Löschen abgebrochen</string>
-    <string name="song_removal_dialog_delete_song_title">Song-Metadaten bearbeiten</string>
-    <string name="song_removal_dialog_delete_song_message">\"%1$s\" von %2$s\n\nDieser Song wird dauerhaft vom Gerät gelöscht und kann nicht wiederhergestellt werden.</string>
-    <string name="song_removal_delete_songs_permanent_message">Diese Songs werden dauerhaft gelöscht – das lässt sich nicht rückgängig machen.</string>
-    <plurals name="song_removal_n_files_deleted">
-        <item quantity="one">%d Datei gelöscht</item>
-        <item quantity="other">%d Dateien gelöscht</item>
-    </plurals>
-    <plurals name="song_removal_delete_songs_confirmation_title">
-        <item quantity="one">%d Song löschen?</item>
-        <item quantity="other">%d Songs löschen?</item>
-    </plurals>
-
     <!-- MetadataEditStateHolder -->
     <string name="metadata_edit_updated_successfully">Metadaten aktualisiert</string>
     <string name="metadata_edit_updating_n_songs">%1$d Songs werden aktualisiert…</string>

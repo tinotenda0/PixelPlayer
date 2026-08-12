@@ -30,8 +30,7 @@ class LibraryTabsStateHolder @Inject constructor() {
         scope: CoroutineScope,
         loadSongs: () -> Unit,
         loadAlbums: () -> Unit,
-        loadArtists: () -> Unit,
-        loadFolders: () -> Unit
+        loadArtists: () -> Unit
     ) {
         Trace.beginSection("PlayerViewModel.onLibraryTabSelected")
         scope.launch { saveLastTabIndex(tabIndex) }
@@ -57,7 +56,6 @@ class LibraryTabsStateHolder @Inject constructor() {
                     LibraryTabId.SONGS -> loadSongs()
                     LibraryTabId.ALBUMS -> loadAlbums()
                     LibraryTabId.ARTISTS -> loadArtists()
-                    LibraryTabId.FOLDERS -> loadFolders()
                     else -> Unit
                 }
                 loadedTabs.update { currentTabs -> currentTabs + tabIdentifier }

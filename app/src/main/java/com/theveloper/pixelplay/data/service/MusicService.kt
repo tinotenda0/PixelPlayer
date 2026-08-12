@@ -166,8 +166,6 @@ class MusicService : MediaLibraryService() {
     @Inject
     lateinit var navidromeRepository: NavidromeRepository
     @Inject
-    lateinit var plexRepository: com.theveloper.pixelplay.data.plex.PlexRepository
-    @Inject
     lateinit var listeningStatsTracker: ListeningStatsTracker
     @Inject
     @AppScope
@@ -476,15 +474,6 @@ class MusicService : MediaLibraryService() {
             }
         }
         registerHeadsetReconnectMonitor()
-
-        serviceScope.launch {
-            musicRepository.telegramRepository.downloadCompleted.collect {
-                if (isCurrentWidgetArtworkBackedByTelegram()) {
-                    invalidateCachedWidgetArtwork()
-                    widgetUpdateManager.requestWithFollowUp()
-                }
-            }
-        }
 
         // Restore equalizer state from preferences and only attach audio effects when
         // the user actually has at least one effect enabled for the current session.
@@ -1396,69 +1385,6 @@ class MusicService : MediaLibraryService() {
         navidromePlaybackReportJob = null
     }
 
-    private fun getPlexId(mediaItem: MediaItem?): String? {
-        if (mediaItem == null) return null
-        return mediaItem.mediaMetadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_PLEX_ID)
-            ?: mediaItem.mediaMetadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_CONTENT_URI)?.let {
-                if (it.startsWith("plex://")) it.substringAfter("plex://") else null
-            }
-    }
-
-    private fun isPlexMediaItem(mediaItem: MediaItem?): Boolean {
-        return getPlexId(mediaItem) != null
-    }
-
-    private fun reportPlexPlayback(state: String, mediaItem: MediaItem? = engine.masterPlayer.currentMediaItem) {
-        val player = engine.masterPlayer
-        val targetItem = mediaItem ?: return
-        val plexId = getPlexId(targetItem) ?: return
-
-        val durationMs = targetItem.mediaMetadata.extras?.getLong(MediaItemBuilder.EXTERNAL_EXTRA_DURATION) ?: 0L
-        // If reporting for current item, use player position.
-        // If reporting "stopped" for a transition, use the item's duration as final position.
-        val positionMs = if (targetItem === player.currentMediaItem) {
-            player.currentPosition
-        } else {
-            durationMs
-        }
-
-        // Plex timeline states: playing, paused, stopped, buffering.
-        val plexState = when (state) {
-            "starting" -> "buffering"
-            else -> state
-        }
-
-        // Use appScope for the network call so it survives if serviceScope is cancelled
-        appScope.launch(Dispatchers.IO) {
-            plexRepository.reportPlayback(
-                ratingKey = plexId,
-                positionMs = positionMs,
-                state = plexState,
-                durationMs = durationMs
-            )
-        }
-    }
-
-    private var plexPlaybackReportJob: Job? = null
-
-    private fun startPlexPlaybackReporting() {
-        plexPlaybackReportJob?.cancel()
-        plexPlaybackReportJob = serviceScope.launch {
-            while (true) {
-                delay(30_000) // Report every 30 seconds
-                val player = engine.masterPlayer
-                if (player.isPlaying && isPlexMediaItem(player.currentMediaItem)) {
-                    reportPlexPlayback("playing")
-                }
-            }
-        }
-    }
-
-    private fun stopPlexPlaybackReporting() {
-        plexPlaybackReportJob?.cancel()
-        plexPlaybackReportJob = null
-    }
-
     private val playerListener = object : Player.Listener {
         override fun onVolumeChanged(volume: Float) {
             replayGainProcessor.onPlayerVolumeChanged(volume)
@@ -1483,14 +1409,10 @@ class MusicService : MediaLibraryService() {
             if (isPlaying) {
                 reportNavidromePlayback("playing")
                 startNavidromePlaybackReporting()
-                reportPlexPlayback("playing")
-                startPlexPlaybackReporting()
             } else {
                 val state = if (player.playbackState == Player.STATE_ENDED) "stopped" else "paused"
                 reportNavidromePlayback(state)
                 stopNavidromePlaybackReporting()
-                reportPlexPlayback(state)
-                stopPlexPlaybackReporting()
             }
 
             // Re-apply the last known RG volume immediately when resuming playback.
@@ -1538,17 +1460,10 @@ class MusicService : MediaLibraryService() {
                         navidromeRepository.scrobble(navidromeId, submission = true)
                     }
                 }
-                getPlexId(mediaItem)?.let { plexId ->
-                    appScope.launch(Dispatchers.IO) {
-                        plexRepository.scrobble(plexId)
-                    }
-                }
 
                 endOfTrackTimerSongId = null
                 reportNavidromePlayback("stopped")
                 stopNavidromePlaybackReporting()
-                reportPlexPlayback("stopped")
-                stopPlexPlaybackReporting()
             } else {
                 syncLocalListeningStatsFromPlayer(mediaSession?.player ?: engine.masterPlayer)
             }
@@ -1575,7 +1490,6 @@ class MusicService : MediaLibraryService() {
             if (reason == Player.DISCONTINUITY_REASON_SEEK) {
                 val state = if (engine.masterPlayer.isPlaying) "playing" else "paused"
                 reportNavidromePlayback(state)
-                reportPlexPlayback(state)
             }
 
             if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION) {
@@ -1586,15 +1500,6 @@ class MusicService : MediaLibraryService() {
                     if (prevId != null) {
                         appScope.launch(Dispatchers.IO) {
                             navidromeRepository.scrobble(prevId, submission = true)
-                        }
-                    }
-                }
-                if (isPlexMediaItem(finishedItem)) {
-                    val prevPlexId = getPlexId(finishedItem)
-                    reportPlexPlayback("stopped", finishedItem)
-                    if (prevPlexId != null) {
-                        appScope.launch(Dispatchers.IO) {
-                            plexRepository.scrobble(prevPlexId)
                         }
                     }
                 }
@@ -1626,14 +1531,6 @@ class MusicService : MediaLibraryService() {
                 }
             } else {
                 stopNavidromePlaybackReporting()
-            }
-            if (isPlexMediaItem(mediaItem)) {
-                reportPlexPlayback("starting")
-                if (engine.masterPlayer.isPlaying) {
-                    startPlexPlaybackReporting()
-                }
-            } else {
-                stopPlexPlaybackReporting()
             }
 
             val eotTargetSongId = endOfTrackTimerSongId
@@ -1738,8 +1635,6 @@ class MusicService : MediaLibraryService() {
         listeningStatsTracker.finalizeCurrentSession(forceSynchronousPersistence = true)
         reportNavidromePlayback("stopped")
         stopNavidromePlaybackReporting()
-        reportPlexPlayback("stopped")
-        stopPlexPlaybackReporting()
         playbackSnapshotPersistJob?.cancel()
         mediaSessionButtonRefreshJob?.cancel()
         followUpMediaSessionUiRefreshJob?.cancel()
@@ -2405,16 +2300,6 @@ class MusicService : MediaLibraryService() {
         cachedWidgetArtBytes = null
         cachedWidgetArtLoadFailureKey = null
         cachedWidgetArtLoadFailureAtMs = 0L
-    }
-
-    private fun isCurrentWidgetArtworkBackedByTelegram(): Boolean {
-        val currentItem = engine.masterPlayer.currentMediaItem ?: return false
-        val metadata = currentItem.mediaMetadata
-        val contentUriString = currentItem.localConfiguration?.uri?.toString()
-            ?: metadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_CONTENT_URI)
-        val artworkUriString = resolveStoredArtworkUriString(metadata)
-        return contentUriString?.startsWith("telegram://") == true ||
-            artworkUriString?.startsWith("telegram_art://") == true
     }
 
     private suspend fun getAlbumArtForWidget(

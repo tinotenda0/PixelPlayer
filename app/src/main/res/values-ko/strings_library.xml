@@ -11,7 +11,6 @@
     <string name="library_tab_albums">앨범</string>
     <string name="library_tab_artists">아티스트</string>
     <string name="library_tab_playlists">플레이리스트</string>
-    <string name="library_tab_folders">폴더</string>
     <string name="library_tab_liked">좋아요 표시한 곡</string>
 
     <!-- Library Toasts -->
@@ -30,24 +29,10 @@
 
     <!-- Library Multi-Selection & Folders -->
     <string name="library_toast_max_albums_selection">최대 %1$d개의 앨범을 선택할 수 있습니다</string>
-    <string name="library_folder_name_fallback">폴더</string>
-    <string name="library_cd_folder">폴더</string>
-
     <!-- Library Sort & View Bottom Sheet -->
     <string name="library_sort_by_title">정렬 기준</string>
-    <string name="library_sort_section_view">보기</string>
-    <string name="library_sort_toggle_playlist_view">플레이리스트 보기</string>
     <string name="library_view_mode_grid">그리드</string>
     <string name="library_view_mode_list">목록</string>
-    <string name="library_storage_internal">내부 저장공간</string>
-    <string name="library_storage_sd_card">SD 카드</string>
-    <string name="library_storage_sd_card_unavailable">현재 SD 카드를 사용할 수 없습니다.</string>
-    <string name="library_sort_section_cloud">클라우드</string>
-    <string name="library_sort_toggle_telegram_channels">Telegram 클라우드 채널</string>
-    <string name="library_telegram_topics_display_title">토픽 표시</string>
-    <string name="library_telegram_topic_mode_channels">채널</string>
-    <string name="library_telegram_topic_mode_topics">토픽</string>
-    <string name="library_telegram_topic_mode_both">둘 다</string>
     <string name="library_cloud_sources_heading">클라우드</string>
     <string name="library_cloud_only_label">클라우드 전용</string>
 
@@ -98,7 +83,7 @@
     <string name="library_empty_songs_offline_title">로컬 곡을 찾을 수 없음</string>
     <string name="library_empty_songs_offline_subtitle">다른 소스 필터를 시도하거나 기기 라이브러리를 다시 스캔하세요.</string>
     <string name="library_empty_songs_online_title">클라우드 곡을 찾을 수 없음</string>
-    <string name="library_empty_songs_online_subtitle">Telegram 또는 NetEase Music 곡을 동기화하거나 로컬 소스로 전환하세요.</string>
+    <string name="library_empty_songs_online_subtitle">Navidrome 곡을 동기화하거나 로컬 소스로 전환하세요.</string>
     <string name="library_empty_albums_all_title">사용 가능한 앨범 없음</string>
     <string name="library_empty_albums_all_subtitle">라이브러리의 트랙이 그룹화되는 대로 앨범이 여기에 표시됩니다.</string>
     <string name="library_empty_albums_offline_title">로컬 앨범을 찾을 수 없음</string>
@@ -116,9 +101,7 @@
     <string name="library_empty_liked_offline_title">좋아요 표시한 로컬 곡 없음</string>
     <string name="library_empty_liked_offline_subtitle">소스 필터를 전환하거나 기기의 곡에 좋아요를 표시하세요.</string>
     <string name="library_empty_liked_online_title">좋아요 표시한 클라우드 곡 없음</string>
-    <string name="library_empty_liked_online_subtitle">Telegram 또는 NetEase 트랙에 좋아요를 표시하여 이 보기에 나타나게 하세요.</string>
-    <string name="library_empty_folders_title">폴더를 찾을 수 없음</string>
-    <string name="library_empty_folders_subtitle">음악이 포함된 내부 저장소 폴더가 여기에 표시됩니다.</string>
+    <string name="library_empty_liked_online_subtitle">Navidrome 트랙에 좋아요를 표시하여 이 보기에 나타나게 하세요.</string>
     <string name="library_empty_playlists_title">플레이리스트가 아직 없습니다</string>
     <string name="library_empty_playlists_subtitle">첫 번째 플레이리스트를 만들어 라이브러리를 정리해 보세요.</string>
 
@@ -142,7 +125,6 @@
     <string name="song_info_cd_queue_next">대기열의 다음에 재생</string>
     <string name="song_info_cd_add_to_playlist">플레이리스트에 추가</string>
     <string name="song_info_action_delete">삭제</string>
-    <string name="song_info_action_delete_all">모두 삭제</string>
     <string name="song_info_checking_watch">워치 확인 중</string>
     <string name="song_info_transferring_percent">전송 중 %1$d%%</string>
     <string name="song_info_transferring_to_watch">워치로 전송 중</string>
@@ -439,8 +421,6 @@
     <string name="playlist_sheet_search_playlists_hint">플레이리스트 검색…</string>
     <string name="playlist_sheet_song_added_to_playlists">플레이리스트에 곡이 추가되었습니다</string>
     <string name="playlist_sheet_created_and_songs_added">플레이리스트가 생성되고 곡이 추가되었습니다</string>
-    <string name="playlist_sheet_internal_storage">내부 저장공간</string>
-
     <!-- SongPickerBottomSheet -->
     <string name="song_picker_title">곡 추가</string>
     <string name="song_picker_cd_confirm_add_songs">선택한 곡 추가</string>
@@ -516,23 +496,6 @@
     <string name="artist_detail_not_found">아티스트를 찾을 수 없습니다</string>
 
     <!-- SongRemovalStateHolder -->
-    <string name="song_removal_cannot_delete_currently_playing">현재 재생 중인 곡은 삭제할 수 없습니다</string>
-    <string name="song_removal_batch_delete_files_deleted_skipped_format">%1$d개 파일 삭제됨 (%2$d개 건너뜀 - 재생 중)</string>
-    <string name="song_removal_batch_delete_partial_format">%2$d개 중 %1$d개 파일 삭제됨</string>
-    <string name="song_removal_delete_files_failed">파일 삭제 실패</string>
-    <string name="song_removal_file_deleted">파일 삭제됨</string>
-    <string name="song_removal_delete_file_not_found">파일을 삭제할 수 없거나 파일을 찾을 수 없습니다</string>
-    <string name="song_removal_deletion_cancelled">삭제 취소됨</string>
-    <string name="song_removal_dialog_delete_song_title">곡을 삭제하시겠습니까?</string>
-    <string name="song_removal_dialog_delete_song_message">아티스트 %2$s의 \"%1$s\"\n\n이 곡은 기기에서 영구적으로 삭제되며 복구할 수 없습니다.</string>
-    <string name="song_removal_delete_songs_permanent_message">이 곡들은 기기에서 영구적으로 삭제되며 복구할 수 없습니다.</string>
-    <plurals name="song_removal_n_files_deleted">
-        <item quantity="other">파일 %d개가 삭제되었습니다</item>
-    </plurals>
-    <plurals name="song_removal_delete_songs_confirmation_title">
-        <item quantity="other">곡 %d개를 삭제하시겠습니까?</item>
-    </plurals>
-
     <!-- MetadataEditStateHolder -->
     <string name="metadata_edit_updated_successfully">메타데이터가 성공적으로 업데이트되었습니다</string>
     <string name="metadata_edit_updating_n_songs">%1$d곡 업데이트 중…</string>

@@ -233,10 +233,6 @@ internal fun UnifiedPlayerSongInfoLayer(
                 onAddToPlayList = {
                     showPlaylistBottomSheet = true
                 },
-                onDeleteFromDevice = { activity, songToDelete, onResult ->
-                    playerViewModel.deleteFromDevice(activity, songToDelete, onResult)
-                    onDismissSongInfo()
-                },
                 onNavigateToAlbum = { onNavigateToAlbum(liveSong) },
                 onNavigateToArtist = { onNavigateToArtist(liveSong) },
                 onNavigateToArtistById = { ref -> onNavigateToArtistByRef(ref) },
@@ -257,10 +253,6 @@ internal fun UnifiedPlayerSongInfoLayer(
                         replayGainAlbumGainDb,
                         coverArtUpdate
                     )
-                    onDismissSongInfo()
-                },
-                removeFromListTrigger = {
-                    playerViewModel.removeSongFromQueue(liveSong.id)
                     onDismissSongInfo()
                 }
             )

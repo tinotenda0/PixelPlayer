@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_top_bar_title">الإعدادات</string>
     <string name="settings_accounts_row_title">الحسابات</string>
-    <string name="settings_accounts_row_subtitle">إدارة خدمات Telegram، وGoogle Drive، وNetEase وغيرها</string>
+    <string name="settings_accounts_row_subtitle">إدارة حساب Navidrome</string>
 
     <string name="settings_category_library_title">إدارة الموسيقى</string>
     <string name="settings_category_library_subtitle">إدارة المجلدات، تحديث المكتبة، وخيارات التحليل البرمجي</string>

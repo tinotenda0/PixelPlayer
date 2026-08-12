@@ -12,13 +12,13 @@
     <string name="setup_beta_symbol">β</string>
     <string name="setup_beta_label">Beta</string>
     <string name="setup_intro_body">Prepariamo tutto per te.</string>
-    <string name="setup_permission_media_title">Permesso media</string>
-    <string name="setup_permission_media_description">PixelPlayer necessita accesso ai tuoi file audio per costruire la tua libreria musicale.</string>
     <string name="setup_permission_granted">Permesso concesso</string>
-    <string name="setup_grant_media_permission">Concedi permesso media</string>
     <string name="setup_permission_notifications_title">Notifiche</string>
     <string name="setup_permission_notifications_description">Abilita le notifiche per controllare la tua musica dalla schermata di blocco e dal pannello notifiche.</string>
     <string name="setup_enable_notifications">Abilita notifiche</string>
+    <string name="setup_gateway_signin_title">Collega il tuo account</string>
+    <string name="setup_gateway_signin_subtitle">Accedi per sincronizzare la tua libreria, playlist e gusti musicali.</string>
+    <string name="setup_gateway_signin_connected">Sei connesso</string>
     <string name="setup_backup_have_title">Hai un backup?</string>
     <string name="setup_backup_have_description">Se hai già un backup di PixelPlayer, ripristinalo ora e salta la maggior parte del setup rimanente su questo dispositivo.</string>
     <string name="setup_import_backup">Importa backup</string>
@@ -34,10 +34,6 @@
     <string name="setup_backup_unknown_version">Versione sconosciuta</string>
     <string name="setup_restore_selected">Ripristina selezionati</string>
     <string name="setup_restoring">Ripristino in corso</string>
-    <string name="setup_excluded_folders_title">Cartelle escluse</string>
-    <string name="setup_excluded_folders_description">Tutte le cartelle sono scansionate per impostazione predefinita. Scegli le posizioni da ignorare durante la costruzione della tua libreria.</string>
-    <string name="setup_choose_folders_ignore">Scegli cartelle da ignorare</string>
-    <string name="setup_toast_grant_storage_first">Concedi prima i permessi di archiviazione</string>
     <string name="setup_theme_title">Tema app</string>
     <string name="setup_theme_subtitle">Scegli l\'aspetto che preferisci prima di iniziare a esplorare la tua libreria.</string>
     <string name="setup_theme_dark_title">Scuro</string>

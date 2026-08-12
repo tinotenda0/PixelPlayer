@@ -15,11 +15,7 @@ object CloudStreamSecurity {
     private const val MAX_RANGE_HEADER_LENGTH = 64
     private const val MAX_RANGE_VALUE_BYTES = 8L * 1024L * 1024L * 1024L
 
-    private val GDRIVE_FILE_ID_REGEX = Regex("^[A-Za-z0-9_-]{10,200}$")
-    private val QQMUSIC_SONG_MID_REGEX = Regex("^[A-Za-z0-9_-]{6,50}$")
     private val NAVIDROME_SONG_ID_REGEX = Regex("^[A-Za-z0-9_-]{1,100}$")
-    private val JELLYFIN_ITEM_ID_REGEX = Regex("^[A-Za-z0-9]{1,100}$")
-    private val PLEX_RATING_KEY_REGEX = Regex("^[0-9]{1,20}$")
     private val FORBIDDEN_HOSTS = setOf("localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]")
 
     // DNS suffixes that only resolve on a local network: mDNS (.local), common
@@ -41,19 +37,7 @@ object CloudStreamSecurity {
         val isSuffixRange: Boolean = false
     )
 
-    fun validateTelegramFileId(fileId: Int): Boolean = fileId > 0
-
-    fun validateNeteaseSongId(songId: Long): Boolean = songId > 0L
-
-    fun validateGDriveFileId(fileId: String): Boolean = GDRIVE_FILE_ID_REGEX.matches(fileId)
-
-    fun validateQqMusicSongMid(songMid: String): Boolean = QQMUSIC_SONG_MID_REGEX.matches(songMid)
-
     fun validateNavidromeSongId(songId: String): Boolean = NAVIDROME_SONG_ID_REGEX.matches(songId)
-
-    fun validateJellyfinItemId(itemId: String): Boolean = JELLYFIN_ITEM_ID_REGEX.matches(itemId)
-
-    fun validatePlexRatingKey(ratingKey: String): Boolean = PLEX_RATING_KEY_REGEX.matches(ratingKey)
 
     fun validateRangeHeader(rawHeader: String?): RangeHeaderValidation {
         if (rawHeader.isNullOrBlank()) {
@@ -136,12 +120,10 @@ object CloudStreamSecurity {
         val httpUrl = url.toHttpUrlOrNull() ?: return false
         val host = httpUrl.host.lowercase()
 
-        // Allow private IPs and .local for Subsonic/Navidrome/Jellyfin/Plex servers which are often self-hosted
+        // Allow private IPs and .local for Subsonic/Navidrome servers which are often self-hosted
         val isNavidromeStream = httpUrl.pathSegments.contains("stream.view")
-        val isJellyfinStream = httpUrl.pathSegments.contains("Audio") && httpUrl.pathSegments.contains("universal")
-        val isPlexStream = httpUrl.pathSegments.contains("library") && httpUrl.pathSegments.contains("parts")
 
-        if (!isNavidromeStream && !isJellyfinStream && !isPlexStream) {
+        if (!isNavidromeStream) {
             if (host in FORBIDDEN_HOSTS) return false
             if (host.endsWith(".local")) return false
             if (isPrivateIpv4Literal(host)) return false
@@ -183,7 +165,7 @@ object CloudStreamSecurity {
     /**
      * Returns true when [host] points at a local network or private address,
      * where cleartext HTTP is acceptable for self-hosted media servers
-     * (Navidrome/Subsonic, Jellyfin).
+     * (Navidrome/Subsonic).
      *
      * Covers loopback names, local-only DNS suffixes, single-label LAN
      * hostnames, private and carrier-grade-NAT IPv4 ranges (the latter used by

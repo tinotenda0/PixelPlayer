@@ -20,7 +20,7 @@
     <string name="settings_category_device_capabilities_title">Capacités de l\'appareil</string>
     <string name="settings_category_device_capabilities_subtitle">Spécifications audio, codecs et infos sur le décodeur</string>
     <string name="settings_category_accounts_title">Comptes</string>
-    <string name="settings_category_accounts_subtitle">Gérer Telegram, Google Drive, NetEase Music et d\'autres services</string>
+    <string name="settings_category_accounts_subtitle">Gérer votre compte Navidrome</string>
     <string name="settings_category_about_title">À propos</string>
     <string name="settings_category_about_subtitle">Infos sur l\'application, version et crédits</string>
 
@@ -36,8 +36,6 @@
 
     <!-- Music Management category -->
     <string name="settings_library_structure_section">Structure de la bibliothèque</string>
-    <string name="settings_excluded_directories_title">Répertoires exclus</string>
-    <string name="settings_excluded_directories_subtitle">Les dossiers listés ici seront ignorés lors de l\'analyse.</string>
     <string name="settings_artists_title">Artistes</string>
     <string name="settings_artists_subtitle">Options d\'analyse et d\'organisation multi-artistes.</string>
     <string name="settings_filtering_section">Filtrage</string>
@@ -127,21 +125,6 @@
     <string name="delimiter_label_space">Espace</string>
 
     <!-- Word Delimiters -->
-    <string name="word_delimiters_screen_title">Délimiteurs de mots</string>
-    <string name="word_delimiter_current_title">Délimiteurs de mots actuels</string>
-    <string name="word_delimiter_current_subtitle">Ces mots-clés séparent les noms d\'artistes lorsqu\'ils sont entourés d\'espaces. Correspondance insensible à la casse. Appuyez pour supprimer.</string>
-    <string name="word_delimiter_empty">Aucun délimiteur de mot configuré</string>
-    <string name="word_delimiter_add_title">Ajouter un nouveau délimiteur de mot</string>
-    <string name="word_delimiter_add_hint">ex. : feat. ou ft.</string>
-    <string name="word__delimiter_cd_add">Ajouter le délimiteur de mot</string>
-    <string name="word_delimiter_help_title">Fonctionnement des délimiteurs de mots</string>
-    <string name="word_delimiter_help_body">Les délimiteurs de mots sont mis en correspondance sans tenir compte de la casse, avec des espaces autour d\'eux.\n\nLes délimiteurs à caractère unique (comme « x ») nécessitent des espaces des deux côtés pour éviter les fausses correspondances.\n\nExemples :\n  « Drake feat. Rihanna » -&gt; Drake, Rihanna\n  « Marshmello x Bastille » -&gt; Marshmello, Bastille\n  « A vs. B » -&gt; A, B</string>
-    <string name="word_delimiter_reset_title">Réinitialiser les délimiteurs de mots ?</string>
-    <string name="word_delimiter_reset_message">Cela effacera tous vos délimiteurs de mots personnalisés et restaurera les mots-clés par défaut. Cette action ne peut pas être annulée.</string>
-    <string name="word_delimiter_toast_added">Délimiteur de mot ajouté</string>
-    <string name="word_delimiter_toast_invalid">Existe déjà ou est invalide</string>
-    <string name="word_delimiter_toast_reset">Délimiteurs de mots réinitialisés aux valeurs par défaut</string>
-
     <!-- Library Sync flow -->
     <string name="settings_sync_phase_preparing">Préparation de la synchronisation</string>
     <string name="settings_sync_phase_reading_mediastore">Lecture de MediaStore</string>
@@ -289,9 +272,6 @@
     <string name="settings_show_queue_history_subtitle">Afficher les chansons lues précédemment dans la file d\'attente.</string>
 
     <!-- Behavior category -->
-    <string name="settings_folders_section">Dossiers</string>
-    <string name="settings_folder_back_gesture_title">Le geste retour contrôle les dossiers</string>
-    <string name="settings_folder_back_gesture_subtitle">Dans l\'onglet Dossiers, le retour système navigue dans la pile de dossiers avant de quitter la bibliothèque.</string>
     <string name="settings_player_gestures_section">Gestes du lecteur</string>
     <string name="settings_tap_bg_closes_title">Appuyer sur l\'arrière-plan ferme le lecteur</string>
     <string name="settings_tap_bg_closes_subtitle">Appuyez sur l\'arrière-plan flou pour fermer la feuille du lecteur.</string>
@@ -519,18 +499,13 @@
     <string name="settings_devcaps_unknown">--</string>
     <string name="settings_devcaps_metric_formats">Formats</string>
     <string name="settings_devcaps_metric_hw_decoders">Décodeurs matériels</string>
-    <string name="settings_devcaps_metric_local_music">Chansons locales</string>
-    <string name="settings_devcaps_storage_title">Stockage de la musique locale</string>
-    <string name="settings_devcaps_storage_music_size">Taille de la musique</string>
-    <string name="settings_devcaps_storage_music_count">%1$d chansons locales</string>
+    <string name="settings_devcaps_metric_local_music">Morceaux</string>
+    <string name="settings_devcaps_storage_title">Stockage de l\'appareil</string>
     <string name="settings_devcaps_storage_available">Disponible</string>
     <string name="settings_devcaps_storage_total">%1$s au total</string>
-    <string name="settings_devcaps_storage_music_footprint">Empreinte de la musique</string>
     <string name="settings_devcaps_storage_device_used">Espace utilisé sur l\'appareil</string>
     <string name="settings_devcaps_storage_percent">%1$d%%</string>
     <string name="settings_devcaps_storage_less_than_one_percent">&lt;1%</string>
-    <string name="settings_devcaps_storage_cloud_count">%1$d chansons cloud</string>
-    <string name="settings_devcaps_storage_unavailable_count">%1$d fichiers illisibles</string>
     <string name="settings_devcaps_playback_path_title">Chemin de lecture</string>
     <string name="settings_devcaps_status_yes">Oui</string>
     <string name="settings_devcaps_status_no">Non</string>
@@ -569,8 +544,6 @@
     <string name="settings_devcaps_finding_clear_body">Vos pistes indexées correspondent aux décodeurs signalés par Android sur cet appareil.</string>
     <string name="settings_devcaps_finding_unsupported_title">%1$d pistes pourraient ne pas être décodées nativement</string>
     <string name="settings_devcaps_finding_unsupported_body">Formats à vérifier : %1$s.</string>
-    <string name="settings_devcaps_finding_resample_title">%1$d pistes locales pourraient être rééchantillonnées</string>
-    <string name="settings_devcaps_finding_resample_body">La bibliothèque atteint %1$d Hz, ce qui est supérieur au taux d\'échantillonnage de la sortie actuelle.</string>
     <string name="settings_devcaps_finding_unknown_title">%1$d pistes ont des métadonnées inconnues</string>
     <string name="settings_devcaps_finding_unknown_body">Une analyse complète de la bibliothèque peut compléter les données manquantes (MIME, débit et taux d\'échantillonnage).</string>
     <string name="settings_devcaps_device_info_title">Infos appareil</string>
@@ -610,7 +583,6 @@
     <string name="accounts_no_linked_subtitle">Connectez un fournisseur pour le gérer depuis cet écran.</string>
     <string name="accounts_connect_service">Connecter %1$s</string>
     <string name="accounts_service_coming_soon">%1$s (Bientôt disponible)</string>
-    <string name="accounts_google_drive_soon">Google Drive arrive bientôt.</string>
     <string name="accounts_unable_open_screen">Impossible d\'ouvrir cet écran pour le moment.</string>
 
     <!-- About category -->

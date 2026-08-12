@@ -300,7 +300,6 @@ fun RecentlyPlayedScreen(
                 onAddToPlayList = {
                     showPlaylistBottomSheet = true
                 },
-                onDeleteFromDevice = playerViewModel::deleteFromDevice,
                 onNavigateToAlbum = {
                     navController.navigateSafely(Screen.AlbumDetail.createRoute(song.albumId))
                     showSongInfoBottomSheet = false
@@ -335,8 +334,7 @@ fun RecentlyPlayedScreen(
                         replayGainAlbumGainDb,
                         coverArtUpdate
                     )
-                },
-                removeFromListTrigger = {}
+                }
             )
 
             if (showPlaylistBottomSheet) {

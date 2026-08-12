@@ -1,13 +1,10 @@
 package com.theveloper.pixelplay.data.media
 
-import android.content.ContentUris
-import android.content.ContentValues
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.ParcelFileDescriptor
-import android.provider.MediaStore
 import android.util.Base64
 import androidx.annotation.RequiresApi
 import androidx.core.net.toUri
@@ -16,15 +13,12 @@ import com.kyant.taglib.TagLib
 import com.theveloper.pixelplay.data.database.ArtistEntity
 import com.theveloper.pixelplay.data.database.MusicDao
 import com.theveloper.pixelplay.data.database.SongArtistCrossRef
-import com.theveloper.pixelplay.data.database.TelegramDao // Added
-import com.theveloper.pixelplay.data.database.TelegramSongEntity // Added
 import com.theveloper.pixelplay.data.database.serializeArtistRefs
 import com.theveloper.pixelplay.data.model.ArtistRef
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.worker.collectArtistNames
 import com.theveloper.pixelplay.utils.AlbumArtUtils
 import com.theveloper.pixelplay.utils.LocalArtworkUri
-import com.theveloper.pixelplay.utils.MediaStorePermissionHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first // Added
 import kotlinx.coroutines.withContext
@@ -86,7 +80,6 @@ private sealed interface ReplayGainUpdate {
 class SongMetadataEditor(
     private val context: Context,
     private val musicDao: MusicDao,
-    private val telegramDao: TelegramDao, // Added
     private val userPreferencesRepository: UserPreferencesRepository
 ) {
 
@@ -286,25 +279,10 @@ class SongMetadataEditor(
                 )
             }
 
-            val isTelegramSong = songId < 0
-            val filePath = if (isTelegramSong) {
-                musicDao.getSongById(songId).first()?.filePath
-            } else {
-                getFilePathFromMediaStore(songId)
-            }
-
-            if (filePath.isNullOrBlank() && !isTelegramSong) {
-                Timber.tag(TAG).e("Could not get file path for songId: $songId")
-                return@withContext SongMetadataEditResult(
-                    success = false,
-                    updatedAlbumArtUri = null,
-                    error = MetadataEditError.FILE_NOT_FOUND,
-                    errorMessage = "Could not find file in media library"
-                )
-            }
-
-            // Write permission is now handled upstream via MediaStore.createWriteRequest()
-            // before this method is called. No File.canWrite() check needed.
+            // All songs are gateway (Navidrome) songs with negative synthetic IDs. A song may
+            // still have no local file at all (streamed, never downloaded) — handled below by
+            // the `fileExists` check, which skips file-tag writes and updates the DB only.
+            val filePath = musicDao.getSongById(songId).first()?.filePath
 
             val finalFilePath = filePath ?: ""
             val extension = finalFilePath.substringAfterLast('.', "").lowercase(Locale.ROOT)
@@ -417,14 +395,9 @@ class SongMetadataEditor(
             }
 
             val fileUpdateSuccess = if (!fileExists) {
-                if (isTelegramSong) {
-                    Timber.tag(TAG)
-                        .w("METADATA_EDIT: Telegram file not found (streaming?). Skipping file tags, updating DB only.")
-                    true
-                } else {
-                    Timber.tag(TAG).e("METADATA_EDIT: File does not exist: $finalFilePath")
-                    false
-                }
+                Timber.tag(TAG)
+                    .w("METADATA_EDIT: Song file not found (streaming?). Skipping file tags, updating DB only.")
+                true
             } else {
                 val tempFile = File(
                     context.cacheDir,
@@ -449,20 +422,7 @@ class SongMetadataEditor(
                                 writeBackSuccess = true
                                 Timber.tag(TAG).d("Successfully wrote metadata directly to raw file path")
                             } else {
-                                val uri = if (!isTelegramSong) MediaStorePermissionHelper.getMediaStoreUri(context, songId) else null
-                                if (uri != null) {
-                                    context.contentResolver.openFileDescriptor(uri, "rwt")?.use { pfd ->
-                                        FileOutputStream(pfd.fileDescriptor).use { output ->
-                                            tempFile.inputStream().use { input ->
-                                                input.copyTo(output)
-                                            }
-                                        }
-                                    }
-                                    writeBackSuccess = true
-                                    Timber.tag(TAG).d("Successfully wrote metadata via ContentResolver (rwt)")
-                                } else {
-                                    Timber.tag(TAG).e("Cannot write back: file is not writeable and no MediaStore URI resolved")
-                                }
+                                Timber.tag(TAG).e("Cannot write back: file is not writeable")
                             }
                         } catch (e: Exception) {
                             Timber.tag(TAG).e(e, "Failed to write edited bytes back to destination")
@@ -489,36 +449,6 @@ class SongMetadataEditor(
                     error = MetadataEditError.TAGLIB_ERROR,
                     errorMessage = "Failed to write metadata to file"
                 )
-            }
-
-            if (isTelegramSong) {
-                val songEntity = musicDao.getSongById(songId).first()
-                if (songEntity?.telegramChatId != null && songEntity.telegramFileId != null) {
-                    val telegramId = "${songEntity.telegramChatId}_${songEntity.telegramFileId}"
-                    val telegramSong = telegramDao.getSongsByIds(listOf(telegramId)).first().firstOrNull()
-                    if (telegramSong != null) {
-                        val updatedTelegramSong = telegramSong.copy(
-                            title = newTitle,
-                            artist = newArtist,
-                        )
-                        telegramDao.insertSongs(listOf(updatedTelegramSong))
-                        Timber.d("Updated TelegramDao for song: $telegramId")
-                    }
-                }
-            } else {
-                val mediaStoreSuccess = updateMediaStoreMetadata(
-                    songId = songId,
-                    title = newTitle,
-                    artist = newArtist,
-                    album = newAlbum,
-                    albumArtist = newAlbumArtist,
-                    genre = trimmedGenre,
-                    trackNumber = newTrackNumber,
-                    discNumber = newDiscNumber
-                )
-                if (!mediaStoreSuccess) {
-                    Timber.w("MediaStore update failed, but file was updated for songId: $songId")
-                }
             }
 
             var storedCoverArtUri: String? = null
@@ -667,8 +597,8 @@ class SongMetadataEditor(
 
     /**
      * Detects the actual audio container by reading the file's magic bytes.
-     * Many files in the wild have wrong extensions (e.g. MP4/M4A served as .mp3 by YouTube rippers
-     * or Telegram). Writing ID3v2 tags to an MP4 container corrupts it irreversibly, so the
+     * Many files in the wild have wrong extensions (e.g. MP4/M4A served as .mp3 by YouTube rippers).
+     * Writing ID3v2 tags to an MP4 container corrupts it irreversibly, so the
      * tag-writing pipeline must route by real content, not by extension.
      */
     private fun detectContainerFormat(filePath: String): DetectedContainer {
@@ -1076,45 +1006,6 @@ class SongMetadataEditor(
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.R)
-    private fun updateMediaStoreMetadata(
-        songId: Long,
-        title: String,
-        artist: String,
-        album: String,
-        albumArtist: String?,
-        genre: String,
-        trackNumber: Int,
-        discNumber: Int?
-    ): Boolean {
-        return try {
-            val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, songId)
-
-            val values = ContentValues().apply {
-                put(MediaStore.Audio.Media.TITLE, title)
-                put(MediaStore.Audio.Media.ARTIST, artist)
-                put(MediaStore.Audio.Media.ALBUM, album)
-                put(MediaStore.Audio.Media.GENRE, genre)
-                val encodedTrack = ((discNumber ?: 0) * 1000) + trackNumber
-                put(MediaStore.Audio.Media.TRACK, encodedTrack)
-                put(MediaStore.Audio.Media.DATE_MODIFIED, System.currentTimeMillis() / 1000)
-                if (!albumArtist.isNullOrBlank()) {
-                    put(MediaStore.Audio.Media.ALBUM_ARTIST, albumArtist)
-                }
-            }
-
-            val rowsUpdated = context.contentResolver.update(uri, values, null, null)
-            val success = rowsUpdated > 0
-
-            Timber.d("MediaStore update: $rowsUpdated row(s) affected")
-            success
-
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to update MediaStore for songId: $songId")
-            false
-        }
-    }
-
     private fun forceMediaRescan(filePath: String) {
         try {
             val file = File(filePath)
@@ -1135,32 +1026,6 @@ class SongMetadataEditor(
         }
     }
 
-    private fun getFilePathFromMediaStore(songId: Long): String? {
-        Timber.tag(TAG).e("getFilePathFromMediaStore: Looking up songId: $songId")
-        return try {
-            context.contentResolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Audio.Media.DATA),
-                "${MediaStore.Audio.Media._ID} = ?",
-                arrayOf(songId.toString()),
-                null
-            )?.use { cursor ->
-                Timber.tag(TAG).e("getFilePathFromMediaStore: Cursor count: ${cursor.count}")
-                if (cursor.moveToFirst()) {
-                    val path = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA))
-                    Timber.tag(TAG).e("getFilePathFromMediaStore: Found path: $path")
-                    path
-                } else {
-                    Timber.tag(TAG)
-                        .e("getFilePathFromMediaStore: No file found for songId: $songId")
-                    null
-                }
-            }
-        } catch (e: Exception) {
-            Timber.tag(TAG).e("getFilePathFromMediaStore: Error querying MediaStore: ${e.message}")
-            null
-        }
-    }
     private fun saveCoverArtPreview(songId: Long, coverArtUpdate: CoverArtUpdate): String? {
         return try {
             val extension = imageExtensionFromMimeType(coverArtUpdate.mimeType) ?: "jpg"

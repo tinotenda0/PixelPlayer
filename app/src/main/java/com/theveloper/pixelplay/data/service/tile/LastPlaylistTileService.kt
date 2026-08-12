@@ -1,7 +1,6 @@
 package com.theveloper.pixelplay.data.service.tile
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
@@ -10,10 +9,8 @@ import androidx.annotation.RequiresApi
 import com.theveloper.pixelplay.MainActivity
 import com.theveloper.pixelplay.MainActivityIntentContract
 import com.theveloper.pixelplay.R
-import com.theveloper.pixelplay.data.model.MusicFolder
 import com.theveloper.pixelplay.data.preferences.PlaylistPreferencesRepository
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
-import com.theveloper.pixelplay.data.repository.MusicRepository
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -38,14 +35,12 @@ import kotlinx.coroutines.withContext
 class LastPlaylistTileService : TileService() {
 
     companion object {
-        private const val FOLDER_PLAYLIST_PREFIX = "folder_playlist:"
         private const val REQUEST_CODE_LAST_PLAYLIST = 1002
     }
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface LastPlaylistTileEntryPoint {
-        fun musicRepository(): MusicRepository
         fun playlistPreferencesRepository(): PlaylistPreferencesRepository
         fun userPreferencesRepository(): UserPreferencesRepository
     }
@@ -66,15 +61,6 @@ class LastPlaylistTileService : TileService() {
             LastPlaylistTileEntryPoint::class.java
         )
         entryPoint.playlistPreferencesRepository()
-    }
-
-    private val musicRepo: MusicRepository by lazy {
-        val appContext = applicationContext
-        val entryPoint = EntryPointAccessors.fromApplication(
-            appContext,
-            LastPlaylistTileEntryPoint::class.java
-        )
-        entryPoint.musicRepository()
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -132,34 +118,13 @@ class LastPlaylistTileService : TileService() {
 
     private suspend fun resolveLaunchablePlaylistId(): String? {
         val storedPlaylistId = prefsRepo.lastPlaylistIdFlow.first() ?: return null
-        val isValid = if (storedPlaylistId.startsWith(FOLDER_PLAYLIST_PREFIX)) {
-            hasExistingFolderPlaylist(storedPlaylistId)
-        } else {
-            playlistRepo.getPlaylistsOnce().any { playlist -> playlist.id == storedPlaylistId }
-        }
+        val isValid = playlistRepo.getPlaylistsOnce().any { playlist -> playlist.id == storedPlaylistId }
 
         if (isValid) {
             return storedPlaylistId
         }
 
         prefsRepo.clearLastPlaylist()
-        return null
-    }
-
-    private suspend fun hasExistingFolderPlaylist(playlistId: String): Boolean {
-        val folderPath = Uri.decode(playlistId.removePrefix(FOLDER_PLAYLIST_PREFIX))
-        return findFolder(folderPath, musicRepo.getMusicFolders().first()) != null
-    }
-
-    private fun findFolder(targetPath: String, folders: List<MusicFolder>): MusicFolder? {
-        val queue = ArrayDeque(folders)
-        while (queue.isNotEmpty()) {
-            val folder = queue.removeFirst()
-            if (folder.path == targetPath) {
-                return folder
-            }
-            folder.subFolders.forEach(queue::addLast)
-        }
         return null
     }
 }

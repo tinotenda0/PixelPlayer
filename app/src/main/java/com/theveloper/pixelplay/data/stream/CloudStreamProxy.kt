@@ -36,7 +36,7 @@ import java.util.concurrent.ConcurrentHashMap
  * The base class handles the full Ktor CIO server lifecycle, URL caching, and OkHttp
  * proxying with security checks via [CloudStreamSecurity].
  *
- * @param K The song identifier type (e.g. [String] for QQ Music songMid, [Long] for Netease songId)
+ * @param K The song identifier type (e.g. [String] for Navidrome songId)
  */
 abstract class CloudStreamProxy<K : Any>(
     private val okHttpClient: OkHttpClient
@@ -47,13 +47,13 @@ abstract class CloudStreamProxy<K : Any>(
     protected abstract val cacheExpirationMs: Long
     protected abstract val proxyTag: String
 
-    /** Route path registered with Ktor, e.g. "/qqmusic/{songMid}" */
+    /** Route path registered with Ktor, e.g. "/navidrome/{songId}" */
     protected abstract val routePath: String
-    /** The parameter name inside the route path, e.g. "songMid" */
+    /** The parameter name inside the route path, e.g. "songId" */
     protected abstract val routeParamName: String
-    /** URI scheme this proxy handles, e.g. "qqmusic" or "netease" */
+    /** URI scheme this proxy handles, e.g. "navidrome" */
     protected abstract val uriScheme: String
-    /** URL path prefix for proxy URLs, e.g. "/qqmusic" or "/netease" */
+    /** URL path prefix for proxy URLs, e.g. "/navidrome" */
     protected abstract val routePrefix: String
 
     /** Parse the raw route parameter string into the typed ID, or null if invalid */
@@ -111,7 +111,7 @@ abstract class CloudStreamProxy<K : Any>(
     }
 
     /**
-     * Parse a cloud URI (e.g. "qqmusic://xxxx" or "netease://12345") and return
+     * Parse a cloud URI (e.g. "navidrome://xxxx") and return
      * the local proxy URL. Returns null if the URI doesn't match this proxy's scheme.
      */
     fun resolveUri(uriString: String): String? {

@@ -169,7 +169,6 @@ import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.model.LyricsSourcePreference
 import com.theveloper.pixelplay.presentation.components.CollapsibleCommonTopBar
 import com.theveloper.pixelplay.presentation.components.ExpressiveTopBarContent
-import com.theveloper.pixelplay.presentation.components.FileExplorerDialog
 import com.theveloper.pixelplay.presentation.components.MiniPlayerHeight
 import com.theveloper.pixelplay.presentation.model.SettingsCategory
 import com.theveloper.pixelplay.presentation.navigation.Screen
@@ -214,22 +213,12 @@ fun SettingsCategoryScreen(
     val currentAiModel by settingsViewModel.currentAiModel.collectAsStateWithLifecycle()
     val currentAiSystemPrompt by settingsViewModel.currentAiSystemPrompt.collectAsStateWithLifecycle()
     val aiProvider by settingsViewModel.aiProvider.collectAsStateWithLifecycle()
-    val currentPath by settingsViewModel.currentPath.collectAsStateWithLifecycle()
-    val directoryChildren by settingsViewModel.currentDirectoryChildren.collectAsStateWithLifecycle()
-    val availableStorages by settingsViewModel.availableStorages.collectAsStateWithLifecycle()
-    val selectedStorageIndex by settingsViewModel.selectedStorageIndex.collectAsStateWithLifecycle()
-    val isLoadingDirectories by settingsViewModel.isLoadingDirectories.collectAsStateWithLifecycle()
-    val isExplorerPriming by settingsViewModel.isExplorerPriming.collectAsStateWithLifecycle()
-    val isExplorerReady by settingsViewModel.isExplorerReady.collectAsStateWithLifecycle()
-    val isCurrentDirectoryResolved by settingsViewModel.isCurrentDirectoryResolved.collectAsStateWithLifecycle()
     val isSyncing by settingsViewModel.isSyncing.collectAsStateWithLifecycle()
     val syncProgress by settingsViewModel.syncProgress.collectAsStateWithLifecycle()
     val dataTransferProgress by settingsViewModel.dataTransferProgress.collectAsStateWithLifecycle()
     val paletteRegenerateTargets by playerViewModel.paletteRegenerationTargets.collectAsStateWithLifecycle()
-    val explorerRoot = settingsViewModel.explorerRoot()
 
     // Local State
-    var showExplorerSheet by remember { mutableStateOf(false) }
     var refreshRequested by remember { mutableStateOf(false) }
     var syncRequestObservedRunning by remember { mutableStateOf(false) }
     var syncIndicatorLabel by remember { mutableStateOf<String?>(null) }
@@ -242,12 +231,6 @@ fun SettingsCategoryScreen(
     var showImportFlow by remember { mutableStateOf(false) }
     var exportSections by remember { mutableStateOf(BackupSection.defaultSelection) }
     var importFileUri by remember { mutableStateOf<Uri?>(null) }
-    var minSongDurationDraft by remember(uiState.minSongDuration) {
-        mutableStateOf(uiState.minSongDuration.toFloat())
-    }
-    var minTracksPerAlbumDraft by remember(uiState.minTracksPerAlbum) {
-        mutableStateOf(uiState.minTracksPerAlbum.toFloat())
-    }
     var albumArtCacheLimitDraft by remember(uiState.albumArtCacheLimitMb) {
         mutableStateOf(uiState.albumArtCacheLimitMb.toFloat())
     }
@@ -416,55 +399,7 @@ fun SettingsCategoryScreen(
                ) {
                     when (category) {
                         SettingsCategory.LIBRARY -> {
-                            SettingsSubsection(title = stringResource(R.string.settings_library_structure_section)) {
-                                SettingsItem(
-                                    title = stringResource(R.string.settings_excluded_directories_title),
-                                    subtitle = stringResource(R.string.settings_excluded_directories_subtitle),
-                                    leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = MaterialTheme.colorScheme.secondary) },
-                                    trailingIcon = { Icon(Icons.Rounded.ChevronRight, stringResource(R.string.settings_cd_open), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                    onClick = {
-                                        showExplorerSheet = true
-                                        settingsViewModel.openExplorer()
-                                    }
-                                )
-                                SettingsItem(
-                                    title = stringResource(R.string.settings_artists_title),
-                                    subtitle = stringResource(R.string.settings_artists_subtitle),
-                                    leadingIcon = { Icon(Icons.Outlined.Person, null, tint = MaterialTheme.colorScheme.secondary) },
-                                    trailingIcon = { Icon(Icons.Rounded.ChevronRight, stringResource(R.string.settings_cd_open), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                    onClick = { navController.navigateSafely(Screen.ArtistSettings.route) }
-                                )
-                            }
-
                             SettingsSubsection(title = stringResource(R.string.settings_filtering_section)) {
-                                SliderSettingsItem(
-                                    label = stringResource(R.string.settings_min_song_duration),
-                                    value = minSongDurationDraft,
-                                    valueRange = 0f..120000f,
-                                    steps = 23, // 0, 5, 10, 15, ... 120 seconds (24 positions, 23 steps)
-                                    onValueChange = { minSongDurationDraft = it },
-                                    onValueChangeFinished = {
-                                        val selectedDuration = minSongDurationDraft.toInt()
-                                        if (selectedDuration != uiState.minSongDuration) {
-                                            settingsViewModel.setMinSongDuration(selectedDuration)
-                                        }
-                                    },
-                                    valueText = { value -> "${(value / 1000).toInt()}s" }
-                                )
-                                SliderSettingsItem(
-                                    label = stringResource(R.string.settings_min_tracks_per_album),
-                                    value = minTracksPerAlbumDraft,
-                                    valueRange = 1f..5f,
-                                    steps = 3, // 1, 2, 3, 4, 5
-                                    onValueChange = { minTracksPerAlbumDraft = it },
-                                    onValueChangeFinished = {
-                                        val selectedTracks = minTracksPerAlbumDraft.toInt()
-                                        if (selectedTracks != uiState.minTracksPerAlbum) {
-                                            settingsViewModel.setMinTracksPerAlbum(selectedTracks)
-                                        }
-                                    },
-                                    valueText = { value -> "${value.toInt()}" }
-                                )
                                 SliderSettingsItem(
                                     label = stringResource(R.string.settings_album_art_cache_limit),
                                     value = albumArtCacheLimitDraft,
@@ -932,23 +867,6 @@ fun SettingsCategoryScreen(
 
                         }
                         SettingsCategory.BEHAVIOR -> {
-                            SettingsSubsection(
-                                title = stringResource(R.string.settings_folders_section)
-                            ) {
-                                SwitchSettingItem(
-                                    title = stringResource(R.string.settings_folder_back_gesture_title),
-                                    subtitle = stringResource(R.string.settings_folder_back_gesture_subtitle),
-                                    checked = uiState.folderBackGestureNavigation,
-                                    onCheckedChange = { settingsViewModel.setFolderBackGestureNavigation(it) },
-                                    leadingIcon = {
-                                        Icon(
-                                            painterResource(R.drawable.rounded_touch_app_24),
-                                            null,
-                                            tint = MaterialTheme.colorScheme.secondary
-                                        )
-                                    }
-                                )
-                            }
                             SettingsSubsection(
                                 title = stringResource(R.string.settings_player_gestures_section)
                             ) {
@@ -1505,35 +1423,6 @@ fun SettingsCategoryScreen(
     }
 
     BackupTransferProgressDialogHost(progress = dataTransferProgress)
-
-    // Dialogs
-    FileExplorerDialog(
-        visible = showExplorerSheet,
-        currentPath = currentPath,
-        directoryChildren = directoryChildren,
-        availableStorages = availableStorages,
-        selectedStorageIndex = selectedStorageIndex,
-        isLoading = isLoadingDirectories,
-        isPriming = isExplorerPriming,
-        isReady = isExplorerReady,
-        isCurrentDirectoryResolved = isCurrentDirectoryResolved,
-        isAtRoot = settingsViewModel.isAtRoot(),
-        rootDirectory = explorerRoot,
-        onNavigateTo = settingsViewModel::loadDirectory,
-        onNavigateUp = settingsViewModel::navigateUp,
-        onNavigateHome = { settingsViewModel.loadDirectory(explorerRoot) },
-        onToggleAllowed = settingsViewModel::toggleDirectoryAllowed,
-        onRefresh = settingsViewModel::refreshExplorer,
-        onStorageSelected = settingsViewModel::selectStorage,
-        onDone = {
-            settingsViewModel.applyPendingDirectoryRuleChanges()
-            showExplorerSheet = false
-        },
-        onDismiss = {
-            settingsViewModel.applyPendingDirectoryRuleChanges()
-            showExplorerSheet = false
-        }
-    )
 
     if (showPaletteRegenerateSheet) {
         ModalBottomSheet(

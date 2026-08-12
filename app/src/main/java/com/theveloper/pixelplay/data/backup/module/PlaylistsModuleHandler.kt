@@ -126,7 +126,7 @@ class PlaylistsModuleHandler @Inject constructor(
     override suspend fun export(): String = withContext(Dispatchers.IO) {
         val allPlaylists = playlistPreferencesRepository.getPlaylistsOnce()
 
-        // Only export local/AI playlists — cloud playlists (Telegram, Netease, QQMusic)
+        // Only export local/AI playlists — cloud playlists (Navidrome)
         // are tied to service auth and would be empty on restore
         val playlists = allPlaylists.filter { it.source in LOCAL_SOURCES }
 
@@ -414,10 +414,7 @@ class PlaylistsModuleHandler @Inject constructor(
 
     private suspend fun buildCloudSongIdSet(): Set<String> {
         val cloudIds = mutableSetOf<String>()
-        musicDao.getAllTelegramSongIds().mapTo(cloudIds) { it.toString() }
-        musicDao.getAllNeteaseSongIds().mapTo(cloudIds) { it.toString() }
-        musicDao.getAllGDriveSongIds().mapTo(cloudIds) { it.toString() }
-        musicDao.getAllQqMusicSongIds().mapTo(cloudIds) { it.toString() }
+        musicDao.getAllNavidromeSongIds().mapTo(cloudIds) { it.toString() }
         return cloudIds
     }
 

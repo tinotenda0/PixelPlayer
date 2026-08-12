@@ -59,7 +59,6 @@ class PlaybackDispatchCallbacks(
     val sendToast: (String) -> Unit,
     val emitToast: suspend (String) -> Unit,
     val showNoInternetDialog: () -> Unit,
-    val ensureTelegramObservers: () -> Unit,
     val cancelTransitionScheduler: () -> Unit,
     val incrementSongScore: (Song) -> Unit,
     val resetPredictiveBackState: () -> Unit,
@@ -92,9 +91,6 @@ class PlaybackDispatchStateHolder @Inject constructor(
     private val libraryStateHolder: LibraryStateHolder,
     private val castStateHolder: CastStateHolder,
     private val castTransferStateHolder: CastTransferStateHolder,
-    private val plexRemotePlaybackManager: com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager,
-    private val plexConnectClient: com.theveloper.pixelplay.data.plex.connect.PlexConnectClient,
-    private val connectivityStateHolder: ConnectivityStateHolder,
     private val themeStateHolder: ThemeStateHolder,
     @param:ApplicationContext private val context: Context,
 ) {
@@ -515,28 +511,6 @@ class PlaybackDispatchStateHolder @Inject constructor(
             val validStartSong =
                 validSongs.firstOrNull { it.id == startSong.id } ?: validSongs.first()
 
-            // Offline check for the starting song if it is a Telegram song
-            if (validStartSong.contentUriString.startsWith("telegram:")) {
-                cb.ensureTelegramObservers()
-                val isOnline = connectivityStateHolder.isOnline.value
-                val fileId = validStartSong.telegramFileId
-
-                Timber.d("Offline Check: fileId=$fileId, contentUri=${validStartSong.contentUriString}, isOnline=$isOnline")
-
-                if (!isOnline) {
-                     if (fileId != null) {
-                         val isCached = musicRepository.telegramRepository.isFileCached(fileId)
-                         Timber.d("Offline Check: isCached=$isCached")
-                         throwIfDirectPlaybackRequestIsStale(requestToken)
-                         if (!isCached) {
-                             Timber.w("Blocked playback: Offline and not cached.")
-                             cb.showNoInternetDialog()
-                             return@launch
-                         }
-                     }
-                }
-            }
-
             // Store the original order so we can "unshuffle" later if the user turns shuffle off
             queueStateHolder.setOriginalQueueOrder(validSongs)
             queueStateHolder.saveOriginalQueueState(validSongs, queueName)
@@ -847,80 +821,7 @@ class PlaybackDispatchStateHolder @Inject constructor(
                     totalDuration = effectiveStartSong.duration.coerceAtLeast(0L)
                 )
             }
-        } else if (plexConnectClient.isRemoteActive && !effectiveStartSong.plexId.isNullOrBlank()) {
-            // A Connect device (web player, another PixelPlayer) is the active
-            // output: send the queue through the session broker.
-            clearPreparingSongIfMatching()
-            val remoteLoaded = plexConnectClient.playQueueRemote(
-                songs = songsToPlay,
-                startSong = effectiveStartSong
-            )
-            if (!remoteLoaded) {
-                Timber.tag(CAST_LOG_TAG).w(
-                    "Connect remote queue load failed (songId=%s queueSize=%d).",
-                    effectiveStartSong.id,
-                    songsToPlay.size
-                )
-                return
-            }
-
-            cb.updateUiState {
-                it.copy(
-                    currentPlaybackQueue = songsToPlay.toPlaybackQueue(),
-                    currentQueueSourceName = queueName
-                )
-            }
-            playbackStateHolder.updateStablePlayerState {
-                it.copy(
-                    currentSong = effectiveStartSong,
-                    currentMediaItemIndex = 0,
-                    isPlaying = true,
-                    playWhenReady = true,
-                    totalDuration = effectiveStartSong.duration.coerceAtLeast(0L)
-                )
-            }
-            cb.showSheet()
-        } else if (plexRemotePlaybackManager.isActive && !effectiveStartSong.plexId.isNullOrBlank()) {
-            // A Plexamp/Companion player is the active output: route the queue
-            // there instead of the local engine, mirroring the Cast branch.
-            clearPreparingSongIfMatching()
-            val remoteLoaded = plexRemotePlaybackManager.playQueue(
-                songs = songsToPlay,
-                startSong = effectiveStartSong
-            )
-            if (!remoteLoaded) {
-                Timber.tag(CAST_LOG_TAG).w(
-                    "Plex remote queue load failed (songId=%s queueSize=%d).",
-                    effectiveStartSong.id,
-                    songsToPlay.size
-                )
-                return
-            }
-
-            cb.updateUiState {
-                it.copy(
-                    currentPlaybackQueue = songsToPlay.toPlaybackQueue(),
-                    currentQueueSourceName = queueName
-                )
-            }
-            playbackStateHolder.updateStablePlayerState {
-                it.copy(
-                    currentSong = effectiveStartSong,
-                    currentMediaItemIndex = 0,
-                    isPlaying = true,
-                    playWhenReady = true,
-                    totalDuration = effectiveStartSong.duration.coerceAtLeast(0L)
-                )
-            }
-            cb.showSheet()
         } else {
-            // A Plexamp/Companion session is active but this content isn't on
-            // the Plex server (e.g. Navidrome/on-demand songs) — Plexamp can
-            // only play Plex content, so we play locally. Say so instead of
-            // silently switching outputs on the user.
-            if (plexRemotePlaybackManager.isActive && effectiveStartSong.plexId.isNullOrBlank()) {
-                cb.sendToast(context.getString(R.string.plex_remote_non_plex_song))
-            }
             beginPreparingSong(effectiveStartSong)
             cb.updateUiState {
                 it.copy(
@@ -985,20 +886,8 @@ class PlaybackDispatchStateHolder @Inject constructor(
         val mediaItem = MediaItemBuilder.build(song)
         val originalUri = mediaItem.localConfiguration?.uri ?: return mediaItem
         val scheme = originalUri.scheme
-        if (
-            scheme != "telegram" &&
-            scheme != "netease" &&
-            scheme != "qqmusic" &&
-            scheme != "navidrome" &&
-            scheme != "jellyfin" &&
-            scheme != "plex" &&
-            scheme != "gdrive"
-        ) {
+        if (scheme != "navidrome") {
             return mediaItem
-        }
-
-        if (scheme == "telegram") {
-            cb.ensureTelegramObservers()
         }
 
         val resolvedUri = dualPlayerEngine.resolveCloudUri(originalUri)
@@ -1084,23 +973,6 @@ class PlaybackDispatchStateHolder @Inject constructor(
     }
 
     fun playPause() {
-        if (plexConnectClient.isRemoteActive) {
-            val playing = plexConnectClient.session.value?.state == "playing"
-            plexConnectClient.playPause()
-            playbackStateHolder.updateStablePlayerState {
-                it.copy(isPlaying = !playing, playWhenReady = !playing, isBuffering = false)
-            }
-            return
-        }
-        if (plexRemotePlaybackManager.isActive) {
-            val playing = plexRemotePlaybackManager.session.value?.state == "playing"
-            plexRemotePlaybackManager.playPause()
-            playbackStateHolder.updateStablePlayerState {
-                it.copy(isPlaying = !playing, playWhenReady = !playing, isBuffering = false)
-            }
-            return
-        }
-
         val castSession = castStateHolder.castSession.value
         if (castSession != null && castSession.remoteMediaClient != null) {
             val remoteMediaClient = castSession.remoteMediaClient!!

@@ -249,7 +249,7 @@ class SpotifyImportViewModel @Inject constructor(
                         // playlists — that was the gap where "nothing but the playlist" showed up).
                         runCatching { navidromeRepository.syncPlaylists() }
                         runCatching {
-                            WorkManager.getInstance(context).enqueue(SyncWorker.fullSyncWork())
+                            WorkManager.getInstance(context).enqueue(SyncWorker.forceRefreshWork())
                         }
                         return@launch
                     }

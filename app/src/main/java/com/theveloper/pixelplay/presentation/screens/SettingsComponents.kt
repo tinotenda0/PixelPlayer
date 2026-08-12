@@ -705,35 +705,16 @@ fun RefreshLibraryItem(
             if (isSyncing) {
                 Spacer(modifier = Modifier.height(12.dp))
                 val phaseLabel = activeOperationLabel ?: syncPhaseLabel(syncProgress.phase)
-                if (syncProgress.hasProgress) {
-                    LinearProgressIndicator(
-                            progress = { syncProgress.progress },
-                            modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                            text = stringResource(
-                                R.string.settings_sync_progress_detailed,
-                                phaseLabel,
-                                (syncProgress.progress * 100).toInt(),
-                                syncProgress.currentCount,
-                                syncProgress.totalCount
-                            ),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                            text = stringResource(
-                                R.string.settings_sync_progres_indeterminate,
-                                phaseLabel
-                            ),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                        text = stringResource(
+                            R.string.settings_sync_progres_indeterminate,
+                            phaseLabel
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -744,18 +725,10 @@ private fun syncPhaseLabel(phase: SyncProgress.SyncPhase): String =
         stringResource(
                 when (phase) {
                     SyncProgress.SyncPhase.IDLE -> R.string.settings_sync_phase_preparing
-                    SyncProgress.SyncPhase.FETCHING_MEDIASTORE ->
-                            R.string.settings_sync_phase_reading_mediastore
-                    SyncProgress.SyncPhase.PROCESSING_FILES ->
-                            R.string.settings_sync_phase_reading_processing_tracks
-                    SyncProgress.SyncPhase.SAVING_TO_DATABASE ->
-                            R.string.settings_sync_phase_saving_db
-                    SyncProgress.SyncPhase.SCANNING_LRC -> R.string.settings_sync_phase_scanning_lrc
                     SyncProgress.SyncPhase.CLEANING_CACHE ->
                             R.string.settings_sync_phase_cleaning_cache
                     SyncProgress.SyncPhase.SYNCING_CLOUD ->
                             R.string.settings_sync_phase_syncing_cloud
-                    SyncProgress.SyncPhase.COMPLETING -> R.string.settings_sync_phase_completing
                 }
         )
 

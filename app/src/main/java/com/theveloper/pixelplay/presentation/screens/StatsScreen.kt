@@ -43,6 +43,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoGraph
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Hearing
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.rounded.IosShare
@@ -271,6 +272,22 @@ fun StatsScreen(
             if (uiState.isLoading && summary == null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     ContainedLoadingIndicator()
+                }
+            } else if (!uiState.isGatewayLinked) {
+                // Distinct from "linked but nothing played yet": stats now come from the
+                // gateway, so an unlinked account has nothing to show at all.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp)
+                        .padding(top = currentTopBarHeightDp + tabsHeight + tabContentSpacing),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    StatsEmptyState(
+                        icon = Icons.Outlined.CloudOff,
+                        title = stringResource(R.string.stats_empty_not_linked_title),
+                        subtitle = stringResource(R.string.stats_empty_not_linked_subtitle)
+                    )
                 }
             } else {
                 val showDailyRhythm = summary?.range == StatsTimeRange.DAY || summary?.range == StatsTimeRange.WEEK

@@ -68,7 +68,6 @@ class ControllerSyncCallbacks(
     val setTrackVolume: (Float) -> Unit,
     val emitToast: suspend (String) -> Unit,
     val showNoInternetDialog: suspend () -> Unit,
-    val ensureTelegramObservers: () -> Unit,
     val cancelSleepTimerForEot: () -> Unit,
     val resetLyricsSearchState: () -> Unit,
     val loadLyricsForCurrentSong: () -> Unit,
@@ -92,9 +91,6 @@ class MediaControllerSyncStateHolder @Inject constructor(
     private val playbackStateHolder: PlaybackStateHolder,
     private val libraryStateHolder: LibraryStateHolder,
     private val castStateHolder: CastStateHolder,
-    private val plexRemotePlaybackManager: com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager,
-    private val plexConnectClient: com.theveloper.pixelplay.data.plex.connect.PlexConnectClient,
-    private val connectivityStateHolder: ConnectivityStateHolder,
     private val themeStateHolder: ThemeStateHolder,
     private val lyricsStateHolder: LyricsStateHolder,
     private val sleepTimerStateHolder: SleepTimerStateHolder,
@@ -489,30 +485,6 @@ class MediaControllerSyncStateHolder @Inject constructor(
     }
 
     /** One-time snapshot of the controller's current state when it first attaches. */
-    /**
-     * Re-derives the full player UI state from the local controller. Used when a
-     * remote session (Plex Companion) ends: the last remote snapshot must be
-     * discarded in favour of whatever the local player is actually doing —
-     * typically the paused local queue left behind when the session connected.
-     */
-    fun resyncFromLocalController() {
-        val controller = cb.getController()
-        if (controller == null || controller.currentMediaItem == null) {
-            playbackStateHolder.updateStablePlayerState {
-                it.copy(
-                    currentSong = null,
-                    isPlaying = false,
-                    playWhenReady = false,
-                    isBuffering = false
-                )
-            }
-            playbackStateHolder.clearCurrentPositionHints()
-            playbackStateHolder.setCurrentPosition(0L)
-            return
-        }
-        applyInitialControllerState(controller)
-    }
-
     private fun applyInitialControllerState(playerCtrl: MediaController) {
         cb.setTrackVolume(playerCtrl.volume)
         playbackStateHolder.updateStablePlayerState {
@@ -655,9 +627,7 @@ class MediaControllerSyncStateHolder @Inject constructor(
                 }
                 if (playbackState == Player.STATE_IDLE && playerCtrl.mediaItemCount == 0) {
                     playbackDispatchStateHolder.clearPreparingSongIfMatching()
-                    if (!castStateHolder.isCastConnecting.value && !castStateHolder.isRemotePlaybackActive.value &&
-                        !plexRemotePlaybackManager.isActive &&
-                        !plexConnectClient.isRemoteActive) {
+                    if (!castStateHolder.isCastConnecting.value && !castStateHolder.isRemotePlaybackActive.value) {
                         lyricsStateHolder.cancelLoading()
                         playbackStateHolder.updateStablePlayerState {
                             it.copy(
@@ -678,7 +648,7 @@ class MediaControllerSyncStateHolder @Inject constructor(
         })
     }
 
-    /** Media-item and timeline transitions (incl. EOT timer + Telegram offline guard). */
+    /** Media-item and timeline transitions (incl. EOT timer). */
     private fun setupTransitionListeners(playerCtrl: MediaController) {
         registerMediaControllerListener(playerCtrl, object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -710,22 +680,6 @@ class MediaControllerSyncStateHolder @Inject constructor(
 
                     mediaItem?.let { transitionedItem ->
                         val song = resolveSongFromMediaItem(transitionedItem)
-
-                        // Offline check for Telegram songs
-                        if (song?.contentUriString?.startsWith("telegram:") == true) {
-                            cb.ensureTelegramObservers()
-                            val isOnline = connectivityStateHolder.isOnline.value
-                            if (!isOnline) {
-                                val fileId = song.telegramFileId
-                                if (fileId != null) {
-                                    val isCached = musicRepository.telegramRepository.isFileCached(fileId)
-                                    if (!isCached) {
-                                        playerCtrl.pause()
-                                        cb.showNoInternetDialog()
-                                    }
-                                }
-                            }
-                        }
 
                         val resolvedDuration = if (song != null) {
                             playbackStateHolder.resolveDurationForPlaybackState(
@@ -765,9 +719,7 @@ class MediaControllerSyncStateHolder @Inject constructor(
                             cb.loadLyricsForCurrentSong()
                         }
                     } ?: run {
-                        if (!castStateHolder.isCastConnecting.value && !castStateHolder.isRemotePlaybackActive.value &&
-                        !plexRemotePlaybackManager.isActive &&
-                        !plexConnectClient.isRemoteActive) {
+                        if (!castStateHolder.isCastConnecting.value && !castStateHolder.isRemotePlaybackActive.value) {
                             lyricsStateHolder.cancelLoading()
                             playbackStateHolder.updateStablePlayerState {
                                 it.copy(

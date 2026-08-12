@@ -129,13 +129,6 @@ fun UnifiedPlayerSheetV2(
         playerViewModel.onWritePermissionResult(result.resultCode == android.app.Activity.RESULT_OK)
     }
 
-    // MediaStore delete-permission launcher (system delete confirmation dialog)
-    val deletePermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        playerViewModel.onDeletePermissionResult(result.resultCode == android.app.Activity.RESULT_OK)
-    }
-
     LaunchedEffect(playerViewModel, lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
             launch {
@@ -151,13 +144,6 @@ fun UnifiedPlayerSheetV2(
             launch {
                 playerViewModel.writePermissionRequest.collect { intentSender ->
                     writePermissionLauncher.launch(
-                        androidx.activity.result.IntentSenderRequest.Builder(intentSender).build()
-                    )
-                }
-            }
-            launch {
-                playerViewModel.deletePermissionRequest.collect { intentSender ->
-                    deletePermissionLauncher.launch(
                         androidx.activity.result.IntentSenderRequest.Builder(intentSender).build()
                     )
                 }

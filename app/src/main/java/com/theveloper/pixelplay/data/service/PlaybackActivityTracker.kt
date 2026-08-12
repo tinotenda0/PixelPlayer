@@ -10,8 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * Owned by [MusicService]: set to true in `onIsPlayingChanged(true)`, cleared on
  * stop/destroy. Read by background workers (AI, sync) to defer non-urgent work
  * while the user is listening, prioritising thermal stability and battery over
- * background completion latency. Also observed (as a flow) by the always-on
- * Plex integrations so their polling loops can idle when nothing is playing.
+ * background completion latency.
  *
  * Intentionally a singleton object with no Hilt wiring — it is read from
  * `CoroutineWorker.doWork()` where injected fields are awkward to coordinate

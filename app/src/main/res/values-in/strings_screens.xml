@@ -12,13 +12,13 @@
     <string name="setup_beta_symbol">β</string>
     <string name="setup_beta_label">Beta</string>
     <string name="setup_intro_body">Mari kita siapkan segalanya untuk Anda.</string>
-    <string name="setup_permission_media_title">Izin Media</string>
-    <string name="setup_permission_media_description">PixelPlayer memerlukan akses ke file audio Anda untuk membangun pustaka musik Anda.</string>
     <string name="setup_permission_granted">Izin Diberikan</string>
-    <string name="setup_grant_media_permission">Berikan Izin Media</string>
     <string name="setup_permission_notifications_title">Notifikasi</string>
     <string name="setup_permission_notifications_description">Aktifkan notifikasi untuk mengontrol musik Anda dari layar kunci dan panel notifikasi.</string>
     <string name="setup_enable_notifications">Aktifkan Notifikasi</string>
+    <string name="setup_gateway_signin_title">Hubungkan akun Anda</string>
+    <string name="setup_gateway_signin_subtitle">Masuk untuk menyinkronkan pustaka, daftar putar, dan selera musik Anda.</string>
+    <string name="setup_gateway_signin_connected">Anda telah terhubung</string>
     <string name="setup_backup_have_title">Apakah Anda memiliki cadangan?</string>
     <string name="setup_backup_have_description">Jika Anda sudah memiliki cadangan PixelPlayer, pulihkan sekarang dan lewati sebagian besar penyiapan yang tersisa di perangkat ini.</string>
     <string name="setup_import_backup">Impor cadangan</string>
@@ -34,10 +34,6 @@
     <string name="setup_backup_unknown_version">Versi tidak dikenal</string>
     <string name="setup_restore_selected">Pulihkan yang terpilih</string>
     <string name="setup_restoring">Memulihkan</string>
-    <string name="setup_excluded_folders_title">Folder yang dikecualikan</string>
-    <string name="setup_excluded_folders_description">Semua folder dipindai secara default. Pilih lokasi mana pun yang ingin Anda abaikan saat membangun pustaka.</string>
-    <string name="setup_choose_folders_ignore">Pilih folder untuk diabaikan</string>
-    <string name="setup_toast_grant_storage_first">Berikan izin penyimpanan terlebih dahulu</string>
     <string name="setup_theme_title">Tema Aplikasi</string>
     <string name="setup_theme_subtitle">Pilih tampilan yang Anda inginkan sebelum mulai menjelajahi pustaka Anda.</string>
     <string name="setup_theme_dark_title">Gelap</string>

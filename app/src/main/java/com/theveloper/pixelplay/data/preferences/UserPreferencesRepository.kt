@@ -15,7 +15,6 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.media3.common.Player
 import com.theveloper.pixelplay.data.equalizer.EqualizerPreset
 import com.theveloper.pixelplay.data.diagnostics.AdvancedPerformanceDiagnostics
-import com.theveloper.pixelplay.data.model.FolderSource
 import com.theveloper.pixelplay.data.model.LyricsSourcePreference
 import com.theveloper.pixelplay.data.model.PlaybackQueueSnapshot
 import com.theveloper.pixelplay.data.model.Playlist
@@ -84,7 +83,10 @@ class UserPreferencesRepository @Inject constructor(
 ) {
 
     private val backupExcludedKeyNames = setOf(
-        PreferencesKeys.INITIAL_SETUP_DONE.name
+        PreferencesKeys.INITIAL_SETUP_DONE.name,
+        // Device-local, one-shot: restoring it onto a different device would skip that
+        // device's own local-history migration.
+        PreferencesKeys.STATS_MIGRATION_COMPLETED.name
     )
 
     // ─── Preference keys ────────────────────────────────────────────────────
@@ -109,7 +111,6 @@ class UserPreferencesRepository @Inject constructor(
         val ALBUMS_SORT_OPTION = stringPreferencesKey("albums_sort_option")
         val ARTISTS_SORT_OPTION = stringPreferencesKey("artists_sort_option")
         val PLAYLISTS_SORT_OPTION = stringPreferencesKey("playlists_sort_option")
-        val FOLDERS_SORT_OPTION = stringPreferencesKey("folders_sort_option")
         val LIKED_SONGS_SORT_OPTION = stringPreferencesKey("liked_songs_sort_option")
 
         // UI state
@@ -129,13 +130,7 @@ class UserPreferencesRepository @Inject constructor(
         // Transition
         val GLOBAL_TRANSITION_SETTINGS = stringPreferencesKey("global_transition_settings_json")
         val LIBRARY_TABS_ORDER = stringPreferencesKey("library_tabs_order")
-        val IS_FOLDER_FILTER_ACTIVE = booleanPreferencesKey("is_folder_filter_active")
-        val IS_FOLDERS_PLAYLIST_VIEW = booleanPreferencesKey("is_folders_playlist_view")
-        val SHOW_TELEGRAM_CLOUD_PLAYLISTS = booleanPreferencesKey("show_telegram_cloud_playlists")
         val HIDE_LOCAL_MEDIA = booleanPreferencesKey("hide_local_media")
-        val TELEGRAM_TOPIC_DISPLAY_MODE = stringPreferencesKey("telegram_topic_display_mode")
-        val FOLDERS_SOURCE = stringPreferencesKey("folders_source")
-        val FOLDER_BACK_GESTURE_NAVIGATION = booleanPreferencesKey("folder_back_gesture_navigation")
         val USE_SMOOTH_CORNERS = booleanPreferencesKey("use_smooth_corners")
         val KEEP_PLAYING_IN_BACKGROUND = booleanPreferencesKey("keep_playing_in_background")
         val IS_CROSSFADE_ENABLED = booleanPreferencesKey("is_crossfade_enabled")
@@ -206,6 +201,11 @@ class UserPreferencesRepository @Inject constructor(
         val DIRECTORY_RULES_VERSION = intPreferencesKey("directory_rules_version")
         val LAST_APPLIED_DIRECTORY_RULES_VERSION =
             intPreferencesKey("last_applied_directory_rules_version")
+
+        // Stats migration: one-shot, device-wide upload of this device's pre-gateway-Stats
+        // local history. Not per-account — re-running for a second household member who later
+        // logs into the same device would only compound the accepted misattribution risk.
+        val STATS_MIGRATION_COMPLETED = booleanPreferencesKey("stats_migration_completed")
 
         // Lyrics
         val LYRICS_SYNC_OFFSETS = stringPreferencesKey("lyrics_sync_offsets_json")
@@ -663,6 +663,17 @@ suspend fun markDirectoryRulesVersionApplied(version: Int) {
         dataStore.edit { it[PreferencesKeys.LAST_APPLIED_DIRECTORY_RULES_VERSION] = version }
     }
 
+    // ─── Stats migration ─────────────────────────────────────────────────────
+
+    val statsMigrationCompletedFlow: Flow<Boolean> =
+        pref { it[PreferencesKeys.STATS_MIGRATION_COMPLETED] ?: false }
+
+    suspend fun isStatsMigrationCompleted(): Boolean = statsMigrationCompletedFlow.first()
+
+    suspend fun setStatsMigrationCompleted(completed: Boolean) {
+        dataStore.edit { it[PreferencesKeys.STATS_MIGRATION_COMPLETED] = completed }
+    }
+
     val dailyMixSongIdsFlow: Flow<List<String>> =
             dataStore.data.map { preferences ->
                 val jsonString = preferences[PreferencesKeys.DAILY_MIX_SONG_IDS]
@@ -822,9 +833,6 @@ suspend fun markDirectoryRulesVersionApplied(version: Int) {
     val playlistsSortOptionFlow: Flow<String> =
         pref { SortOption.fromStorageKey(it[PreferencesKeys.PLAYLISTS_SORT_OPTION], SortOption.PLAYLISTS, SortOption.PlaylistNameAZ).storageKey }
 
-    val foldersSortOptionFlow: Flow<String> =
-        pref { SortOption.fromStorageKey(it[PreferencesKeys.FOLDERS_SORT_OPTION], SortOption.FOLDERS, SortOption.FolderNameAZ).storageKey }
-
     val likedSongsSortOptionFlow: Flow<String> =
         pref { SortOption.fromStorageKey(it[PreferencesKeys.LIKED_SONGS_SORT_OPTION], SortOption.LIKED, SortOption.LikedSongDateLiked).storageKey }
 
@@ -845,10 +853,6 @@ suspend fun markDirectoryRulesVersionApplied(version: Int) {
 
     suspend fun setPlaylistsSortOption(optionKey: String) {
         dataStore.edit { it[PreferencesKeys.PLAYLISTS_SORT_OPTION] = optionKey }
-    }
-
-    suspend fun setFoldersSortOption(optionKey: String) {
-        dataStore.edit { it[PreferencesKeys.FOLDERS_SORT_OPTION] = optionKey }
     }
 
     suspend fun setLikedSongsSortOption(optionKey: String) {
@@ -874,7 +878,6 @@ suspend fun markDirectoryRulesVersionApplied(version: Int) {
             migrateSortPreference(preferences, PreferencesKeys.ALBUMS_SORT_OPTION, SortOption.ALBUMS, SortOption.AlbumTitleAZ)
             migrateSortPreference(preferences, PreferencesKeys.ARTISTS_SORT_OPTION, SortOption.ARTISTS, SortOption.ArtistNameAZ)
             migrateSortPreference(preferences, PreferencesKeys.PLAYLISTS_SORT_OPTION, SortOption.PLAYLISTS, SortOption.PlaylistNameAZ)
-            migrateSortPreference(preferences, PreferencesKeys.FOLDERS_SORT_OPTION, SortOption.FOLDERS, SortOption.FolderNameAZ)
             migrateSortPreference(preferences, PreferencesKeys.LIKED_SONGS_SORT_OPTION, SortOption.LIKED, SortOption.LikedSongDateLiked)
         }
     }
@@ -929,68 +932,11 @@ suspend fun markDirectoryRulesVersionApplied(version: Int) {
         dataStore.edit { it.remove(PreferencesKeys.LIBRARY_TABS_ORDER) }
     }
 
-    suspend fun migrateTabOrder() {
-        dataStore.edit { preferences ->
-            val orderJson = preferences[PreferencesKeys.LIBRARY_TABS_ORDER] ?: return@edit
-            val order = runCatching {
-                json.decodeFromString<MutableList<String>>(orderJson)
-            }.getOrNull() ?: return@edit  // Abort on malformed data; don't overwrite user data.
-
-            if ("FOLDERS" !in order) {
-                val insertAfter = order.indexOf("LIKED").takeIf { it != -1 } ?: order.lastIndex
-                order.add(insertAfter + 1, "FOLDERS")
-                preferences[PreferencesKeys.LIBRARY_TABS_ORDER] = json.encodeToString(order)
-            }
-        }
-    }
-
-    val isFolderFilterActiveFlow: Flow<Boolean> =
-        pref { it[PreferencesKeys.IS_FOLDER_FILTER_ACTIVE] ?: false }
-
-    suspend fun setFolderFilterActive(isActive: Boolean) {
-        dataStore.edit { it[PreferencesKeys.IS_FOLDER_FILTER_ACTIVE] = isActive }
-    }
-
-    val isFoldersPlaylistViewFlow: Flow<Boolean> =
-        pref { it[PreferencesKeys.IS_FOLDERS_PLAYLIST_VIEW] ?: false }
-
-    suspend fun setFoldersPlaylistView(isPlaylistView: Boolean) {
-        dataStore.edit { it[PreferencesKeys.IS_FOLDERS_PLAYLIST_VIEW] = isPlaylistView }
-    }
-
-    val showTelegramCloudPlaylistsFlow: Flow<Boolean> =
-        pref { it[PreferencesKeys.SHOW_TELEGRAM_CLOUD_PLAYLISTS] ?: true }
-
-    suspend fun setShowTelegramCloudPlaylists(show: Boolean) {
-        dataStore.edit { it[PreferencesKeys.SHOW_TELEGRAM_CLOUD_PLAYLISTS] = show }
-    }
-
     val hideLocalMediaFlow: Flow<Boolean> =
         pref { it[PreferencesKeys.HIDE_LOCAL_MEDIA] ?: false }.distinctUntilChanged()
 
     suspend fun setHideLocalMedia(hide: Boolean) {
         dataStore.edit { it[PreferencesKeys.HIDE_LOCAL_MEDIA] = hide }
-    }
-
-    val telegramTopicDisplayModeFlow: Flow<TelegramTopicDisplayMode> =
-        pref { TelegramTopicDisplayMode.fromStorageKey(it[PreferencesKeys.TELEGRAM_TOPIC_DISPLAY_MODE]) }
-
-    suspend fun setTelegramTopicDisplayMode(mode: TelegramTopicDisplayMode) {
-        dataStore.edit { it[PreferencesKeys.TELEGRAM_TOPIC_DISPLAY_MODE] = mode.storageKey }
-    }
-
-    val foldersSourceFlow: Flow<FolderSource> =
-        pref { FolderSource.fromStorageKey(it[PreferencesKeys.FOLDERS_SOURCE]) }
-
-    suspend fun setFoldersSource(source: FolderSource) {
-        dataStore.edit { it[PreferencesKeys.FOLDERS_SOURCE] = source.storageKey }
-    }
-
-    val folderBackGestureNavigationFlow: Flow<Boolean> =
-        pref { it[PreferencesKeys.FOLDER_BACK_GESTURE_NAVIGATION] ?: true }
-
-    suspend fun setFolderBackGestureNavigation(enabled: Boolean) {
-        dataStore.edit { it[PreferencesKeys.FOLDER_BACK_GESTURE_NAVIGATION] = enabled }
     }
 
     // ─── Navigation bar ───────────────────────────────────────────────────────

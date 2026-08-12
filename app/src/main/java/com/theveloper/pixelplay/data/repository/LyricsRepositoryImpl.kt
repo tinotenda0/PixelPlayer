@@ -117,7 +117,6 @@ class LyricsRepositoryImpl @Inject constructor(
     private val lrcLibApiService: LrcLibApiService,
     private val lyricsDao: com.theveloper.pixelplay.data.database.LyricsDao,
     private val okHttpClient: OkHttpClient,
-    private val neteaseRepositoryProvider: dagger.Lazy<com.theveloper.pixelplay.data.netease.NeteaseRepository>,
     private val navidromeRepositoryProvider: dagger.Lazy<com.theveloper.pixelplay.data.navidrome.NavidromeRepository>
 ) : LyricsRepository {
 
@@ -144,7 +143,6 @@ class LyricsRepositoryImpl @Inject constructor(
         // API rate limiting constants (matching Rhythm)
         private const val LRCLIB_MIN_DELAY = 100L
         private const val MAX_CALLS_PER_MINUTE = 30
-        private const val AMLLDB_NCM_LYRICS_BASE_URL = "https://amlldb.bikonoo.com/lyrics/ncm-lyrics/"
         private const val NETWORK_RETRY_ATTEMPTS = 3
         private const val NETWORK_RETRY_INITIAL_DELAY_MS = 500L
 
@@ -378,19 +376,16 @@ class LyricsRepositoryImpl @Inject constructor(
         forceRefresh: Boolean
     ): Lyrics? = withContext(Dispatchers.IO) {
         val cacheKey = generateCacheKey(song.id)
-        val isNeteaseTrack = isNeteaseSong(song)
-        
+
         Log.d(TAG, "===== FETCH LYRICS START: ${song.displayArtist} - ${song.title} (forceRefresh=$forceRefresh, source=$sourcePreference) =====")
 
         // Check in-memory cache unless force refresh (early return - matching Rhythm)
-        if (!forceRefresh && !isNeteaseTrack) {
+        if (!forceRefresh) {
             lyricsCache.get(cacheKey)?.let { cached ->
                 Log.d(TAG, "===== RETURNING IN-MEMORY CACHED LYRICS =====")
                 return@withContext cached
             }
             Log.d(TAG, "===== NO IN-MEMORY CACHE HIT, proceeding to fetch =====")
-        } else if (!forceRefresh && isNeteaseTrack) {
-            Log.d(TAG, "===== BYPASSING IN-MEMORY CACHE FOR NETEASE TRACK =====")
         } else {
             Log.d(TAG, "===== FORCE REFRESH - BYPASSING IN-MEMORY CACHE =====")
         }
@@ -479,17 +474,6 @@ class LyricsRepositoryImpl @Inject constructor(
      * Fetches lyrics from LRCLIB API with rate limiting (matching Rhythm)
      */
     private suspend fun fetchLyricsFromAPI(song: Song): Lyrics? = withContext(Dispatchers.IO) {
-        val isNetease = isNeteaseSong(song)
-
-        if (isNetease) {
-            val amlLyrics = fetchFromAmlldb(song)
-            if (amlLyrics != null) {
-                Log.d(TAG, "===== LOADED WORD-BY-WORD LYRICS FROM AMLLDB =====")
-                return@withContext amlLyrics
-            }
-            Log.d(TAG, "AMLLDB unavailable for Netease song, falling back to cache/LRCLIB")
-        }
-
         // Check JSON disk cache first (matching Rhythm)
         val cachedJson = loadLocalLyricsJson(song)
         if (cachedJson != null) {
@@ -497,68 +481,7 @@ class LyricsRepositoryImpl @Inject constructor(
             return@withContext cachedJson
         }
 
-        // Race the (slow — often 6-12s) LRCLIB lookup against NetEase's lyric
-        // API (typically <1s). First VALID result wins; the loser is cancelled.
-        return@withContext coroutineScope {
-            val lrclib = async { fetchFromLrcLib(song) }
-            val netease = async { fetchFromNeteaseSearch(song) }
-            // Track WHICH deferred won — deciding by isCompleted races when
-            // both finish close together and can return the loser's null
-            // while discarding the winner's valid lyrics.
-            val (firstResult, winner) = kotlinx.coroutines.selects.select<Pair<Lyrics?, kotlinx.coroutines.Deferred<Lyrics?>>> {
-                lrclib.onAwait { it to lrclib }
-                netease.onAwait { it to netease }
-            }
-            val other = if (winner === lrclib) netease else lrclib
-            if (firstResult != null && firstResult.isValid()) {
-                other.cancel()
-                firstResult
-            } else {
-                // The first finisher had nothing — wait for the other.
-                other.await()
-            }
-        }
-    }
-
-    /**
-     * NetEase lyric lookup: direct by id for NetEase tracks, otherwise search
-     * by "artist title" and accept a candidate whose title matches and whose
-     * duration is within 10s — a strong-enough signal to avoid wrong lyrics.
-     */
-    private suspend fun fetchFromNeteaseSearch(song: Song): Lyrics? {
-        return try {
-            val netease = neteaseRepositoryProvider.get()
-            val songId = song.neteaseId ?: run {
-                val query = "${song.displayArtist} ${song.title}".trim()
-                val candidates = netease.searchOnline(query, limit = 5).getOrNull() ?: return null
-                fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
-                val targetTitle = norm(song.title)
-                // A degenerate title ("?", "!!!") matches everything — bail.
-                if (targetTitle.isEmpty()) return null
-                val targetArtist = norm(song.primaryArtist.name)
-                candidates.firstOrNull { c ->
-                    val ct = norm(c.title)
-                    val exactTitle = ct == targetTitle
-                    val partialTitle = !exactTitle &&
-                        (ct.contains(targetTitle) || targetTitle.contains(ct))
-                    // Only trust the duration check when BOTH sides know it.
-                    val durKnown = song.duration > 0L && c.duration > 0L
-                    val durOk = durKnown && kotlin.math.abs(c.duration - song.duration) <= 10_000
-                    val artistOk = targetArtist.isNotEmpty() &&
-                        (norm(c.displayArtist).contains(targetArtist) ||
-                            targetArtist.contains(norm(c.artist)))
-                    // Exact title needs one corroborating signal; a partial
-                    // title match needs both — wrong lyrics are worse than none.
-                    (exactTitle && (durOk || artistOk)) || (partialTitle && durOk && artistOk)
-                }?.neteaseId ?: return null
-            }
-            val lrc = netease.getLyrics(songId).getOrNull() ?: return null
-            val parsed = LyricsUtils.parseLyrics(lrc).copy(areFromRemote = true)
-            parsed.takeIf { it.isValid() }
-        } catch (e: Exception) {
-            Log.d(TAG, "NetEase lyrics lookup failed: ${e.message}")
-            null
-        }
+        fetchFromLrcLib(song)
     }
 
     private suspend fun fetchFromLrcLib(song: Song): Lyrics? = withContext(Dispatchers.IO) {
@@ -947,132 +870,6 @@ class LyricsRepositoryImpl @Inject constructor(
     private fun isUnknownArtist(value: String): Boolean =
         normalizeForMatch(value) in UNKNOWN_ARTISTS
 
-    private fun isNeteaseSong(song: Song): Boolean =
-        song.neteaseId != null || song.contentUriString.startsWith("netease://")
-
-    private fun resolveNeteaseSongId(song: Song): Long? {
-        song.neteaseId?.let { return it }
-        if (!song.contentUriString.startsWith("netease://")) return null
-        return Uri.parse(song.contentUriString).host?.toLongOrNull()
-    }
-
-    private suspend fun fetchFromAmlldb(song: Song): Lyrics? = withContext(Dispatchers.IO) {
-        val neteaseSongId = resolveNeteaseSongId(song) ?: return@withContext null
-        val request = Request.Builder()
-            .url("$AMLLDB_NCM_LYRICS_BASE_URL$neteaseSongId")
-            .get()
-            .build()
-
-        try {
-            val ttml = withNetworkRetry(
-                operationName = "amlldb_fetch:$neteaseSongId",
-                shouldRetry = { throwable -> throwable is IOException }
-            ) {
-                okHttpClient.newCall(request).execute().use { response ->
-                    when {
-                        response.isSuccessful -> response.body.string()
-                        response.code.isRetryableHttpStatusCode() ->
-                            throw IOException("AMLLDB HTTP ${response.code} for songId=$neteaseSongId")
-                        else -> ""
-                    }
-                }
-            }
-
-            if (ttml.isBlank() || ttml.contains("歌词不存在")) return@withContext null
-            val lrc = convertAmlTtmlToLrc(ttml) ?: return@withContext null
-            val parsed = LyricsUtils.parseLyrics(lrc)
-            if (!parsed.isValid()) return@withContext null
-            return@withContext parsed.copy(areFromRemote = true)
-        } catch (e: Exception) {
-            Log.w(TAG, "AMLLDB fetch failed for $neteaseSongId: ${e.message}")
-            return@withContext null
-        }
-    }
-
-    private fun convertAmlTtmlToLrc(ttml: String): String? {
-        val lineRegex = Regex(
-            "<p\\b[^>]*\\bbegin=\"([^\"]+)\"[^>]*>(.*?)</p>",
-            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
-        )
-        val spanRegex = Regex(
-            "<span\\b([^>]*)>(.*?)</span>",
-            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
-        )
-        val beginAttrRegex = Regex("\\bbegin=\"([^\"]+)\"")
-        val roleAttrRegex = Regex("\\bttm:role=\"([^\"]+)\"")
-
-        val lrcLines = mutableListOf<String>()
-        lineRegex.findAll(ttml).forEach { lineMatch ->
-            val lineStartMs = parseTtmlTimeToMs(lineMatch.groupValues[1]) ?: return@forEach
-            var inner = lineMatch.groupValues[2]
-            val markerRegex = Regex("§§TS\\(([^)]+)\\)§§")
-
-            inner = spanRegex.replace(inner) { spanMatch ->
-                val attributes = spanMatch.groupValues[1]
-                val role = roleAttrRegex.find(attributes)?.groupValues?.getOrNull(1)?.lowercase()
-                if (role == "x-roman") {
-                    return@replace ""
-                }
-                val wordStartMs = beginAttrRegex
-                    .find(attributes)
-                    ?.groupValues
-                    ?.getOrNull(1)
-                    ?.let(::parseTtmlTimeToMs)
-                val text = decodeXmlEntities(spanMatch.groupValues[2])
-
-                if (wordStartMs == null) {
-                    // Keep visible text (e.g. translation) but do not inject word timing.
-                    return@replace text
-                }
-
-                "§§TS(${formatTimestamp(wordStartMs.toInt())})§§$text"
-            }
-
-            val withoutXmlTags = decodeXmlEntities(inner.replace(Regex("<[^>]+>"), ""))
-            val lrcInlineTagged = markerRegex.replace(withoutXmlTags, "<$1>")
-            if (lrcInlineTagged.isBlank()) return@forEach
-
-            lrcLines += "[${formatTimestamp(lineStartMs.toInt())}]$lrcInlineTagged"
-        }
-
-        return lrcLines.takeIf { it.isNotEmpty() }?.joinToString("\n")
-    }
-
-    private fun parseTtmlTimeToMs(value: String): Long? {
-        val raw = value.trim()
-        if (raw.isEmpty()) return null
-
-        if (raw.endsWith("s")) {
-            val seconds = raw.removeSuffix("s").toDoubleOrNull() ?: return null
-            return (seconds * 1000.0).toLong()
-        }
-
-        val parts = raw.split(":")
-        val secondsPart = parts.lastOrNull()?.toDoubleOrNull() ?: return null
-        return when (parts.size) {
-            3 -> {
-                val hours = parts[0].toLongOrNull() ?: return null
-                val minutes = parts[1].toLongOrNull() ?: return null
-                (hours * 3_600_000L) + (minutes * 60_000L) + (secondsPart * 1000.0).toLong()
-            }
-            2 -> {
-                val minutes = parts[0].toLongOrNull() ?: return null
-                (minutes * 60_000L) + (secondsPart * 1000.0).toLong()
-            }
-            1 -> (secondsPart * 1000.0).toLong()
-            else -> null
-        }
-    }
-
-    private fun decodeXmlEntities(value: String): String =
-        value
-            .replace("&amp;", "&")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&apos;", "'")
-            .replace("&#39;", "'")
-
     /**
      * Find local .lrc file next to the music file (matching Rhythm)
      */
@@ -1236,8 +1033,7 @@ class LyricsRepositoryImpl @Inject constructor(
      * Load embedded lyrics from audio file metadata
      */
     private suspend fun loadEmbeddedLyricsFromMetadata(song: Song): Lyrics? = withContext(Dispatchers.IO) {
-        // Skip embedded lyrics for Telegram songs (not supported yet/streamed)
-        if (song.contentUriString.startsWith("telegram://") || song.contentUriString.isEmpty()) {
+        if (song.contentUriString.isEmpty()) {
             return@withContext null
         }
 

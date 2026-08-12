@@ -79,9 +79,6 @@ object MediaItemBuilder {
         // these via the registered Coil fetchers — so letting them survive into the metadata
         // lets the system notification / lock screen show real art instead of the placeholder.
         "navidrome_cover",
-        "plex_cover",
-        "jellyfin_cover",
-        "telegram_art",
     )
     private val SUPPORTED_EXTERNAL_ARTWORK_SCHEMES = setOf(
         "content",
@@ -104,7 +101,6 @@ object MediaItemBuilder {
     const val EXTERNAL_EXTRA_SAMPLE_RATE = EXTERNAL_EXTRA_PREFIX + "SAMPLE_RATE"
     const val EXTERNAL_EXTRA_FILE_PATH = EXTERNAL_EXTRA_PREFIX + "FILE_PATH"
     const val EXTERNAL_EXTRA_NAVIDROME_ID = EXTERNAL_EXTRA_PREFIX + "NAVIDROME_ID"
-    const val EXTERNAL_EXTRA_PLEX_ID = EXTERNAL_EXTRA_PREFIX + "PLEX_ID"
 
     fun build(song: Song): MediaItem {
         return MediaItem.Builder()
@@ -155,7 +151,7 @@ object MediaItemBuilder {
         directLocalFileUri(contentUriString, filePath, mimeType)?.let { return it }
         val uri = runCatching { Uri.parse(contentUriString) }.getOrNull()
             ?: return Uri.fromFile(File(contentUriString))
-        // Telegram downloaded files can be stored as absolute paths (without file://).
+        // Some downloaded files can be stored as absolute paths (without file://).
         // Normalize them so ExoPlayer always gets a canonical local-file URI.
         return if (uri.scheme.isNullOrBlank() && contentUriString.startsWith("/")) {
             Uri.fromFile(File(contentUriString))
@@ -264,7 +260,7 @@ object MediaItemBuilder {
             )
         }
 
-        // Streaming-provider covers (plex_cover:// etc.) can't be opened by
+        // Streaming-provider covers (navidrome_cover:// etc.) can't be opened by
         // external controllers directly — expose them through the shared
         // artwork provider, which loads them via the app's Coil pipeline.
         rawArtworkUri?.let { raw ->
@@ -316,7 +312,6 @@ object MediaItemBuilder {
             putInt(EXTERNAL_EXTRA_SAMPLE_RATE, song.sampleRate ?: 0)
             putString(EXTERNAL_EXTRA_FILE_PATH, song.path)
             song.navidromeId?.let { putString(EXTERNAL_EXTRA_NAVIDROME_ID, it) }
-            song.plexId?.let { putString(EXTERNAL_EXTRA_PLEX_ID, it) }
         }
 
         metadataBuilder.setExtras(extras)

@@ -349,7 +349,7 @@ class NavidromeDownloadManager @Inject constructor(
     }
 
     private fun mimeTypeToExtension(mimeType: String?, url: String): String {
-        // Only trust a real audio extension from the URL path (e.g. Plex-style ".../track.flac").
+        // Only trust a real audio extension from the URL path (e.g. ".../track.flac").
         // The gateway streams from ".../rest/stream.view", whose ".view" must NOT become the file
         // extension — fall through to the Content-Type mapping in that case.
         val known = setOf("mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "webm", "mp4")

@@ -69,19 +69,6 @@ enum class LibraryTabId(
             SortOption.PlaylistDateCreatedAsc
         )
     ),
-    Folders(
-        stableKey = "FOLDERS",
-        label = "FOLDERS",
-        labelRes = R.string.library_tab_folders,
-        sortOptions = listOf(
-            SortOption.FolderNameAZ,
-            SortOption.FolderNameZA,
-            SortOption.FolderSongCountAsc,
-            SortOption.FolderSongCountDesc,
-            SortOption.FolderSubdirCountAsc,
-            SortOption.FolderSubdirCountDesc
-        )
-    ),
     Liked(
         stableKey = "LIKED",
         label = "LIKED",

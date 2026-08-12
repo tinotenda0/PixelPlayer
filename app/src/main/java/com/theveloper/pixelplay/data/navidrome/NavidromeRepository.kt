@@ -70,6 +70,9 @@ class NavidromeRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     companion object {
+        // PixelPlayer is a dedicated client for this one XPS Subsonic gateway — there is no
+        // multi-server support, so the URL is baked in rather than asked of the user.
+        const val GATEWAY_URL = "https://api.tinotenda.co"
         const val SYNC_THRESHOLD_MS = 24 * 60 * 60 * 1000L // 24 hours
         private const val TAG = "NavidromeRepo"
         private const val PREFS_NAME = "navidrome_prefs"
@@ -78,7 +81,8 @@ class NavidromeRepository @Inject constructor(
         private const val KEY_PASSWORD = "password"
         private const val KEY_LAST_FULL_SYNC = "last_full_sync"
 
-        // ID offsets for unified library (following Netease: 3-5, QQ: 6-8)
+        // ID offsets for unified library, kept in the same trillion-scale range
+        // established when other cloud sources (since removed) used 3-8.
         // Using negative offsets to prevent collisions with MediaStore IDs
         private const val NAVIDROME_SONG_ID_OFFSET = 9_000_000_000_000L
         private const val NAVIDROME_ALBUM_ID_OFFSET = 10_000_000_000_000L
@@ -1504,8 +1508,6 @@ class NavidromeRepository @Inject constructor(
                     mimeType = navidromeSong.mimeType,
                     bitrate = navidromeSong.bitRate?.let { it * 1000 },
                     sampleRate = null,
-                    telegramChatId = null,
-                    telegramFileId = null,
                     sourceType = SourceType.NAVIDROME
                 )
             )
@@ -1533,7 +1535,9 @@ class NavidromeRepository @Inject constructor(
     private fun parseArtistNames(rawArtist: String): List<String> =
         CloudMusicUtils.parseArtistNames(rawArtist)
 
-    private fun toUnifiedSongId(navidromeId: String): Long {
+    // internal (not private): PlaybackStatsRepository reuses this exact mapping to translate
+    // gateway song ids coming back from getListeningEvents into the app's unified Song.id.
+    internal fun toUnifiedSongId(navidromeId: String): Long {
         return -(NAVIDROME_SONG_ID_OFFSET + navidromeId.hashCode().toLong().absoluteValue)
     }
 
@@ -1640,6 +1644,39 @@ class NavidromeRepository @Inject constructor(
     suspend fun scrobble(navidromeId: String, submission: Boolean = true): Result<Unit> {
         if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
         return api.scrobble(id = navidromeId, submission = submission)
+    }
+
+    // ─── Listening Events (Stats) ────────────────────────────────────────
+
+    suspend fun reportListeningEvent(
+        eventId: String,
+        songId: String,
+        title: String,
+        artist: String,
+        album: String,
+        cover: String,
+        durationMs: Long,
+        startTime: Long,
+        endTime: Long
+    ): Result<JSONObject> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return api.reportListeningEvent(
+            eventId, songId, title, artist, album, cover, durationMs, startTime, endTime
+        )
+    }
+
+    suspend fun getListeningEvents(
+        startTime: Long? = null,
+        endTime: Long? = null,
+        limit: Int = 5000
+    ): Result<JSONObject> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return api.getListeningEvents(startTime, endTime, limit)
+    }
+
+    suspend fun importListeningEvents(events: List<JSONObject>): Result<JSONObject> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return api.importListeningEvents(events)
     }
 
     // ─── Delete ────────────────────────────────────────────────────────────

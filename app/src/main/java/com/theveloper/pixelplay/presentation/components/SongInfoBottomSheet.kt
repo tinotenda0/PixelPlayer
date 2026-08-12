@@ -123,7 +123,6 @@ fun SongInfoBottomSheet(
     onAddToQueue: () -> Unit,
     onAddNextToQueue: () -> Unit,
     onAddToPlayList: () -> Unit,
-    onDeleteFromDevice: (activity: Activity, song: Song, onResult: (Boolean) -> Unit) -> Unit,
     onNavigateToAlbum: () -> Unit,
     onNavigateToArtist: () -> Unit,
     /**
@@ -147,7 +146,6 @@ fun SongInfoBottomSheet(
         replayGainAlbumGainDb: String,
         coverArtUpdate: CoverArtUpdate?
     ) -> Unit,
-    removeFromListTrigger: () -> Unit,
     songInfoViewModel: SongInfoBottomSheetViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -538,17 +536,7 @@ fun SongInfoBottomSheet(
                                         )
 
                                         Row3Actions(
-                                            onAddToPlaylist = onAddToPlayList,
-                                            onDelete = {
-                                                (context as? Activity)?.let { activity ->
-                                                    onDeleteFromDevice(activity, song) { result ->
-                                                        if (result) {
-                                                            removeFromListTrigger()
-                                                            onDismiss()
-                                                        }
-                                                    }
-                                                }
-                                            }
+                                            onAddToPlaylist = onAddToPlayList
                                         )
 
                                         if (songInfoViewModel.isDownloadable(song)) {
@@ -1520,54 +1508,12 @@ private fun Row2Actions(
 
 @Composable
 private fun Row3Actions(
-    onAddToPlaylist: () -> Unit,
-    onDelete: () -> Unit
+    onAddToPlaylist: () -> Unit
 ) {
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     var clickPending by remember { mutableStateOf(false) }
 
     val playlistInteractionSource = remember { MutableInteractionSource() }
-    val isPlaylistPressed by playlistInteractionSource.collectIsPressedAsState()
-    var playlistVisualPressed by remember { mutableStateOf(false) }
-    LaunchedEffect(isPlaylistPressed) {
-        if (isPlaylistPressed) {
-            playlistVisualPressed = true
-        } else {
-            kotlinx.coroutines.delay(180)
-            playlistVisualPressed = false
-        }
-    }
-
-    val deleteInteractionSource = remember { MutableInteractionSource() }
-    val isDeletePressed by deleteInteractionSource.collectIsPressedAsState()
-    var deleteVisualPressed by remember { mutableStateOf(false) }
-    LaunchedEffect(isDeletePressed) {
-        if (isDeletePressed) {
-            deleteVisualPressed = true
-        } else {
-            kotlinx.coroutines.delay(180)
-            deleteVisualPressed = false
-        }
-    }
-
-    val pressSpec = spring<Float>(
-        dampingRatio = 0.8f,
-        stiffness = 300f
-    )
-
-    val pressFractionPlaylist by animateFloatAsState(
-        targetValue = if (playlistVisualPressed) 1f else 0f,
-        animationSpec = pressSpec,
-        label = "PlaylistPressFraction"
-    )
-    val pressFractionDelete by animateFloatAsState(
-        targetValue = if (deleteVisualPressed) 1f else 0f,
-        animationSpec = pressSpec,
-        label = "DeletePressFraction"
-    )
-
-    val weightPlaylist = (0.5f + 0.08f * pressFractionPlaylist - 0.08f * pressFractionDelete).coerceAtLeast(0.1f)
-    val weightDelete = (0.5f + 0.08f * pressFractionDelete - 0.08f * pressFractionPlaylist).coerceAtLeast(0.1f)
 
     Row(
         modifier = Modifier
@@ -1578,7 +1524,7 @@ private fun Row3Actions(
     ) {
         FilledTonalButton(
             modifier = Modifier
-                .weight(weightPlaylist)
+                .weight(1f)
                 .heightIn(min = 66.dp),
             colors = ButtonDefaults.filledTonalButtonColors(
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -1590,11 +1536,8 @@ private fun Row3Actions(
             onClick = {
                 if (clickPending) return@FilledTonalButton
                 clickPending = true
-                playlistVisualPressed = true
-                android.util.Log.d("PixelPlayerDebug", "Row3Actions: AddToPlaylist clicked")
                 coroutineScope.launch {
                     kotlinx.coroutines.delay(180)
-                    playlistVisualPressed = false
                     clickPending = false
                     onAddToPlaylist()
                 }
@@ -1607,44 +1550,6 @@ private fun Row3Actions(
             Spacer(Modifier.width(6.dp))
             TightWrapText(
                 text = stringResource(R.string.common_playlist),
-                modifier = Modifier.padding(end = 4.dp),
-                overflow = TextOverflow.Ellipsis,
-                maxLines = 2,
-                lineHeight = 20.sp
-            )
-        }
-
-        FilledTonalButton(
-            modifier = Modifier
-                .weight(weightDelete)
-                .heightIn(min = 66.dp),
-            colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer
-            ),
-            contentPadding = PaddingValues(horizontal = 10.dp),
-            shape = CircleShape,
-            interactionSource = deleteInteractionSource,
-            onClick = {
-                if (clickPending) return@FilledTonalButton
-                clickPending = true
-                deleteVisualPressed = true
-                android.util.Log.d("PixelPlayerDebug", "Row3Actions: Delete clicked")
-                coroutineScope.launch {
-                    kotlinx.coroutines.delay(180)
-                    deleteVisualPressed = false
-                    clickPending = false
-                    onDelete()
-                }
-            }
-        ) {
-            Icon(
-                Icons.Default.DeleteForever,
-                contentDescription = stringResource(R.string.song_info_action_delete)
-            )
-            Spacer(Modifier.width(6.dp))
-            TightWrapText(
-                text = stringResource(R.string.song_info_action_delete),
                 modifier = Modifier.padding(end = 4.dp),
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 2,

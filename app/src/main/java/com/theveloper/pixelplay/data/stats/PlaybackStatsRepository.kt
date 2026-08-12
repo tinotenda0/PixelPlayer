@@ -2,11 +2,16 @@ package com.theveloper.pixelplay.data.stats
 
 import android.content.Context
 import android.util.AtomicFile
+import androidx.work.WorkManager
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.reflect.TypeToken
+import com.theveloper.pixelplay.data.database.MusicDao
 import com.theveloper.pixelplay.data.model.Song
+import com.theveloper.pixelplay.data.navidrome.NavidromeRepository
+import com.theveloper.pixelplay.data.worker.ListeningEventUploadWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
+import org.json.JSONObject
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
@@ -37,10 +42,19 @@ import timber.log.Timber
 
 @Singleton
 class PlaybackStatsRepository @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val musicDao: MusicDao,
+    private val navidromeRepository: NavidromeRepository,
+    private val outbox: ListeningEventOutbox,
+    private val workManager: WorkManager
 ) {
 
     private val gson = Gson()
+    // Legacy local history file. No longer WRITTEN by recordPlayback()/loadSummary() (both now
+    // go through the gateway — see fetchEventsForSummary()), but kept read/write-able as-is:
+    // exportEventsForBackup()/importEventsFromBackup() still use it for local backup/restore,
+    // and StatsHistoryMigrationWorker reads its frozen contents once, on upgrade, to seed the
+    // gateway with each device's pre-existing history.
     private val historyFile = File(context.filesDir, "playback_history.json")
     private val atomicHistoryFile = AtomicFile(historyFile)
     private val fileLock = Any()
@@ -50,6 +64,31 @@ class PlaybackStatsRepository @Inject constructor(
     val refreshFlow: StateFlow<Long> = _refreshVersion.asStateFlow()
 
     private val sessionGapThresholdMs = TimeUnit.MINUTES.toMillis(30)
+
+    // ─── Gateway-backed listening events (the actual Stats data source) ────
+
+    private val eventsCacheFile = File(context.filesDir, "listening_events_cache.json")
+    private val atomicEventsCacheFile = AtomicFile(eventsCacheFile)
+    private val cacheLock = Any()
+    private val remoteEventsType = object : TypeToken<List<RemoteListeningEvent>>() {}.type
+
+    /** Internal shape only — carries [eventId] (needed to dedupe against the outbox) through
+     *  the fetch/merge step; stripped before handing events to [buildSummaryFromEvents]. */
+    private data class RemoteListeningEvent(
+        val eventId: String,
+        val songId: String, // the app's unified Song.id, already translated from the gateway id
+        val durationMs: Long,
+        val startTimestamp: Long,
+        val endTimestamp: Long
+    )
+
+    private fun RemoteListeningEvent.toPlaybackEvent() = PlaybackEvent(
+        songId = songId,
+        timestamp = endTimestamp,
+        durationMs = durationMs,
+        startTimestamp = startTimestamp,
+        endTimestamp = endTimestamp
+    )
 
     data class PlaybackEvent(
         val songId: String,
@@ -163,6 +202,10 @@ class PlaybackStatsRepository @Inject constructor(
         val peakDayDurationMs: Long
     )
 
+    /** Resolves [songId] (either shape — see below) to a gateway song id, queues a durable
+     *  listening event for it, and best-effort-uploads it immediately. Non-gateway songs
+     *  (nothing resolvable either way) are a silent no-op — gateway-only scope, matching what
+     *  the Stats page now reads back. */
     suspend fun recordPlayback(
         songId: String,
         durationMs: Long,
@@ -172,23 +215,59 @@ class PlaybackStatsRepository @Inject constructor(
         val coercedTimestamp = timestamp.coerceAtLeast(0L)
         val coercedDuration = durationMs.coerceAtLeast(0L)
         val start = (coercedTimestamp - coercedDuration).coerceAtLeast(0L)
-        val sanitizedEvent = PlaybackEvent(
-            songId = songId,
-            timestamp = coercedTimestamp,
+
+        // Song.id reaches here in two shapes. Most plays are songs synced into the unified
+        // library (NavidromeRepository.syncUnifiedLibrarySongsFromNavidrome) — a hashed Long,
+        // resolvable via MusicDao, which also gives real title/artist/album/cover. But anything
+        // surfaced by live gateway browsing that was never persisted there — search results,
+        // "Browse by genre", similar-songs/radio, curated home rows — carries a
+        // "navidrome_<rawId>" string instead (see NavidromeSong.toSong()); MusicDao has never
+        // heard of it. Handle both: try the synced-library path first, then fall back to
+        // stripping the live-browse prefix. The stripped remainder is only trusted if it still
+        // looks like a real gateway song id (starts with "yt-") — a synced-*playlist* song's id
+        // is a different, composite shape ("navidrome_<playlistId>_<rawId>") that stripping
+        // alone can't safely recover, so that narrower case is left unresolved rather than
+        // risking a garbled id.
+        val song = songId.toLongOrNull()?.let { musicDao.getSongByIdOnce(it) }
+        val navidromeId = song?.contentUriString
+            ?.takeIf { it.startsWith(NAVIDROME_URI_PREFIX) }
+            ?.removePrefix(NAVIDROME_URI_PREFIX)
+            ?.takeIf { it.isNotBlank() }
+            ?: songId.removePrefix(LIVE_GATEWAY_ID_PREFIX)
+                .takeIf { it != songId && it.startsWith(GATEWAY_SONG_ID_PREFIX) }
+            ?: return@withContext
+
+        val pending = outbox.enqueue(
+            navidromeId = navidromeId,
+            // Metadata is best-effort and only for the server's own record: nothing client-side
+            // reads it back — loadSummary always re-resolves title/artist/album/cover from its
+            // own `songs` list, joined by unified id (see buildSummaryFromEvents). A live-browse
+            // song has no local SongEntity to pull this from, so it's sent blank.
+            title = song?.title.orEmpty(),
+            artist = song?.artistName.orEmpty(),
+            album = song?.albumName.orEmpty(),
+            cover = song?.albumArtUriString.orEmpty(),
             durationMs = coercedDuration,
             startTimestamp = start,
             endTimestamp = coercedTimestamp
         )
-        val writeSucceeded = updateEventsAtomically { events ->
-            val cutoff = sanitizedEvent.endMillis() - MAX_HISTORY_AGE_MS
-            if (cutoff > 0) {
-                events.removeAll { it.endMillis() < cutoff }
-            }
-            events += sanitizedEvent
-            events
-        }
-        if (writeSucceeded) {
-            notifyStatsChanged()
+        notifyStatsChanged() // reflect the play in the UI before the network round-trip lands
+
+        val uploaded = navidromeRepository.reportListeningEvent(
+            eventId = pending.eventId,
+            songId = pending.navidromeId,
+            title = pending.title,
+            artist = pending.artist,
+            album = pending.album,
+            cover = pending.cover,
+            durationMs = pending.durationMs,
+            startTime = pending.startTimestamp,
+            endTime = pending.endTimestamp
+        )
+        if (uploaded.isSuccess) {
+            outbox.remove(listOf(pending.eventId))
+        } else {
+            ListeningEventUploadWorker.enqueue(workManager)
         }
     }
 
@@ -197,15 +276,104 @@ class PlaybackStatsRepository @Inject constructor(
         songs: List<Song>,
         nowMillis: Long = System.currentTimeMillis()
     ): PlaybackStatsSummary = withContext(Dispatchers.IO) {
-        val zoneId = ZoneId.systemDefault()
-        val allEvents = readEvents()
         buildSummaryFromEvents(
             range = range,
             songs = songs,
             nowMillis = nowMillis,
-            allEvents = allEvents,
-            zoneId = zoneId
+            allEvents = fetchEventsForSummary(),
+            zoneId = ZoneId.systemDefault()
         )
+    }
+
+    /** Not logged into the gateway -> the empty-history summary buildSummaryFromEvents already
+     *  produces for a blank event list (same shape StatsScreen already renders for "no plays
+     *  yet"). Logged in -> merge the gateway's confirmed events with anything still in the
+     *  local outbox (so a play made offline shows up in your own stats immediately), falling
+     *  back to the last successful fetch if the network call itself fails. */
+    private suspend fun fetchEventsForSummary(): List<PlaybackEvent> {
+        if (!navidromeRepository.isLoggedIn) return emptyList()
+
+        val pendingEvents = outbox.pending().map { toRemoteEvent(it) }
+        val remoteEvents = navidromeRepository.getListeningEvents().fold(
+            onSuccess = { payload ->
+                parseRemoteEvents(payload).also { cacheRemoteEvents(it) }
+            },
+            onFailure = { readCachedRemoteEvents() }
+        )
+
+        // Prefer the confirmed-remote copy of an event; an outbox entry whose upload actually
+        // succeeded but whose remove() hasn't landed yet shouldn't double-count.
+        val merged = LinkedHashMap<String, RemoteListeningEvent>()
+        remoteEvents.forEach { merged[it.eventId] = it }
+        pendingEvents.forEach { merged.putIfAbsent(it.eventId, it) }
+        return merged.values.map { it.toPlaybackEvent() }
+    }
+
+    private fun toRemoteEvent(pending: ListeningEventOutbox.PendingListeningEvent) =
+        RemoteListeningEvent(
+            eventId = pending.eventId,
+            songId = navidromeRepository.toUnifiedSongId(pending.navidromeId).toString(),
+            durationMs = pending.durationMs,
+            startTimestamp = pending.startTimestamp,
+            endTimestamp = pending.endTimestamp
+        )
+
+    private fun parseRemoteEvents(payload: JSONObject): List<RemoteListeningEvent> {
+        val array = payload.optJSONArray("event") ?: return emptyList()
+        return (0 until array.length()).mapNotNull { i ->
+            val obj = array.optJSONObject(i) ?: return@mapNotNull null
+            val eventId = obj.optString("eventId").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val gatewaySongId = obj.optString("songId").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val durationMs = obj.optLong("durationMs", 0L)
+            if (durationMs <= 0L) return@mapNotNull null
+            RemoteListeningEvent(
+                eventId = eventId,
+                songId = navidromeRepository.toUnifiedSongId(gatewaySongId).toString(),
+                durationMs = durationMs,
+                startTimestamp = obj.optLong("startTime", 0L),
+                endTimestamp = obj.optLong("endTime", 0L)
+            )
+        }
+    }
+
+    private fun readCachedRemoteEvents(): List<RemoteListeningEvent> {
+        val raw = synchronized(cacheLock) {
+            runCatching {
+                atomicEventsCacheFile.openRead().bufferedReader(Charsets.UTF_8).use { it.readText() }
+            }
+                .onFailure { throwable ->
+                    if (throwable !is FileNotFoundException) {
+                        Timber.e(throwable, "Failed reading cached listening events")
+                    }
+                }
+                .getOrNull()
+                ?.takeIf { it.isNotBlank() }
+        } ?: return emptyList()
+        return runCatching { gson.fromJson<List<RemoteListeningEvent>>(raw, remoteEventsType) ?: emptyList() }
+            .getOrElse { throwable ->
+                Timber.e(throwable, "Failed parsing cached listening events")
+                emptyList()
+            }
+    }
+
+    private fun cacheRemoteEvents(events: List<RemoteListeningEvent>) {
+        synchronized(cacheLock) {
+            var outputStream: FileOutputStream? = null
+            runCatching {
+                val parent = eventsCacheFile.parentFile
+                if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                    Timber.w("Unable to ensure listening events cache directory: ${parent.absolutePath}")
+                }
+                outputStream = atomicEventsCacheFile.startWrite()
+                outputStream?.write(gson.toJson(events).toByteArray(Charsets.UTF_8))
+                outputStream?.fd?.sync()
+                outputStream?.let { atomicEventsCacheFile.finishWrite(it) }
+                outputStream = null
+            }.onFailure { throwable ->
+                outputStream?.let { stream -> atomicEventsCacheFile.failWrite(stream) }
+                Timber.e(throwable, "Failed to cache listening events")
+            }
+        }
     }
 
     internal fun buildSummaryFromEvents(
@@ -465,7 +633,7 @@ class PlaybackStatsRepository @Inject constructor(
     suspend fun loadPlaybackHistory(limit: Int = DEFAULT_PLAYBACK_HISTORY_LIMIT): List<PlaybackHistoryEntry> = withContext(Dispatchers.IO) {
         if (limit <= 0) return@withContext emptyList()
         val safeLimit = limit.coerceAtMost(MAX_PLAYBACK_HISTORY_LIMIT)
-        readEvents()
+        fetchEventsForSummary()
             .asSequence()
             .sortedByDescending { event -> event.timestamp }
             .take(safeLimit)
@@ -1100,6 +1268,9 @@ class PlaybackStatsRepository @Inject constructor(
         private val MAX_HISTORY_AGE_MS = TimeUnit.DAYS.toMillis(730) // Keep roughly two years of history
         private const val SEGMENT_JOIN_TOLERANCE_MS = 0L
         private const val MAX_SONG_STATS_COUNT = 100
+        private const val NAVIDROME_URI_PREFIX = "navidrome://"
+        private const val LIVE_GATEWAY_ID_PREFIX = "navidrome_"
+        private const val GATEWAY_SONG_ID_PREFIX = "yt-"
     }
 }
 

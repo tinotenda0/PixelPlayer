@@ -1,7 +1,6 @@
 package com.theveloper.pixelplay.presentation.viewmodel
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.net.Uri
 import android.os.Trace
 import android.util.Log
@@ -40,7 +39,6 @@ import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.data.media.CoverArtUpdate
 import com.theveloper.pixelplay.data.model.Album
 import com.theveloper.pixelplay.data.model.Artist
-import com.theveloper.pixelplay.data.model.FolderSource
 import com.theveloper.pixelplay.data.model.Genre
 import com.theveloper.pixelplay.data.model.Lyrics
 import com.theveloper.pixelplay.data.model.LyricsSourcePreference
@@ -109,8 +107,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -124,7 +120,6 @@ import coil.memory.MemoryCache
 import dagger.Lazy
 
 private const val CAST_LOG_TAG = "PlayerCastTransfer"
-private const val ENABLE_FOLDERS_SOURCE_SWITCHING = true
 private const val HOME_MIX_PREVIEW_LIMIT = 48
 private const val EXTERNAL_SONG_ID_PREFIX = "external:"
 
@@ -185,7 +180,6 @@ private data class SortOptionsSnapshot(
     val songSort: SortOption,
     val albumSort: SortOption,
     val artistSort: SortOption,
-    val folderSort: SortOption,
     val favoriteSort: SortOption,
 )
 
@@ -202,16 +196,11 @@ class PlayerViewModel @Inject constructor(
     val syncManager: SyncManager, // Inyectar SyncManager
 
     private val dualPlayerEngine: DualPlayerEngine,
-    private val telegramCacheManagerProvider: Lazy<com.theveloper.pixelplay.data.telegram.TelegramCacheManager>,
     private val listeningStatsTracker: ListeningStatsTracker,
     private val dailyMixStateHolder: DailyMixStateHolder,
     private val lyricsStateHolder: LyricsStateHolder,
     private val castStateHolder: CastStateHolder,
     private val castRouteStateHolder: CastRouteStateHolder,
-    private val plexRemotePlaybackManager: com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager,
-    private val plexConnectClient: com.theveloper.pixelplay.data.plex.connect.PlexConnectClient,
-    private val rokuEcpClient: com.theveloper.pixelplay.data.network.roku.RokuEcpClient,
-    private val plexRepository: com.theveloper.pixelplay.data.plex.PlexRepository,
     private val navidromeRepository: com.theveloper.pixelplay.data.navidrome.NavidromeRepository,
     private val navidromeDownloadManager: com.theveloper.pixelplay.data.navidrome.NavidromeDownloadManager,
     private val queueStateHolder: QueueStateHolder,
@@ -223,11 +212,9 @@ class PlayerViewModel @Inject constructor(
     private val searchStateHolder: SearchStateHolder,
     private val aiStateHolder: AiStateHolder,
     private val libraryStateHolder: LibraryStateHolder,
-    private val folderNavigationStateHolder: FolderNavigationStateHolder,
     private val libraryTabsStateHolder: LibraryTabsStateHolder,
     private val castTransferStateHolder: CastTransferStateHolder,
     private val metadataEditStateHolder: MetadataEditStateHolder,
-    private val songRemovalStateHolder: SongRemovalStateHolder,
     val themeStateHolder: ThemeStateHolder,
     val multiSelectionStateHolder: MultiSelectionStateHolder,
     val playlistSelectionStateHolder: PlaylistSelectionStateHolder,
@@ -341,83 +328,6 @@ class PlayerViewModel @Inject constructor(
         connectivityStateHolder.offlinePlaybackBlocked.collect {
             Timber.w("Received offline blocked event. Showing dialog.")
             _showNoInternetDialog.emit(Unit)
-        }
-    }
-
-    private var telegramPlaybackObserversStarted = false
-
-    private fun ensureTelegramPlaybackObserversStarted() {
-        if (telegramPlaybackObserversStarted) return
-        telegramPlaybackObserversStarted = true
-
-        val telegramCacheManager = telegramCacheManagerProvider.get()
-        val telegramRepository = musicRepository.telegramRepository
-
-        viewModelScope.launch {
-            launch {
-                telegramCacheManager.embeddedArtUpdated.collect { updatedArtUri ->
-                    refreshArtwork(updatedArtUri)
-                }
-            }
-
-            launch {
-                telegramRepository.downloadCompleted.collect {
-                    val currentSong = playbackStateHolder.stablePlayerState.value.currentSong
-                    if (currentSong != null && currentSong.contentUriString.startsWith("telegram:")) {
-                        val uri = Uri.parse(currentSong.contentUriString)
-                        val chatId = uri.host?.toLongOrNull()
-                        val messageId = uri.pathSegments.firstOrNull()?.toLongOrNull()
-
-                        if (chatId != null && messageId != null) {
-                            refreshArtwork("telegram_art://$chatId/$messageId")
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private suspend fun refreshArtwork(updatedArtUri: String) {
-        val currentState = playbackStateHolder.stablePlayerState.value
-        val currentSong = currentState.currentSong
-        // Check if it matches, ignoring query params for comparison
-        val currentUriClean = currentSong?.albumArtUriString?.substringBefore('?')
-        val updatedUriClean = updatedArtUri.substringBefore('?')
-        
-        if (currentUriClean == updatedUriClean) {
-            Timber.d("PlayerViewModel: Embedded art updated for current song, forcing refresh")
-            
-            // 1. Invalidate Coil cache for the BASE uri (without params)
-            // This ensures next time we load it without params, it's fresh too.
-            val baseUri = currentUriClean
-            
-            // Remove from Memory Cache
-            context.imageLoader.memoryCache?.keys?.forEach { key ->
-                if (key.toString().contains(baseUri)) {
-                    context.imageLoader.memoryCache?.remove(key)
-                }
-            }
-            // Remove from Disk Cache
-            context.imageLoader.diskCache?.remove(baseUri)
-
-            // 2. Extract Colors (using base URI)
-            themeStateHolder.extractAndGenerateColorScheme(updatedArtUri.toUri(), updatedArtUri, isPreload = false)
-            
-            // 3. FORCE UI REFRESH by updating the URI with a version timestamp
-            // This forces SmartImage to see a "new" model and reload.
-            // We keep the quality param if it exists, or add a version param.
-            val newUri = if (updatedArtUri.contains("?")) {
-                "$updatedArtUri&v=${System.currentTimeMillis()}"
-            } else {
-                "$updatedArtUri?v=${System.currentTimeMillis()}"
-            }
-            
-            val updatedSong = currentSong.copy(albumArtUriString = newUri)
-            
-            // Update State
-            playbackStateHolder.updateStablePlayerState { state ->
-                state.copy(currentSong = updatedSong)
-            }
         }
     }
 
@@ -673,10 +583,6 @@ class PlayerViewModel @Inject constructor(
     // Owned by MetadataEditStateHolder (the only producer/consumer); re-exposed here for the UI.
     val writePermissionRequest: SharedFlow<android.content.IntentSender> = metadataEditStateHolder.writePermissionRequest
 
-    // MediaStore delete-permission request (for deletion without MANAGE_EXTERNAL_STORAGE).
-    // Owned by SongRemovalStateHolder (the only producer/consumer); re-exposed here for the UI.
-    val deletePermissionRequest: SharedFlow<android.content.IntentSender> = songRemovalStateHolder.deletePermissionRequest
-
     private val _albumNavigationRequests = MutableSharedFlow<Long>(extraBufferCapacity = 1)
     val albumNavigationRequests = _albumNavigationRequests.asSharedFlow()
     // A route string, not an artist id: a streamed song's artistId is -1, which cannot express
@@ -748,279 +654,6 @@ class PlayerViewModel @Inject constructor(
     suspend fun getSongsForCurrentFavoriteSelection(): List<Song> =
         playbackDispatchStateHolder.getSongsForCurrentFavoriteSelection()
 
-    // ─── Plex Companion remote output (Plexamp on other devices) ──────────
-
-    val plexRemoteDevice: StateFlow<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice?> =
-        plexRemotePlaybackManager.activeDevice
-
-    val plexRemoteSession: StateFlow<com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager.Snapshot?> =
-        plexRemotePlaybackManager.session
-
-    private val _plexRemotePlayers =
-        MutableStateFlow<List<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice>>(emptyList())
-    val plexRemotePlayers: StateFlow<List<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice>> =
-        _plexRemotePlayers.asStateFlow()
-
-    /** clientIdentifier → title the device is currently playing (picker decoration). */
-    private val _plexNowPlaying = MutableStateFlow<Map<String, String>>(emptyMap())
-    val plexNowPlaying: StateFlow<Map<String, String>> = _plexNowPlaying.asStateFlow()
-
-    fun loadPlexRemotePlayers() {
-        viewModelScope.launch {
-            plexRepository.getRemotePlayers().onSuccess { players ->
-                _plexRemotePlayers.value = players
-                loadPlexNowPlaying(players)
-            }
-        }
-    }
-
-    /** One-shot: what each reachable Plex device is currently playing. */
-    private fun loadPlexNowPlaying(
-        players: List<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice>
-    ) {
-        viewModelScope.launch {
-            val titles = players.map { device ->
-                async {
-                    val timeline = plexRepository.getRemoteTimeline(device).getOrNull()
-                    val ratingKey = timeline?.ratingKey?.takeIf {
-                        timeline.state != "stopped"
-                    }
-                    val title = ratingKey?.let { plexRepository.getSongByRatingKey(it)?.title }
-                    device.clientIdentifier to title
-                }
-            }.awaitAll().mapNotNull { (id, title) -> title?.let { id to it } }.toMap()
-            _plexNowPlaying.value = titles
-        }
-    }
-
-    /**
-     * CAST: make a Plex/Companion player the active output and replace what it
-     * is playing with the phone's current queue (transfers song + position).
-     */
-    fun castToPlexRemote(device: com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice) {
-        if (castStateHolder.castSession.value != null) disconnect()
-
-        val currentSong = playbackStateHolder.stablePlayerState.value.currentSong
-        val currentPosition = playbackStateHolder.currentPosition.value
-        val queue = playerUiState.value.currentPlaybackQueue.toList()
-
-        mediaController?.pause()
-        plexRemotePlaybackManager.connect(device)
-
-        if (currentSong?.plexId != null && queue.isNotEmpty()) {
-            viewModelScope.launch {
-                plexRemotePlaybackManager.playQueue(
-                    songs = queue,
-                    startSong = currentSong,
-                    startPositionMs = currentPosition
-                )
-            }
-        }
-    }
-
-    /**
-     * JOIN: attach to the device's EXISTING playback and use the phone purely
-     * as a remote — do not replace what it is playing. The manager mirrors the
-     * device's song/position/queue; transport controls route to it.
-     */
-    fun joinPlexRemote(device: com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice) {
-        if (castStateHolder.castSession.value != null) disconnect()
-        mediaController?.pause()
-        plexRemotePlaybackManager.connect(device)
-        // No playQueue() — the manager's poll loads the device's current queue.
-    }
-
-    /** Back-compat: default connect action is Cast (replace). */
-    fun connectPlexRemote(device: com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice) =
-        castToPlexRemote(device)
-
-    fun disconnectPlexRemote() {
-        plexRemotePlaybackManager.disconnect()
-        // The remote keeps playing (Plexamp semantics), but this phone is its
-        // own player again — drop the last remote snapshot and show the local
-        // controller's real (paused) state.
-        mediaControllerSyncStateHolder.resyncFromLocalController()
-    }
-
-    fun setPlexRemoteVolume(volume: Int) {
-        plexRemotePlaybackManager.setVolume(volume)
-    }
-
-    // ─── Roku TV (cast Plex to the Roku's Plex app) ──────────────────────
-    // Roku doesn't support Google Cast; we launch the Plex channel on the TV
-    // via Roku ECP, then control it through Plex Companion like any player.
-
-    private val _rokuDevices =
-        MutableStateFlow<List<com.theveloper.pixelplay.data.network.roku.RokuDevice>>(emptyList())
-    val rokuDevices: StateFlow<List<com.theveloper.pixelplay.data.network.roku.RokuDevice>> =
-        _rokuDevices.asStateFlow()
-
-    private val _rokuConnecting = MutableStateFlow(false)
-    val rokuConnecting: StateFlow<Boolean> = _rokuConnecting.asStateFlow()
-
-    /** The Roku currently bound as the active Plex Companion output, if any. */
-    private val _activeRokuHost = MutableStateFlow<String?>(null)
-    val activeRokuHost: StateFlow<String?> = _activeRokuHost.asStateFlow()
-
-    fun loadRokuDevices() {
-        viewModelScope.launch {
-            _rokuDevices.value = rokuEcpClient.discover()
-        }
-    }
-
-    /**
-     * Cast to a Roku: launch Plex on the TV, wait for it to appear as a Plex
-     * Companion player, then bind it as the active output (transferring the
-     * current Plex queue + position). Playback then routes through the same
-     * Companion path used for Plexamp.
-     */
-    fun connectRoku(device: com.theveloper.pixelplay.data.network.roku.RokuDevice) {
-        if (!device.hasPlex) {
-            sendToast(context.getString(R.string.roku_needs_plex))
-            return
-        }
-        viewModelScope.launch {
-            _rokuConnecting.value = true
-            try {
-                if (castStateHolder.castSession.value != null) disconnect()
-                // If a Connect device is the active output, pull the session
-                // back here first so it doesn't take precedence over the Roku.
-                if (plexConnectClient.isRemoteActive) {
-                    plexConnectClient.transfer(plexConnectClient.deviceId)
-                }
-
-                rokuEcpClient.launchPlex(device)
-                val player = awaitRokuPlexPlayer(device.host)
-                if (player == null) {
-                    sendToast(context.getString(R.string.roku_plex_not_found))
-                    return@launch
-                }
-
-                val currentSong = playbackStateHolder.stablePlayerState.value.currentSong
-                val currentPosition = playbackStateHolder.currentPosition.value
-                val queue = playerUiState.value.currentPlaybackQueue.toList()
-
-                mediaController?.pause()
-                plexRemotePlaybackManager.connect(player)
-                _activeRokuHost.value = device.host
-
-                if (currentSong?.plexId != null && queue.isNotEmpty()) {
-                    plexRemotePlaybackManager.playQueue(
-                        songs = queue,
-                        startSong = currentSong,
-                        startPositionMs = currentPosition
-                    )
-                }
-            } finally {
-                _rokuConnecting.value = false
-            }
-        }
-    }
-
-    fun disconnectRoku() {
-        _activeRokuHost.value = null
-        disconnectPlexRemote()
-    }
-
-    /** Poll plex.tv until the Roku's Plex app registers as a Companion player. */
-    private suspend fun awaitRokuPlexPlayer(
-        host: String
-    ): com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice? {
-        repeat(12) { // ~18s at 1.5s cadence — a cold Plex channel launch is slow
-            val players = plexRepository.getRemotePlayers().getOrDefault(emptyList())
-            players.firstOrNull { hostOf(it.uri) == host }?.let { return it }
-            // Fallback: a Roku-branded player that appeared after we launched it.
-            players.firstOrNull {
-                it.product.contains("roku", ignoreCase = true) ||
-                    it.name.contains("roku", ignoreCase = true)
-            }?.let { return it }
-            delay(1500)
-        }
-        return null
-    }
-
-    private fun hostOf(uri: String): String? =
-        runCatching { java.net.URI(uri).host }.getOrNull()
-
-    // ─── PixelPlayer Connect (broker sessions across devices) ────────────
-
-    val plexConnectSession: StateFlow<com.theveloper.pixelplay.data.plex.connect.PlexConnectClient.ConnectSession?> =
-        plexConnectClient.session
-
-    val plexConnectDeviceId: String get() = plexConnectClient.deviceId
-
-    /**
-     * Intent-aware: true only when THIS phone chose the currently-active
-     * remote output. A family member's device being active does not count.
-     */
-    fun isConnectRemoteIntended(): Boolean = plexConnectClient.isRemoteActive
-
-    fun transferPlaybackTo(deviceId: String) = plexConnectClient.transfer(deviceId)
-
-    /** Spotify's "listen on this device": pull the session back to the phone. */
-    fun playConnectSessionHere() = plexConnectClient.transfer(plexConnectClient.deviceId)
-
-    fun setConnectRemoteVolume(volume: Int) = plexConnectClient.setRemoteVolume(volume)
-
-    /** Mirrors a remote Connect session into the main player UI. */
-    private fun observeConnectSession() {
-        viewModelScope.launch {
-            plexConnectClient.session.collect { session ->
-                if (session == null || !plexConnectClient.isRemoteActive) return@collect
-                val track = session.currentTrack ?: return@collect
-                val song = plexConnectClient.resolveSongForTrack(track)
-                playbackStateHolder.updateStablePlayerState { state ->
-                    state.copy(
-                        currentSong = song,
-                        isPlaying = session.state == "playing",
-                        playWhenReady = session.state == "playing",
-                        isBuffering = session.state == "buffering",
-                        totalDuration = if (session.durationMs > 0) session.durationMs else track.durationMs
-                    )
-                }
-                playbackStateHolder.setCurrentPosition(session.extrapolatedPositionMs())
-            }
-        }
-    }
-
-    /** Mirrors the remote session into the main player state while active. */
-    private fun observePlexRemoteSession() {
-        viewModelScope.launch {
-            plexRemotePlaybackManager.session.collect { snapshot ->
-                if (plexRemotePlaybackManager.activeDevice.value == null || snapshot == null) {
-                    lastRemoteLyricsSongId = null
-                    return@collect
-                }
-                val song = plexRemotePlaybackManager.resolveSongForRatingKey(snapshot.ratingKey)
-                playbackStateHolder.updateStablePlayerState { state ->
-                    state.copy(
-                        currentSong = song ?: state.currentSong,
-                        isPlaying = snapshot.state == "playing",
-                        playWhenReady = snapshot.state == "playing",
-                        isBuffering = snapshot.state == "buffering",
-                        totalDuration = if (snapshot.durationMs > 0) snapshot.durationMs else state.totalDuration
-                    )
-                }
-                playbackStateHolder.setCurrentPosition(snapshot.positionMs)
-
-                // The MediaController transition listener that loads lyrics for local
-                // playback (MediaControllerSyncStateHolder.onMediaItemTransition) is
-                // bypassed while a remote session controls playback, so the remote
-                // mirror must load lyrics itself as the remote queue advances —
-                // otherwise every song after the first keeps the first song's lyrics.
-                if (song != null && song.id != lastRemoteLyricsSongId) {
-                    lastRemoteLyricsSongId = song.id
-                    lyricsStateHolder.loadLyricsForSong(song, lyricsSourcePreference.value)
-                }
-            }
-        }
-    }
-
-    // Tracks the song whose lyrics were last loaded for the Plex remote mirror,
-    // so each queue advance re-triggers a load exactly once. Reset when the
-    // remote session ends so a later reconnect reloads correctly.
-    private var lastRemoteLyricsSongId: String? = null
-
     val castRoutes: StateFlow<List<MediaRouter.RouteInfo>> = castStateHolder.castRoutes
     val selectedRoute: StateFlow<MediaRouter.RouteInfo?> = castStateHolder.selectedRoute
     /** Pre-mapped so UI composables don't create a new Flow on every recomposition. */
@@ -1082,8 +715,6 @@ class PlayerViewModel @Inject constructor(
         themeStateHolder.initialize(viewModelScope)
         playbackDispatchStateHolder.initialize(playbackDispatchCallbacks())
         mediaControllerSyncStateHolder.initialize(controllerSyncCallbacks())
-        observePlexRemoteSession()
-        observeConnectSession()
 
         // On cold start, the MediaController connects asynchronously, leaving stablePlayerState.currentSong
         // null until that happens. Pre-load the palette from the persisted snapshot so the mini player
@@ -1259,18 +890,6 @@ class PlayerViewModel @Inject constructor(
     )
 
     /**
-     * Bundles the ViewModel-owned collaborators that [SongRemovalStateHolder]'s device-deletion
-     * entry points need (toasts, media-controller queue cleanup, and the full library+player
-     * removal routine), without that holder depending on this ViewModel.
-     */
-    private fun songRemovalCallbacks() = SongRemovalCallbacks(
-        scope = viewModelScope,
-        sendToast = ::sendToast,
-        removeFromMediaControllerQueue = ::removeFromMediaControllerQueue,
-        removeSong = ::removeSong,
-    )
-
-    /**
      * Bundles the ViewModel-owned collaborators that [QueueStateHolder]'s shuffle entry points
      * need (source resolution + shuffled-playback dispatch), without that holder depending on
      * this ViewModel.
@@ -1312,7 +931,6 @@ class PlayerViewModel @Inject constructor(
         sendToast = ::sendToast,
         emitToast = { _toastEvents.emit(it) },
         showNoInternetDialog = { _showNoInternetDialog.tryEmit(Unit) },
-        ensureTelegramObservers = ::ensureTelegramPlaybackObserversStarted,
         cancelTransitionScheduler = { mediaControllerSyncStateHolder.cancelTransitionScheduler() },
         incrementSongScore = ::incrementSongScore,
         resetPredictiveBackState = ::resetPredictiveBackState,
@@ -1333,7 +951,6 @@ class PlayerViewModel @Inject constructor(
         setTrackVolume = { _trackVolume.value = it },
         emitToast = { _toastEvents.emit(it) },
         showNoInternetDialog = { _showNoInternetDialog.emit(Unit) },
-        ensureTelegramObservers = ::ensureTelegramPlaybackObserversStarted,
         cancelSleepTimerForEot = { cancelSleepTimer(suppressDefaultToast = true) },
         resetLyricsSearchState = ::resetLyricsSearchState,
         loadLyricsForCurrentSong = ::loadLyricsForCurrentSong,
@@ -1426,7 +1043,6 @@ class PlayerViewModel @Inject constructor(
                     LibraryTabId.ALBUMS -> SortOption.ALBUMS
                     LibraryTabId.ARTISTS -> SortOption.ARTISTS
                     LibraryTabId.PLAYLISTS -> SortOption.PLAYLISTS
-                    LibraryTabId.FOLDERS -> SortOption.FOLDERS
                     LibraryTabId.LIKED -> SortOption.LIKED
                 }
             } finally {
@@ -1812,39 +1428,6 @@ class PlayerViewModel @Inject constructor(
         return SortOption.fromStorageKey(optionKey, allowed, fallback)
     }
 
-    private data class FolderSourceState(
-        val source: FolderSource,
-        val rootPath: String,
-        val isSdCardAvailable: Boolean
-    )
-
-    private fun resolveFolderSourceState(preferredSource: FolderSource): FolderSourceState {
-        val storages = StorageUtils.getAvailableStorages(context)
-        val internalPath = storages
-            .firstOrNull { it.storageType == StorageType.INTERNAL }
-            ?.path
-            ?.path
-            ?: android.os.Environment.getExternalStorageDirectory().path
-        val sdPath = StorageUtils.getSdCardStorage(context)
-            ?.path
-            ?.path
-
-        val effectiveSource = if (!ENABLE_FOLDERS_SOURCE_SWITCHING) {
-            FolderSource.INTERNAL
-        } else if (preferredSource == FolderSource.SD_CARD && sdPath == null) {
-            FolderSource.INTERNAL
-        } else {
-            preferredSource
-        }
-
-        val resolvedRootPath = if (effectiveSource == FolderSource.SD_CARD) sdPath!! else internalPath
-        return FolderSourceState(
-            source = effectiveSource,
-            rootPath = resolvedRootPath,
-            isSdCardAvailable = sdPath != null
-        )
-    }
-
     // Connectivity refresh delegated to ConnectivityStateHolder
     fun refreshLocalConnectionInfo(refreshBluetoothDevices: Boolean = false) {
         connectivityStateHolder.refreshLocalConnectionInfo(refreshBluetoothDevices)
@@ -1861,10 +1444,6 @@ class PlayerViewModel @Inject constructor(
         }
 
 
-
-        viewModelScope.launch {
-            userPreferencesRepository.migrateTabOrder()
-        }
 
         viewModelScope.launch {
             userPreferencesRepository.ensureLibrarySortDefaults()
@@ -1884,47 +1463,9 @@ class PlayerViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            userPreferencesRepository.isFoldersPlaylistViewFlow.collect { isPlaylistView ->
-                folderNavigationStateHolder.setFoldersPlaylistViewState(
-                    isPlaylistView = isPlaylistView,
-                    updateUiState = { mutation -> _playerUiState.update(mutation) }
-                )
-            }
-        }
-
-        viewModelScope.launch {
-            userPreferencesRepository.foldersSourceFlow.collect { preferredSource ->
-                val resolved = resolveFolderSourceState(preferredSource)
-                if (resolved.source != preferredSource) {
-                    userPreferencesRepository.setFoldersSource(resolved.source)
-                }
-
-                _playerUiState.update { currentState ->
-                    val sourceChanged = currentState.folderSource != resolved.source ||
-                            currentState.folderSourceRootPath != resolved.rootPath
-                    currentState.copy(
-                        folderSource = resolved.source,
-                        folderSourceRootPath = resolved.rootPath,
-                        isSdCardAvailable = resolved.isSdCardAvailable,
-                        currentFolderPath = if (sourceChanged) null else currentState.currentFolderPath,
-                        currentFolder = if (sourceChanged) null else currentState.currentFolder
-                    )
-                }
-            }
-        }
-
-        viewModelScope.launch {
-            combine(
-                userPreferencesRepository.folderBackGestureNavigationFlow,
-                userPreferencesRepository.isAlbumsListViewFlow,
-            ) { gestureNav, albumsList ->
-                Pair(gestureNav, albumsList)
-            }.collect { (gestureNav, albumsList) ->
+            userPreferencesRepository.isAlbumsListViewFlow.collect { albumsList ->
                 _playerUiState.update {
-                    it.copy(
-                        folderBackGestureNavigationEnabled = gestureNav,
-                        isAlbumsListView = albumsList,
-                    )
+                    it.copy(isAlbumsListView = albumsList)
                 }
             }
         }
@@ -1970,11 +1511,6 @@ class PlayerViewModel @Inject constructor(
                 SortOption.ARTISTS,
                 SortOption.ArtistNameAZ
             )
-            val initialFolderSort = resolveSortOption(
-                userPreferencesRepository.foldersSortOptionFlow.first(),
-                SortOption.FOLDERS,
-                SortOption.FolderNameAZ
-            )
             val initialLikedSort = resolveSortOption(
                 userPreferencesRepository.likedSongsSortOptionFlow.first(),
                 SortOption.LIKED,
@@ -1986,7 +1522,6 @@ class PlayerViewModel @Inject constructor(
                     currentSongSortOption = initialSongSort,
                     currentAlbumSortOption = initialAlbumSort,
                     currentArtistSortOption = initialArtistSort,
-                    currentFolderSortOption = initialFolderSort,
                     currentFavoriteSortOption = initialLikedSort
                 )
             }
@@ -1996,7 +1531,6 @@ class PlayerViewModel @Inject constructor(
             sortSongs(initialSongSort, persist = false)
             sortAlbums(initialAlbumSort, persist = false)
             sortArtists(initialArtistSort, persist = false)
-            sortFolders(initialFolderSort, persist = false)
             sortFavoriteSongs(initialLikedSort, persist = false)
         }
 
@@ -2149,18 +1683,16 @@ class PlayerViewModel @Inject constructor(
         // Initialize LibraryStateHolder
         libraryStateHolder.initialize(viewModelScope)
 
-        // Sync library folders and loading states
+        // Sync library loading states
         viewModelScope.launch {
             combine(
-                libraryStateHolder.musicFolders,
                 libraryStateHolder.isLoadingLibrary,
                 libraryStateHolder.isLoadingCategories,
-            ) { folders, loadingLibrary, loadingCategories ->
-                Triple(folders, loadingLibrary, loadingCategories)
-            }.collect { (folders, loadingLibrary, loadingCategories) ->
+            ) { loadingLibrary, loadingCategories ->
+                Pair(loadingLibrary, loadingCategories)
+            }.collect { (loadingLibrary, loadingCategories) ->
                 _playerUiState.update {
                     it.copy(
-                        musicFolders = folders,
                         isLoadingInitialSongs = loadingLibrary,
                         isLoadingLibraryCategories = loadingCategories,
                     )
@@ -2174,17 +1706,15 @@ class PlayerViewModel @Inject constructor(
                 libraryStateHolder.currentSongSortOption,
                 libraryStateHolder.currentAlbumSortOption,
                 libraryStateHolder.currentArtistSortOption,
-                libraryStateHolder.currentFolderSortOption,
                 libraryStateHolder.currentFavoriteSortOption,
-            ) { songSort, albumSort, artistSort, folderSort, favoriteSort ->
-                SortOptionsSnapshot(songSort, albumSort, artistSort, folderSort, favoriteSort)
+            ) { songSort, albumSort, artistSort, favoriteSort ->
+                SortOptionsSnapshot(songSort, albumSort, artistSort, favoriteSort)
             }.collect { snapshot ->
                 _playerUiState.update {
                     it.copy(
                         currentSongSortOption = snapshot.songSort,
                         currentAlbumSortOption = snapshot.albumSort,
                         currentArtistSortOption = snapshot.artistSort,
-                        currentFolderSortOption = snapshot.folderSort,
                         currentFavoriteSortOption = snapshot.favoriteSort,
                     )
                 }
@@ -2306,7 +1836,6 @@ class PlayerViewModel @Inject constructor(
         libraryStateHolder.loadSongsFromRepository()
         libraryStateHolder.loadAlbumsFromRepository()
         libraryStateHolder.loadArtistsFromRepository()
-        libraryStateHolder.loadFoldersFromRepository()
     }
 
     private fun resetAndLoadInitialData(caller: String = "Unknown") {
@@ -2323,7 +1852,6 @@ class PlayerViewModel @Inject constructor(
     fun loadSongsIfNeeded() = libraryStateHolder.loadSongsIfNeeded()
     fun loadAlbumsIfNeeded() = libraryStateHolder.loadAlbumsIfNeeded()
     fun loadArtistsIfNeeded() = libraryStateHolder.loadArtistsIfNeeded()
-    fun loadFoldersFromRepository() = libraryStateHolder.loadFoldersFromRepository()
 
     fun setStorageFilter(filter: com.theveloper.pixelplay.data.model.StorageFilter) {
         libraryStateHolder.setStorageFilter(filter)
@@ -2770,54 +2298,6 @@ class PlayerViewModel @Inject constructor(
      * Delegated to [SongRemovalStateHolder]; the ViewModel only supplies the
      * UI-state collaborators via [songRemovalCallbacks].
      */
-    fun deleteSelectedFromDevice(activity: Activity, songs: List<Song>, onComplete: () -> Unit) {
-        songRemovalStateHolder.deleteSelectedFromDevice(activity, songs, onComplete, songRemovalCallbacks())
-    }
-
-    fun deleteFromDevice(activity: Activity, song: Song, onResult: (Boolean) -> Unit = {}) {
-        songRemovalStateHolder.deleteFromDevice(activity, song, onResult, songRemovalCallbacks())
-    }
-
-    /** Called from the UI after the user approves or denies the MediaStore delete request. */
-    fun onDeletePermissionResult(granted: Boolean) {
-        songRemovalStateHolder.onDeletePermissionResult(granted, songRemovalCallbacks())
-    }
-
-    suspend fun removeSong(song: Song) {
-        toggleFavoriteSpecificSong(song, true)
-        playbackStateHolder.setCurrentPosition(0L)
-        _playerUiState.update { currentState ->
-            currentState.copy(
-                currentPlaybackQueue = currentState.currentPlaybackQueue.removeSongById(song.id),
-                currentQueueSourceName = ""
-            )
-        }
-        _isSheetVisible.value = false
-        songRemovalStateHolder.removeSongFromLibrary(song)
-    }
-
-    private fun removeFromMediaControllerQueue(songId: String) {
-        val controller = mediaController ?: return
-
-        try {
-            // Get the current timeline and media item count
-            val timeline = controller.currentTimeline
-            val mediaItemCount = timeline.windowCount
-
-            // Find the media item to remove by iterating through windows
-            for (i in 0 until mediaItemCount) {
-                val window = timeline.getWindow(i, Timeline.Window())
-                if (window.mediaItem.mediaId == songId) {
-                    // Remove the media item by index
-                    controller.removeMediaItem(i)
-                    break
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("MediaController", "Error removing from queue: ${e.message}")
-        }
-    }
-
     /**
      * Signal from the player sheet whether the slider-bearing UI is currently
      * rendered. Drives the position-ticker's resolution (250 ms vs 1 s).
@@ -2875,62 +2355,6 @@ class PlayerViewModel @Inject constructor(
 
     fun sortFavoriteSongs(sortOption: SortOption, persist: Boolean = true) {
         libraryStateHolder.sortFavoriteSongs(sortOption, persist)
-    }
-
-    fun sortFolders(sortOption: SortOption, persist: Boolean = true) {
-        libraryStateHolder.sortFolders(sortOption, persist)
-    }
-
-    fun setFoldersPlaylistView(isPlaylistView: Boolean) {
-        viewModelScope.launch {
-            userPreferencesRepository.setFoldersPlaylistView(isPlaylistView)
-            folderNavigationStateHolder.setFoldersPlaylistViewState(
-                isPlaylistView = isPlaylistView,
-                updateUiState = { mutation -> _playerUiState.update(mutation) }
-            )
-        }
-    }
-
-    fun setFoldersSource(source: FolderSource) {
-        if (!ENABLE_FOLDERS_SOURCE_SWITCHING) return
-        viewModelScope.launch {
-            userPreferencesRepository.setFoldersSource(source)
-        }
-    }
-
-    fun navigateToFolder(path: String) {
-        folderNavigationStateHolder.navigateToFolder(
-            path = path,
-            getUiState = { _playerUiState.value },
-            updateUiState = { mutation -> _playerUiState.update(mutation) },
-            onFolderChanged = { folderPath ->
-                folderNavigationStateHolder.hydrateCurrentFolderSongsIfNeeded(
-                    scope = viewModelScope,
-                    folderPath = folderPath,
-                    getUiState = { _playerUiState.value },
-                    updateUiState = { mutation -> _playerUiState.update(mutation) },
-                    requiresHydration = { song -> playbackDispatchStateHolder.songRequiresHydration(song) },
-                    hydrateSongs = { songs -> playbackDispatchStateHolder.hydrateSongsIfNeeded(songs) }
-                )
-            }
-        )
-    }
-
-    fun navigateBackFolder() {
-        folderNavigationStateHolder.navigateBackFolder(
-            getUiState = { _playerUiState.value },
-            updateUiState = { mutation -> _playerUiState.update(mutation) },
-            onFolderChanged = { folderPath ->
-                folderNavigationStateHolder.hydrateCurrentFolderSongsIfNeeded(
-                    scope = viewModelScope,
-                    folderPath = folderPath,
-                    getUiState = { _playerUiState.value },
-                    updateUiState = { mutation -> _playerUiState.update(mutation) },
-                    requiresHydration = { song -> playbackDispatchStateHolder.songRequiresHydration(song) },
-                    hydrateSongs = { songs -> playbackDispatchStateHolder.hydrateSongsIfNeeded(songs) }
-                )
-            }
-        )
     }
 
     fun setAlbumsListView(isList: Boolean) {
@@ -3181,8 +2605,7 @@ class PlayerViewModel @Inject constructor(
             scope = viewModelScope,
             loadSongs = { loadSongsIfNeeded() },
             loadAlbums = { loadAlbumsIfNeeded() },
-            loadArtists = { loadArtistsIfNeeded() },
-            loadFolders = { loadFoldersFromRepository() }
+            loadArtists = { loadArtistsIfNeeded() }
         )
     }
 

@@ -12,13 +12,13 @@
     <string name="setup_beta_symbol">β</string>
     <string name="setup_beta_label">Beta</string>
     <string name="setup_intro_body">Sizin için her şeyi ayarlayalım.</string>
-    <string name="setup_permission_media_title">Medya İzni</string>
-    <string name="setup_permission_media_description">PixelPlayer\'ın müzik kitaplığınızı oluşturabilmesi için ses dosyalarınıza erişmesi gerekir.</string>
     <string name="setup_permission_granted">İzin Verildi</string>
-    <string name="setup_grant_media_permission">Medya İzni Ver</string>
     <string name="setup_permission_notifications_title">Bildirimler</string>
     <string name="setup_permission_notifications_description">Müziğinizi kilit ekranından ve bildirim panelinden kontrol edebilmek için bildirimleri etkinleştirin.</string>
     <string name="setup_enable_notifications">Bildirimleri Etkinleştir</string>
+    <string name="setup_gateway_signin_title">Hesabınızı bağlayın</string>
+    <string name="setup_gateway_signin_subtitle">Kitaplığınızı, çalma listelerinizi ve müzik zevkinizi senkronize etmek için giriş yapın.</string>
+    <string name="setup_gateway_signin_connected">Bağlandınız</string>
     <string name="setup_backup_have_title">Yedeğiniz var mı?</string>
     <string name="setup_backup_have_description">Zaten bir PixelPlayer yedeğiniz varsa, şimdi geri yükleyin ve bu cihazdaki kalan kurulum adımlarının çoğunu atlayın.</string>
     <string name="setup_import_backup">Yedeği içe aktar</string>
@@ -34,10 +34,6 @@
     <string name="setup_backup_unknown_version">Bilinmeyen sürüm</string>
     <string name="setup_restore_selected">Seçilenleri geri yükle</string>
     <string name="setup_restoring">Geri yükleniyor</string>
-    <string name="setup_excluded_folders_title">Hariç tutulan klasörler</string>
-    <string name="setup_excluded_folders_description">Varsayılan olarak tüm klasörler taranır. Kitaplığınızı oluştururken yok sayılmasını istediğiniz konumları seçin.</string>
-    <string name="setup_choose_folders_ignore">Yok sayılacak klasörleri seçin</string>
-    <string name="setup_toast_grant_storage_first">Önce depolama izinlerini verin</string>
     <string name="setup_theme_title">Uygulama Teması</string>
     <string name="setup_theme_subtitle">Kitaplığınızı keşfetmeye başlamadan önce istediğiniz görünümü seçin.</string>
     <string name="setup_theme_dark_title">Koyu</string>

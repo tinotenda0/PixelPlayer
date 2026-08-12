@@ -276,7 +276,6 @@ fun OfflineDownloadsSurface(
                 onAddToQueue = { playerViewModel.addSongToQueue(song) },
                 onAddNextToQueue = { playerViewModel.addSongNextToQueue(song) },
                 onAddToPlayList = { showPlaylistBottomSheet = true },
-                onDeleteFromDevice = playerViewModel::deleteFromDevice,
                 onNavigateToAlbum = {
                     navController.navigateSafely(Screen.AlbumDetail.createRoute(song.albumId))
                     showSongInfoBottomSheet = false
@@ -303,8 +302,7 @@ fun OfflineDownloadsSurface(
                         newLyrics, newTrackNumber, newDiscNumber, replayGainTrackGainDb,
                         replayGainAlbumGainDb, coverArtUpdate
                     )
-                },
-                removeFromListTrigger = {}
+                }
             )
 
             if (showPlaylistBottomSheet) {

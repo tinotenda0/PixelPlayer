@@ -268,7 +268,6 @@ fun DownloadsScreen(
                 onAddToQueue = { playerViewModel.addSongToQueue(song) },
                 onAddNextToQueue = { playerViewModel.addSongNextToQueue(song) },
                 onAddToPlayList = { showPlaylistBottomSheet = true },
-                onDeleteFromDevice = playerViewModel::deleteFromDevice,
                 onNavigateToAlbum = {
                     navController.navigateSafely(Screen.AlbumDetail.createRoute(song.albumId))
                     showSongInfoBottomSheet = false
@@ -305,8 +304,7 @@ fun DownloadsScreen(
                         replayGainAlbumGainDb,
                         coverArtUpdate
                     )
-                },
-                removeFromListTrigger = {}
+                }
             )
 
             if (showPlaylistBottomSheet) {

@@ -36,10 +36,10 @@ class MediaStorePermissionHelperTest {
     @Test
     fun canUseSongIdForMediaStoreRequest_rejectsCloudProviderUris() {
         assertThat(
-            MediaStorePermissionHelper.canUseSongIdForMediaStoreRequest("netease://9317")
+            MediaStorePermissionHelper.canUseSongIdForMediaStoreRequest("navidrome://9317")
         ).isFalse()
         assertThat(
-            MediaStorePermissionHelper.canUseSongIdForMediaStoreRequest("telegram://123/456")
+            MediaStorePermissionHelper.canUseSongIdForMediaStoreRequest("cloudservice://123/456")
         ).isFalse()
     }
 

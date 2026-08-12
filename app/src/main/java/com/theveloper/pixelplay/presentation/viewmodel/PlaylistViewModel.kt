@@ -32,7 +32,6 @@ import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.os.Build
 import android.provider.MediaStore
-import com.theveloper.pixelplay.data.preferences.TelegramTopicDisplayMode
 import com.theveloper.pixelplay.data.ai.AiPlaylistGenerator
 import com.theveloper.pixelplay.R
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -45,8 +44,6 @@ import javax.inject.Inject
 
 data class PlaylistUiState(
     val playlists: List<Playlist> = emptyList(),
-    val showTelegramCloudPlaylists: Boolean = true,
-    val telegramTopicDisplayMode: TelegramTopicDisplayMode = TelegramTopicDisplayMode.CHANNELS_AND_TOPICS,
     val currentPlaylistSongs: List<Song> = emptyList(),
     val currentPlaylistDetails: Playlist? = null,
     val isLoading: Boolean = false,
@@ -89,7 +86,6 @@ class PlaylistViewModel @Inject constructor(
     val playlistCreationEvent: SharedFlow<Boolean> = _playlistCreationEvent.asSharedFlow()
 
     companion object {
-        const val FOLDER_PLAYLIST_PREFIX = "folder_playlist:"
         private const val MANUAL_ORDER_MODE = "manual"
         private const val SMART_PLAYLIST_MAX_ITEMS = 100
 
@@ -110,8 +106,6 @@ class PlaylistViewModel @Inject constructor(
 
     init {
         loadPlaylistsAndInitialSortOption()
-        observeTelegramCloudPlaylistVisibility()
-        observeTelegramTopicDisplayMode()
         observePlaylistOrderModes()
     }
 
@@ -188,29 +182,6 @@ class PlaylistViewModel @Inject constructor(
         }
     }
 
-    private fun observeTelegramCloudPlaylistVisibility() {
-        viewModelScope.launch {
-            playlistPreferencesRepository.showTelegramCloudPlaylistsFlow.collect { show ->
-                _uiState.update { it.copy(showTelegramCloudPlaylists = show) }
-            }
-        }
-    }
-
-    private fun observeTelegramTopicDisplayMode() {
-        viewModelScope.launch {
-            playlistPreferencesRepository.telegramTopicDisplayModeFlow.collect { mode ->
-                _uiState.update { it.copy(telegramTopicDisplayMode = mode) }
-            }
-        }
-    }
-
-    fun setTelegramTopicDisplayMode(mode: TelegramTopicDisplayMode) { // Simplified
-        _uiState.update { it.copy(telegramTopicDisplayMode = mode) }
-        viewModelScope.launch {
-            playlistPreferencesRepository.setTelegramTopicDisplayMode(mode)
-        }
-    }
-
     fun loadPlaylistDetails(playlistId: String) {
         viewModelScope.launch {
             val shouldKeepExisting = _uiState.value.currentPlaylistDetails?.id == playlistId
@@ -223,47 +194,7 @@ class PlaylistViewModel @Inject constructor(
                 )
             } // Resetear detalles y canciones
             try {
-                if (isFolderPlaylistId(playlistId)) {
-                    val folderPath = Uri.decode(playlistId.removePrefix(FOLDER_PLAYLIST_PREFIX))
-                    val folders = musicRepository.getMusicFolders().first()
-                    val folder = findFolder(folderPath, folders)
-
-                    if (folder != null) {
-                        val songsList = withContext(Dispatchers.IO) {
-                            val rawSongs = folder.collectAllSongs()
-                            if (rawSongs.any { it.contentUriString.isBlank() }) {
-                                musicRepository.getSongsByIds(rawSongs.map { it.id }).first()
-                            } else {
-                                rawSongs
-                            }
-                        }
-                        val pseudoPlaylist = Playlist(
-                            id = playlistId,
-                            name = folder.name,
-                            songIds = songsList.map { it.id }
-                        )
-
-                        _uiState.update {
-                            it.copy(
-                                currentPlaylistDetails = pseudoPlaylist,
-                                currentPlaylistSongs = applySortToSongs(songsList, it.currentPlaylistSongsSortOption),
-                                playlistSongsOrderMode = PlaylistSongsOrderMode.Sorted(it.currentPlaylistSongsSortOption),
-                                isLoading = false,
-                                playlistNotFound = false
-                            )
-                        }
-                    } else {
-                        Log.w("PlaylistVM", "Folder playlist with path $folderPath not found.")
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                playlistNotFound = true,
-                                currentPlaylistDetails = null,
-                                currentPlaylistSongs = emptyList()
-                            )
-                        }
-                    }
-                } else if (isGatewayPlaylistId(playlistId)) {
+                if (isGatewayPlaylistId(playlistId)) {
                     // Gateway-hosted playlist (custom mix, YT Music playlist, curated row). These
                     // live on the server, not in local prefs, and their tracks are gateway ids the
                     // local song table has never seen — so both the playlist and its songs have to
@@ -595,7 +526,6 @@ class PlaylistViewModel @Inject constructor(
     }
 
     fun deletePlaylist(playlistId: String) {
-        if (isFolderPlaylistId(playlistId)) return
         viewModelScope.launch {
             playlistPreferencesRepository.deletePlaylist(playlistId)
         }
@@ -631,7 +561,6 @@ class PlaylistViewModel @Inject constructor(
     }
 
     fun renamePlaylist(playlistId: String, newName: String) {
-        if (isFolderPlaylistId(playlistId)) return
         viewModelScope.launch {
             playlistPreferencesRepository.renamePlaylist(playlistId, newName)
             if (_uiState.value.currentPlaylistDetails?.id == playlistId) {
@@ -661,7 +590,6 @@ class PlaylistViewModel @Inject constructor(
         coverShapeDetail3: Float?,
         coverShapeDetail4: Float?
     ) {
-        if (isFolderPlaylistId(playlistId)) return
         val currentPlaylist = _uiState.value.currentPlaylistDetails ?: return
         if (currentPlaylist.id != playlistId) return
 
@@ -723,7 +651,6 @@ class PlaylistViewModel @Inject constructor(
     }
 
     fun addSongsToPlaylist(playlistId: String, songIdsToAdd: List<String>) {
-        if (isFolderPlaylistId(playlistId)) return
         viewModelScope.launch {
             playlistPreferencesRepository.addSongsToPlaylist(playlistId, songIdsToAdd)
             if (_uiState.value.currentPlaylistDetails?.id == playlistId) {
@@ -758,7 +685,6 @@ class PlaylistViewModel @Inject constructor(
     }
 
     fun removeSongFromPlaylist(playlistId: String, songIdToRemove: String) {
-        if (isFolderPlaylistId(playlistId)) return
         viewModelScope.launch {
             playlistPreferencesRepository.removeSongFromPlaylist(playlistId, songIdToRemove)
             if (_uiState.value.currentPlaylistDetails?.id == playlistId) {
@@ -770,7 +696,6 @@ class PlaylistViewModel @Inject constructor(
     }
 
     fun reorderSongsInPlaylist(playlistId: String, fromIndex: Int, toIndex: Int) {
-        if (isFolderPlaylistId(playlistId)) return
         viewModelScope.launch {
             val currentSongs = _uiState.value.currentPlaylistSongs.toMutableList()
             if (fromIndex in currentSongs.indices && toIndex in currentSongs.indices) {
@@ -809,15 +734,6 @@ class PlaylistViewModel @Inject constructor(
 
         viewModelScope.launch {
             playlistPreferencesRepository.setPlaylistsSortOption(sortOption.storageKey)
-        }
-    }
-
-    fun setShowTelegramCloudPlaylists(show: Boolean) {
-        if (_uiState.value.showTelegramCloudPlaylists == show) return
-
-        _uiState.update { it.copy(showTelegramCloudPlaylists = show) }
-        viewModelScope.launch {
-            playlistPreferencesRepository.setShowTelegramCloudPlaylists(show)
         }
     }
 
@@ -870,9 +786,6 @@ class PlaylistViewModel @Inject constructor(
         // For now, we keep it in memory as per request focus.
     }
 
-    private fun isFolderPlaylistId(playlistId: String): Boolean =
-        playlistId.startsWith(FOLDER_PLAYLIST_PREFIX)
-
     /**
      * Playlists that live on the XPS gateway rather than in local prefs: `pl-` (user-created,
      * including custom mixes), `ytmpl-` (a linked YouTube Music playlist) and `cur-ytm-`
@@ -882,25 +795,6 @@ class PlaylistViewModel @Inject constructor(
         playlistId.startsWith("pl-") ||
             playlistId.startsWith("ytmpl-") ||
             playlistId.startsWith("cur-ytm-")
-
-    private fun findFolder(
-        targetPath: String,
-        folders: List<com.theveloper.pixelplay.data.model.MusicFolder>
-    ): com.theveloper.pixelplay.data.model.MusicFolder? {
-        val queue: ArrayDeque<com.theveloper.pixelplay.data.model.MusicFolder> = ArrayDeque(folders)
-        while (queue.isNotEmpty()) {
-            val folder = queue.removeFirst()
-            if (folder.path == targetPath) {
-                return folder
-            }
-            folder.subFolders.forEach { queue.addLast(it) }
-        }
-        return null
-    }
-
-    private fun com.theveloper.pixelplay.data.model.MusicFolder.collectAllSongs(): List<Song> {
-        return songs + subFolders.flatMap { it.collectAllSongs() }
-    }
 
     private fun applySortToSongs(songs: List<Song>, sortOption: SortOption): List<Song> {
         return sortSongsList(songs, sortOption)
@@ -1062,9 +956,7 @@ class PlaylistViewModel @Inject constructor(
     fun deletePlaylistsInBatch(playlistIds: List<String>) {
         viewModelScope.launch {
             playlistIds.forEach { playlistId ->
-                if (!isFolderPlaylistId(playlistId)) {
-                    playlistPreferencesRepository.deletePlaylist(playlistId)
-                }
+                playlistPreferencesRepository.deletePlaylist(playlistId)
             }
         }
     }

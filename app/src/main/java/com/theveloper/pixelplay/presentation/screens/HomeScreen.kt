@@ -89,11 +89,8 @@ import com.theveloper.pixelplay.presentation.components.AlbumArtCollage
 import com.theveloper.pixelplay.presentation.components.BetaInfoBottomSheet
 import com.theveloper.pixelplay.presentation.components.Beta05CleanInstallDisclaimerDialog
 import com.theveloper.pixelplay.presentation.components.ChangelogBottomSheet
-import com.theveloper.pixelplay.presentation.netease.dashboard.NeteaseDashboardViewModel
-import com.theveloper.pixelplay.presentation.jellyfin.dashboard.JellyfinDashboardViewModel
-import com.theveloper.pixelplay.presentation.plex.dashboard.PlexDashboardViewModel
+import com.theveloper.pixelplay.presentation.navidrome.auth.NavidromeLoginActivity
 import com.theveloper.pixelplay.presentation.navidrome.dashboard.NavidromeDashboardViewModel
-import com.theveloper.pixelplay.presentation.qqmusic.dashboard.QqMusicDashboardViewModel
 import com.theveloper.pixelplay.presentation.components.CuratedSection
 import com.theveloper.pixelplay.presentation.components.DailyMixSection
 import com.theveloper.pixelplay.presentation.components.HomeGradientTopBar
@@ -109,8 +106,6 @@ import com.theveloper.pixelplay.presentation.model.mapRecentlyPlayedSongs
 import com.theveloper.pixelplay.presentation.components.subcomps.PlayingEqIcon
 import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
-import com.theveloper.pixelplay.presentation.components.StreamingProviderSheet
-import com.theveloper.pixelplay.presentation.telegram.auth.TelegramLoginActivity
 import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.SettingsViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.StatsViewModel
@@ -135,11 +130,7 @@ fun HomeScreen(
     paddingValuesParent: PaddingValues,
     playerViewModel: PlayerViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
-    neteaseViewModel: NeteaseDashboardViewModel = hiltViewModel(),
-    qqMusicViewModel: QqMusicDashboardViewModel = hiltViewModel(),
     navidromeViewModel: NavidromeDashboardViewModel = hiltViewModel(),
-    jellyfinViewModel: JellyfinDashboardViewModel = hiltViewModel(),
-    plexViewModel: PlexDashboardViewModel = hiltViewModel(),
     onOpenSidebar: () -> Unit
 ) {
     // Full-restrict offline: when there's no connection (or Offline mode is pinned on), bypass the
@@ -162,6 +153,7 @@ fun HomeScreen(
         (context as? android.app.Activity)?.intent?.getBooleanExtra("is_benchmark", false) ?: false
     }
     val statsViewModel: StatsViewModel = hiltViewModel()
+    val isNavidromeLoggedIn by navidromeViewModel.isLoggedIn.collectAsStateWithLifecycle()
     val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val dailyMixSongs by playerViewModel.dailyMixSongs.collectAsStateWithLifecycle()
     val curatedHomeRows by playerViewModel.curatedHomeRows.collectAsStateWithLifecycle()
@@ -271,7 +263,6 @@ fun HomeScreen(
     var showOptionsBottomSheet by remember { mutableStateOf(false) }
     var showChangelogBottomSheet by remember { mutableStateOf(false) }
     var showBetaInfoBottomSheet by remember { mutableStateOf(false) }
-    var showStreamingProviderSheet by remember { mutableStateOf(false) }
     var cleanInstallDisclaimerDismissedThisSession by rememberSaveable { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
     val betaSheetState = rememberModalBottomSheetState()
@@ -343,8 +334,12 @@ fun HomeScreen(
                     onBetaClick = {
                         showBetaInfoBottomSheet = true
                     },
-                    onTelegramClick = {
-                         showStreamingProviderSheet = true
+                    onCloudStreamingClick = {
+                        if (isNavidromeLoggedIn) {
+                            navController.navigateSafely(Screen.NavidromeDashboard.route)
+                        } else {
+                            runCatching { context.startActivity(Intent(context, NavidromeLoginActivity::class.java)) }
+                        }
                     },
                     onMenuClick = {
                         // onOpenSidebar() // Disabled
@@ -596,36 +591,6 @@ fun HomeScreen(
         ) {
             BetaInfoBottomSheet()
         }
-    }
-    if (showStreamingProviderSheet) {
-        val isNeteaseLoggedIn by neteaseViewModel.isLoggedIn.collectAsStateWithLifecycle()
-        val isQqMusicLoggedIn by qqMusicViewModel.isLoggedIn.collectAsStateWithLifecycle()
-        val isNavidromeLoggedIn by navidromeViewModel.isLoggedIn.collectAsStateWithLifecycle()
-        val isJellyfinLoggedIn by jellyfinViewModel.isLoggedIn.collectAsStateWithLifecycle()
-        val isPlexLoggedIn by plexViewModel.isLoggedIn.collectAsStateWithLifecycle()
-        StreamingProviderSheet(
-            onDismissRequest = { showStreamingProviderSheet = false },
-            isNeteaseLoggedIn = isNeteaseLoggedIn,
-            onNavigateToNeteaseDashboard = {
-                navController.navigateSafely(Screen.NeteaseDashboard.route)
-            },
-            isQqMusicLoggedIn = isQqMusicLoggedIn,
-            onNavigateToQqMusicDashboard = {
-                navController.navigateSafely(Screen.QqMusicDashboard.route)
-            },
-            isNavidromeLoggedIn = isNavidromeLoggedIn,
-            onNavigateToNavidromeDashboard = {
-                navController.navigateSafely(Screen.NavidromeDashboard.route)
-            },
-            isJellyfinLoggedIn = isJellyfinLoggedIn,
-            onNavigateToJellyfinDashboard = {
-                navController.navigateSafely(Screen.JellyfinDashboard.route)
-            },
-            isPlexLoggedIn = isPlexLoggedIn,
-            onNavigateToPlexDashboard = {
-                navController.navigateSafely(Screen.PlexDashboard.route)
-            }
-        )
     }
     if (shouldShowCleanInstallDisclaimer) {
         Beta05CleanInstallDisclaimerDialog(

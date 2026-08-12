@@ -15,7 +15,6 @@ import com.theveloper.pixelplay.data.media.SongMetadataEditor
 import com.theveloper.pixelplay.data.model.Lyrics
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.repository.MusicRepository
-import com.theveloper.pixelplay.utils.FileDeletionUtils
 import com.theveloper.pixelplay.utils.LyricsUtils
 import com.theveloper.pixelplay.utils.MediaItemBuilder
 import com.theveloper.pixelplay.utils.MediaStorePermissionHelper
@@ -48,38 +47,6 @@ class MetadataEditCallbacks(
     val reloadLyricsForCurrentSong: () -> Unit,
 )
 
-private data class PendingMetadataEdit(
-    val song: Song,
-    val title: String,
-    val artist: String,
-    val album: String,
-    val albumArtist: String,
-    val composer: String,
-    val genre: String,
-    val lyrics: String,
-    val trackNumber: Int,
-    val discNumber: Int?,
-    val replayGainTrackGainDb: String?,
-    val replayGainAlbumGainDb: String?,
-    val coverArtUpdate: CoverArtUpdate?
-)
-
-private data class PendingBatchMetadataEdit(
-    val songs: List<Song>,
-    val title: String?,
-    val artist: String?,
-    val album: String?,
-    val albumArtist: String?,
-    val composer: String?,
-    val genre: String?,
-    val lyrics: String?,
-    val trackNumber: Int?,
-    val discNumber: Int?,
-    val replayGainTrackGainDb: String?,
-    val replayGainAlbumGainDb: String?,
-    val coverArtUpdate: CoverArtUpdate?
-)
-
 private data class PendingLyricsSave(
     val song: Song,
     val lyrics: Lyrics,
@@ -106,11 +73,9 @@ class MetadataEditStateHolder @Inject constructor(
     )
     val writePermissionRequest: SharedFlow<IntentSender> = _writePermissionRequest.asSharedFlow()
 
-    // Edits parked while waiting for the user's MediaStore write-permission decision.
-    private var pendingMetadataEdit: PendingMetadataEdit? = null
-    private var pendingBatchMetadataEdit: PendingBatchMetadataEdit? = null
+    // Lyrics saves parked while waiting for the user's MediaStore write-permission decision
+    // (only reachable when the .lrc sidecar's directory itself isn't directly writable).
     private var pendingLyricsSave: PendingLyricsSave? = null
-    private var pendingBatchGenreEdit: Pair<List<Song>, String>? = null
 
     data class MetadataEditResult(
         val success: Boolean,
@@ -280,36 +245,6 @@ class MetadataEditStateHolder @Inject constructor(
         }
     }
 
-    suspend fun deleteSong(song: Song): Boolean = withContext(Dispatchers.IO) {
-        val fileInfo = FileDeletionUtils.getFileInfo(song.path)
-        if (!fileInfo.exists) {
-            true
-        } else if (fileInfo.canWrite) {
-            val success = FileDeletionUtils.deleteFile(context, song.path)
-            if (success) {
-                // Remove from DB happens in ViewModel call logic or should happen here?
-                // VM's deleteFromDevice calls removeSong -> toggleFavorite(false) -> updates lists.
-                // It does NOT explicitly call repository.deleteSong() because MediaStore/FileObserver handles it?
-                // Or maybe explicit deletion IS needed but VM logic (Line 3687) says "removeSong(song)".
-                // removeSong(3698) toggles favorites and updates _masterAllSongs. It implies memory update.
-                // FileDeletionUtils deletes the physical file. The MediaScanner should eventually pick it up, 
-                // but for immediate UI responsiveness, manual update is good.
-                // Also, MusicRepository.deleteById(id) exists.
-                // ViewModel did NOT call musicRepository.deleteById(). It relied on "removeSong" which is UI state only? 
-                // Wait, removeSong updates UI state. Does it update DB?
-                // Line 3698: toggleFavoriteSpecificSong(song, true)?? Wait.
-                
-                // Let's stick to returning success and letting ViewModel handle UI updates for now, 
-                // or if we want to be thorough, we call repository delete.
-                // But if ViewModel wasn't doing it, I won't add it to change behavior.
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    }
 
     private fun resolveSongIdForMetadataEdit(song: Song): Long? {
         song.id.toLongOrNull()?.let { return it }
@@ -349,33 +284,6 @@ class MetadataEditStateHolder @Inject constructor(
     ) {
         cb.scope.launch {
             Log.e("PlayerViewModel", "METADATA_EDIT_VM: Starting editSongMetadata via Holder")
-
-            // On Android 11+, request MediaStore write permission for local songs
-            val songId = song.id.toLongOrNull()
-            if (songId != null && songId > 0 && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                val intentSender = MediaStorePermissionHelper.createWriteRequestForSong(context, songId)
-                if (intentSender != null) {
-                    // Store pending edit and request permission from the UI
-                    pendingMetadataEdit = PendingMetadataEdit(
-                        song = song,
-                        title = newTitle,
-                        artist = newArtist,
-                        album = newAlbum,
-                        albumArtist = newAlbumArtist,
-                        composer = newComposer,
-                        genre = newGenre,
-                        lyrics = newLyrics,
-                        trackNumber = newTrackNumber,
-                        discNumber = newDiscNumber,
-                        replayGainTrackGainDb = newReplayGainTrackGainDb,
-                        replayGainAlbumGainDb = newReplayGainAlbumGainDb,
-                        coverArtUpdate = coverArtUpdate
-                    )
-                    _writePermissionRequest.emit(intentSender)
-                    return@launch
-                }
-            }
-
             performMetadataEdit(song, newTitle, newArtist, newAlbum, newAlbumArtist, newComposer, newGenre, newLyrics,
                 newTrackNumber, newDiscNumber, newReplayGainTrackGainDb, newReplayGainAlbumGainDb, coverArtUpdate, cb)
         }
@@ -398,50 +306,6 @@ class MetadataEditStateHolder @Inject constructor(
         cb: MetadataEditCallbacks,
     ) {
         cb.scope.launch {
-            // Check if we need MediaStore permission (Android 11+)
-            val localSongsNeedingPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                songs.mapNotNull { song ->
-                    song.id.toLongOrNull()?.takeIf { it > 0 }?.let { song to it }
-                }
-            } else {
-                emptyList()
-            }
-
-            // If we have local songs on Android 11+, request permission for batch edit
-            if (localSongsNeedingPermission.isNotEmpty()) {
-                val uris = localSongsNeedingPermission.mapNotNull { (_, songId) ->
-                    android.provider.MediaStore.Audio.Media.getContentUri(
-                        android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY,
-                        songId
-                    )
-                }
-
-                if (uris.isNotEmpty()) {
-                    val intentSender = MediaStorePermissionHelper.createWriteRequestIntentSender(context, uris)
-
-                    if (intentSender != null) {
-                        // Store pending batch edit
-                        pendingBatchMetadataEdit = PendingBatchMetadataEdit(
-                            songs = songs,
-                            title = title,
-                            artist = artist,
-                            album = album,
-                            albumArtist = albumArtist,
-                            composer = composer,
-                            genre = genre,
-                            lyrics = lyrics,
-                            trackNumber = trackNumber,
-                            discNumber = discNumber,
-                            replayGainTrackGainDb = replayGainTrackGainDb,
-                            replayGainAlbumGainDb = replayGainAlbumGainDb,
-                            coverArtUpdate = coverArtUpdate
-                        )
-                        _writePermissionRequest.emit(intentSender)
-                        return@launch
-                    }
-                }
-            }
-
             performBatchMetadataEdit(
                 songs, title, artist, album, albumArtist, composer, genre, lyrics,
                 trackNumber, discNumber, replayGainTrackGainDb, replayGainAlbumGainDb, coverArtUpdate, cb
@@ -453,23 +317,6 @@ class MetadataEditStateHolder @Inject constructor(
         if (songs.isEmpty()) return
 
         cb.scope.launch {
-            // On Android 11+, request write permission for all local songs upfront
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                val uris = songs.mapNotNull { song ->
-                    song.id.toLongOrNull()?.takeIf { it > 0 }?.let { id ->
-                        MediaStorePermissionHelper.getMediaStoreUri(context, id)
-                    }
-                }
-                if (uris.isNotEmpty()) {
-                    val intentSender = MediaStorePermissionHelper.createWriteRequestIntentSender(context, uris)
-                    if (intentSender != null) {
-                        pendingBatchGenreEdit = songs to newGenre
-                        _writePermissionRequest.emit(intentSender)
-                        return@launch
-                    }
-                }
-            }
-
             performBatchEditGenre(songs, newGenre, cb)
         }
     }
@@ -502,75 +349,14 @@ class MetadataEditStateHolder @Inject constructor(
 
     /** Called from the UI after the user approves or denies the MediaStore write permission. */
     fun onWritePermissionResult(granted: Boolean, cb: MetadataEditCallbacks) {
-        // Handle batch metadata edit
-        val batchMetadata = pendingBatchMetadataEdit
-        if (batchMetadata != null) {
-            pendingBatchMetadataEdit = null
-            if (!granted) {
-                cb.sendToast(context.getString(R.string.metadata_edit_permission_denied_edit_files))
-                return
-            }
-            cb.scope.launch {
-                performBatchMetadataEdit(
-                    batchMetadata.songs,
-                    batchMetadata.title,
-                    batchMetadata.artist,
-                    batchMetadata.album,
-                    batchMetadata.albumArtist,
-                    batchMetadata.composer,
-                    batchMetadata.genre,
-                    batchMetadata.lyrics,
-                    batchMetadata.trackNumber,
-                    batchMetadata.discNumber,
-                    batchMetadata.replayGainTrackGainDb,
-                    batchMetadata.replayGainAlbumGainDb,
-                    batchMetadata.coverArtUpdate,
-                    cb
-                )
-            }
-            return
-        }
-
-        // Handle batch genre edit
-        val batchGenre = pendingBatchGenreEdit
-        if (batchGenre != null) {
-            pendingBatchGenreEdit = null
-            if (!granted) {
-                cb.sendToast(context.getString(R.string.metadata_edit_permission_denied_edit_files))
-                return
-            }
-            cb.scope.launch { performBatchEditGenre(batchGenre.first, batchGenre.second, cb) }
-            return
-        }
-
         // Handle lyrics save retry
-        val pendingLyrics = pendingLyricsSave
-        if (pendingLyrics != null) {
-            pendingLyricsSave = null
-            if (!granted) {
-                cb.sendToast(context.getString(R.string.metadata_edit_permission_denied_save_lyrics))
-                return
-            }
-            performLyricsSave(pendingLyrics.song, pendingLyrics.lyrics, pendingLyrics.preferSynced, cb)
-            return
-        }
-
-        // Handle single metadata edit
-        val pending = pendingMetadataEdit ?: return
-        pendingMetadataEdit = null
+        val pendingLyrics = pendingLyricsSave ?: return
+        pendingLyricsSave = null
         if (!granted) {
-            cb.sendToast(context.getString(R.string.metadata_edit_permission_denied_edit_this_file))
+            cb.sendToast(context.getString(R.string.metadata_edit_permission_denied_save_lyrics))
             return
         }
-        cb.scope.launch {
-            performMetadataEdit(
-                pending.song, pending.title, pending.artist, pending.album,
-                pending.albumArtist, pending.composer, pending.genre, pending.lyrics,
-                pending.trackNumber, pending.discNumber,
-                pending.replayGainTrackGainDb, pending.replayGainAlbumGainDb, pending.coverArtUpdate,
-                cb
-            )
-        }
+        performLyricsSave(pendingLyrics.song, pendingLyrics.lyrics, pendingLyrics.preferSynced, cb)
     }
 
     private fun performLyricsSave(song: Song, lyrics: Lyrics, preferSynced: Boolean, cb: MetadataEditCallbacks) {

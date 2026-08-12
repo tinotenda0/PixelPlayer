@@ -11,7 +11,6 @@
     <string name="library_tab_albums">Albums</string>
     <string name="library_tab_artists">Artists</string>
     <string name="library_tab_playlists">Playlists</string>
-    <string name="library_tab_folders">Folders</string>
     <string name="library_tab_liked">Liked</string>
 
     <!-- Library Toasts -->
@@ -30,24 +29,10 @@
 
     <!-- Library Multi-Selection & Folders -->
     <string name="library_toast_max_albums_selection">You can select up to %1$d albums</string>
-    <string name="library_folder_name_fallback">Folder</string>
-    <string name="library_cd_folder">Folder</string>
-
     <!-- Library Sort & View Bottom Sheet -->
     <string name="library_sort_by_title">Sort by</string>
-    <string name="library_sort_section_view">View</string>
-    <string name="library_sort_toggle_playlist_view">Playlist View</string>
     <string name="library_view_mode_grid">Grid</string>
     <string name="library_view_mode_list">List</string>
-    <string name="library_storage_internal">Internal</string>
-    <string name="library_storage_sd_card">SD Card</string>
-    <string name="library_storage_sd_card_unavailable">SD card is not available right now.</string>
-    <string name="library_sort_section_cloud">Cloud</string>
-    <string name="library_sort_toggle_telegram_channels">Telegram Cloud Channels</string>
-    <string name="library_telegram_topics_display_title">Topics Display</string>
-    <string name="library_telegram_topic_mode_channels">Channels</string>
-    <string name="library_telegram_topic_mode_topics">Topics</string>
-    <string name="library_telegram_topic_mode_both">Both</string>
     <string name="library_cloud_sources_heading">Cloud</string>
     <string name="library_cloud_only_label">Cloud Only</string>
 
@@ -98,7 +83,7 @@
     <string name="library_empty_songs_offline_title">No local songs found</string>
     <string name="library_empty_songs_offline_subtitle">Try another source filter or rescan your device library.</string>
     <string name="library_empty_songs_online_title">No cloud songs found</string>
-    <string name="library_empty_songs_online_subtitle">Sync Telegram or NetEase songs, or switch to local source.</string>
+    <string name="library_empty_songs_online_subtitle">Sync Navidrome songs, or switch to local source.</string>
     <string name="library_empty_albums_all_title">No albums available</string>
     <string name="library_empty_albums_all_subtitle">Albums will appear here as soon as your library has grouped tracks.</string>
     <string name="library_empty_albums_offline_title">No local albums found</string>
@@ -116,9 +101,7 @@
     <string name="library_empty_liked_offline_title">No liked local songs</string>
     <string name="library_empty_liked_offline_subtitle">Switch source filter or like songs from your device.</string>
     <string name="library_empty_liked_online_title">No liked cloud songs</string>
-    <string name="library_empty_liked_online_subtitle">Like Telegram or NetEase tracks to see them in this view.</string>
-    <string name="library_empty_folders_title">No folders found</string>
-    <string name="library_empty_folders_subtitle">Internal storage folders with music will appear here.</string>
+    <string name="library_empty_liked_online_subtitle">Like Navidrome tracks to see them in this view.</string>
     <string name="library_empty_playlists_title">No playlists yet</string>
     <string name="library_empty_playlists_subtitle">Create your first playlist to organize your library.</string>
 
@@ -145,7 +128,6 @@
     <string name="song_info_cd_queue_next">Play next in queue</string>
     <string name="song_info_cd_add_to_playlist">Add to playlist</string>
     <string name="song_info_action_delete">Delete</string>
-    <string name="song_info_action_delete_all">Delete all</string>
     <string name="song_info_checking_watch">Checking watch</string>
     <string name="song_info_transferring_percent">Transferring %1$d%%</string>
     <string name="song_info_transferring_to_watch">Transferring to watch</string>
@@ -442,8 +424,6 @@
     <string name="playlist_sheet_search_playlists_hint">Search for playlists…</string>
     <string name="playlist_sheet_song_added_to_playlists">Songs added to playlists</string>
     <string name="playlist_sheet_created_and_songs_added">Playlist created and songs added</string>
-    <string name="playlist_sheet_internal_storage">Internal Storage</string>
-
     <!-- SongPickerBottomSheet -->
     <string name="song_picker_title">Add songs</string>
     <string name="song_picker_cd_confirm_add_songs">Add selected songs</string>
@@ -525,25 +505,6 @@
     <string name="artist_detail_not_found">Could not find the artist</string>
 
     <!-- SongRemovalStateHolder -->
-    <string name="song_removal_cannot_delete_currently_playing">Cannot delete currently playing song</string>
-    <string name="song_removal_batch_delete_files_deleted_skipped_format">%1$d files deleted (%2$d skipped - playing)</string>
-    <string name="song_removal_batch_delete_partial_format">%1$d of %2$d files deleted</string>
-    <string name="song_removal_delete_files_failed">Failed to delete files</string>
-    <string name="song_removal_file_deleted">File deleted</string>
-    <string name="song_removal_delete_file_not_found">Can\'t delete the file or file not found</string>
-    <string name="song_removal_deletion_cancelled">Deletion cancelled</string>
-    <string name="song_removal_dialog_delete_song_title">Delete song?</string>
-    <string name="song_removal_dialog_delete_song_message">\"%1$s\" by %2$s\n\nThis song will be permanently deleted from your device and cannot be recovered.</string>
-    <string name="song_removal_delete_songs_permanent_message">These songs will be permanently deleted from your device and cannot be recovered.</string>
-    <plurals name="song_removal_n_files_deleted">
-        <item quantity="one">%d file deleted</item>
-        <item quantity="other">%d files deleted</item>
-    </plurals>
-    <plurals name="song_removal_delete_songs_confirmation_title">
-        <item quantity="one">Delete %d song?</item>
-        <item quantity="other">Delete %d songs?</item>
-    </plurals>
-
     <!-- MetadataEditStateHolder -->
     <string name="metadata_edit_updated_successfully">Metadata updated successfully</string>
     <string name="metadata_edit_updating_n_songs">Updating %1$d songs…</string>

@@ -59,8 +59,6 @@ taglib = "1.0.6"
 jaudiotagger = "3.0.1"
 vorbisjava = "0.8"
 datastore = "1.2.1"
-credentials = "1.6.0"
-googleid = "1.2.0"
 androidxTestCore = "1.7.0"
 junit5 = "6.1.0"
 kuromoji = "0.9.0"
@@ -118,10 +116,6 @@ aboutlibraries-compose-m3 = { module = "com.mikepenz:aboutlibraries-compose-m3",
 lifecycleprocess = { module = "androidx.lifecycle:lifecycle-process", version.ref = "lifecycleRuntimeKtx" }
 junitplatformlauncher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junitJupiter" }
 worktesting = { group = "androidx.work", name = "work-testing", version.ref = "workRuntimeKtx" }
-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
-googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
-tdlib = { module = "com.github.tdlibx:td", version = "1.8.56" }
 androidx-paging-common = { group = "androidx.paging", name = "paging-common", version = "3.5.0" }
 androidx-app = { module = "androidx.car.app:app", version.ref = "app" }
 androidx-app-projected = { module = "androidx.car.app:app-projected", version.ref = "app" }

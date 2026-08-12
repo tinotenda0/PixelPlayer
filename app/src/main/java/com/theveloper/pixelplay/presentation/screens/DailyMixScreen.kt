@@ -173,11 +173,6 @@ fun DailyMixScreen(
 
     if (showSongInfoSheet && selectedSongForInfo != null) {
         val song = selectedSongForInfo!!
-        val removeFromListTrigger = remember(dailyMixSongs) {
-            {
-                playerViewModel.removeFromDailyMix(song.id)
-            }
-        }
         SongInfoBottomSheet(
             song = song,
             isFavorite = favoriteSongIds.contains(song.id),
@@ -195,7 +190,6 @@ fun DailyMixScreen(
             onAddToPlayList = {
                 showPlaylistBottomSheet = true;
             },
-            onDeleteFromDevice = playerViewModel::deleteFromDevice,
             onNavigateToAlbum = {
                 // Assuming Screen object has a method to create a route
                 navController.navigateSafely(Screen.AlbumDetail.createRoute(song.albumId))
@@ -231,8 +225,7 @@ fun DailyMixScreen(
                     replayGainAlbumGainDb,
                     coverArtUpdate
                 )
-            },
-            removeFromListTrigger = removeFromListTrigger
+            }
         )
 
         if (showPlaylistBottomSheet) {

@@ -227,6 +227,8 @@
     <string name="stats_section_listening_habits">Listening habits</string>
     <string name="stats_empty_no_habits_title">No habits yet</string>
     <string name="stats_empty_no_habits_subtitle">We will surface your listening habits once we know you better.</string>
+    <string name="stats_empty_not_linked_title">Not connected</string>
+    <string name="stats_empty_not_linked_subtitle">Sign in with your Subsonic or Navidrome account to start building your listening stats.</string>
     <string name="stats_habit_total_sessions">Total sessions</string>
     <string name="stats_habit_avg_session">Avg session</string>
     <string name="stats_habit_longest_session">Longest session</string>

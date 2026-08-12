@@ -351,62 +351,6 @@ sealed class SortOption(
         direction = SortDirection.Ascending
     )
 
-    // Folder Sort Options
-    object FolderNameAZ : SortOption(
-        storageKey = "folder_name_az",
-        displayName = "Name (A-Z)",
-        displayNameRes = R.string.sort_display_name_az,
-        methodLabel = "Name",
-        methodLabelRes = R.string.sort_method_name,
-        methodKey = "folder_name",
-        direction = SortDirection.Ascending
-    )
-    object FolderNameZA : SortOption(
-        storageKey = "folder_name_za",
-        displayName = "Name (Z-A)",
-        displayNameRes = R.string.sort_display_name_za,
-        methodLabel = "Name",
-        methodLabelRes = R.string.sort_method_name,
-        methodKey = "folder_name",
-        direction = SortDirection.Descending
-    )
-    object FolderSongCountAsc : SortOption(
-        storageKey = "folder_song_count_asc",
-        displayName = "Fewest Songs",
-        displayNameRes = R.string.sort_display_fewest_songs,
-        methodLabel = "Song Count",
-        methodLabelRes = R.string.sort_method_song_count,
-        methodKey = "folder_song_count",
-        direction = SortDirection.Ascending
-    )
-    object FolderSongCountDesc : SortOption(
-        storageKey = "folder_song_count_desc",
-        displayName = "Most Songs",
-        displayNameRes = R.string.sort_display_most_songs,
-        methodLabel = "Song Count",
-        methodLabelRes = R.string.sort_method_song_count,
-        methodKey = "folder_song_count",
-        direction = SortDirection.Descending
-    )
-    object FolderSubdirCountAsc : SortOption(
-        storageKey = "folder_subdir_count_asc",
-        displayName = "Fewest Subfolders",
-        displayNameRes = R.string.sort_display_fewest_subfolders,
-        methodLabel = "Subfolder Count",
-        methodLabelRes = R.string.sort_method_subfolder_count,
-        methodKey = "folder_subdir_count",
-        direction = SortDirection.Ascending
-    )
-    object FolderSubdirCountDesc : SortOption(
-        storageKey = "folder_subdir_count_desc",
-        displayName = "Most Subfolders",
-        displayNameRes = R.string.sort_display_most_subfolders,
-        methodLabel = "Subfolder Count",
-        methodLabelRes = R.string.sort_method_subfolder_count,
-        methodKey = "folder_subdir_count",
-        direction = SortDirection.Descending
-    )
-
     val canFlipDirection: Boolean
         get() = direction != null && flipDirection().storageKey != storageKey
 
@@ -478,17 +422,6 @@ sealed class SortOption(
             )
         }
 
-        val FOLDERS: List<SortOption> by lazy {
-            listOf(
-                FolderNameAZ,
-                FolderNameZA,
-                FolderSongCountAsc,
-                FolderSongCountDesc,
-                FolderSubdirCountAsc,
-                FolderSubdirCountDesc
-            )
-        }
-
         val LIKED: List<SortOption> by lazy {
             listOf(
                 LikedSongTitleAZ,
@@ -503,7 +436,7 @@ sealed class SortOption(
         }
 
         private val ALL: List<SortOption> by lazy {
-            SONGS + ALBUMS + ARTISTS + PLAYLISTS + FOLDERS + LIKED
+            SONGS + ALBUMS + ARTISTS + PLAYLISTS + LIKED
         }
 
         private val defaultOptionByMethodKey: Map<String, SortOption> by lazy {

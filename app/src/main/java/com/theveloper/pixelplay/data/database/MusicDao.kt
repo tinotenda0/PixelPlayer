@@ -223,9 +223,6 @@ interface MusicDao {
     @Query("SELECT id FROM songs")
     suspend fun getAllSongIds(): List<Long>
 
-    @Query("SELECT id FROM songs WHERE source_type = 0")
-    suspend fun getAllMediaStoreSongIds(): List<Long>
-
     @Query("DELETE FROM songs WHERE id IN (:songIds)")
     suspend fun deleteSongsByIds(songIds: List<Long>)
 
@@ -238,43 +235,8 @@ interface MusicDao {
     @Query("DELETE FROM lyrics WHERE songId IN (:songIds)")
     suspend fun deleteLyricsBySongIds(songIds: List<Long>)
 
-    @Query("SELECT id FROM songs WHERE source_type = 1")
-    suspend fun getAllTelegramSongIds(): List<Long>
-
-    @Query("""
-        SELECT id FROM songs
-        WHERE source_type = 1
-        AND (telegram_chat_id = :chatId
-             OR content_uri_string LIKE 'telegram://' || :chatId || '/%')
-    """)
-    suspend fun getTelegramSongIdsByChatId(chatId: Long): List<Long>
-
-    @Query("""
-        SELECT s.id FROM songs s
-        INNER JOIN telegram_songs ts
-            ON ts.chat_id = s.telegram_chat_id
-            AND ('telegram://' || ts.chat_id || '/' || ts.message_id) = s.content_uri_string
-        WHERE ts.chat_id = :chatId AND ts.thread_id = :threadId
-    """)
-    suspend fun getTelegramSongIdsByTopicId(chatId: Long, threadId: Long): List<Long>
-
-    @Query("SELECT id FROM songs WHERE source_type = 2")
-    suspend fun getAllNeteaseSongIds(): List<Long>
-
-    @Query("SELECT id FROM songs WHERE source_type = 3")
-    suspend fun getAllGDriveSongIds(): List<Long>
-
-    @Query("SELECT id FROM songs WHERE source_type = 4")
-    suspend fun getAllQqMusicSongIds(): List<Long>
-
     @Query("SELECT id FROM songs WHERE source_type = 5")
     suspend fun getAllNavidromeSongIds(): List<Long>
-
-    @Query("SELECT id FROM songs WHERE source_type = 6")
-    suspend fun getAllJellyfinSongIds(): List<Long>
-
-    @Query("SELECT id FROM songs WHERE source_type = 7")
-    suspend fun getAllPlexSongIds(): List<Long>
 
     @Transaction
     suspend fun deleteSongsAndRelatedData(songIds: List<Long>) {
@@ -290,66 +252,10 @@ interface MusicDao {
     }
 
     @Transaction
-    suspend fun clearAllNeteaseSongs() {
-        val neteaseSongIds = getAllNeteaseSongIds()
-        if (neteaseSongIds.isEmpty()) return
-        deleteSongsAndRelatedData(neteaseSongIds)
-    }
-
-    @Transaction
-    suspend fun clearAllGDriveSongs() {
-        val gdriveSongIds = getAllGDriveSongIds()
-        if (gdriveSongIds.isEmpty()) return
-        deleteSongsAndRelatedData(gdriveSongIds)
-    }
-
-    @Transaction
-    suspend fun clearAllQqMusicSongs() {
-        val qqMusicSongIds = getAllQqMusicSongIds()
-        if (qqMusicSongIds.isEmpty()) return
-        deleteSongsAndRelatedData(qqMusicSongIds)
-    }
-
-    @Transaction
     suspend fun clearAllNavidromeSongs() {
         val navidromeSongIds = getAllNavidromeSongIds()
         if (navidromeSongIds.isEmpty()) return
         deleteSongsAndRelatedData(navidromeSongIds)
-    }
-
-    @Transaction
-    suspend fun clearAllJellyfinSongs() {
-        val jellyfinSongIds = getAllJellyfinSongIds()
-        if (jellyfinSongIds.isEmpty()) return
-        deleteSongsAndRelatedData(jellyfinSongIds)
-    }
-
-    @Transaction
-    suspend fun clearAllPlexSongs() {
-        val plexSongIds = getAllPlexSongIds()
-        if (plexSongIds.isEmpty()) return
-        deleteSongsAndRelatedData(plexSongIds)
-    }
-
-    @Transaction
-    suspend fun clearAllTelegramSongs() {
-        val telegramSongIds = getAllTelegramSongIds()
-        if (telegramSongIds.isEmpty()) return
-        deleteSongsAndRelatedData(telegramSongIds)
-    }
-
-    @Transaction
-    suspend fun clearTelegramSongsForChat(chatId: Long) {
-        val telegramSongIds = getTelegramSongIdsByChatId(chatId)
-        if (telegramSongIds.isEmpty()) return
-        deleteSongsAndRelatedData(telegramSongIds)
-    }
-
-    @Transaction
-    suspend fun clearTelegramSongsForTopic(chatId: Long, threadId: Long) {
-        val songIds = getTelegramSongIdsByTopicId(chatId, threadId)
-        if (songIds.isEmpty()) return
-        deleteSongsAndRelatedData(songIds)
     }
 
     /**
@@ -413,7 +319,7 @@ interface MusicDao {
     fun getDistinctParentDirectoriesFlow(): Flow<List<String>>
 
     // --- Song Queries ---
-    // Updated getSongs to include Telegram songs (negative IDs) regardless of directory filter
+    // Updated getSongs to include cloud songs (negative IDs) regardless of directory filter
     @Query("SELECT " + SONG_LIST_PROJECTION + """
         FROM songs
         WHERE (:applyDirectoryFilter = 0 OR id < 0 OR parent_directory_path IN (:allowedParentDirs))
@@ -429,8 +335,8 @@ interface MusicDao {
 
     /**
      * Resolves the unified-table song id for a given content URI. Used when the
-     * currently-playing song was loaded from a non-unified source (e.g. raw Telegram
-     * repository Songs whose ids are "chatId_messageId" strings) and we need the
+     * currently-playing song was loaded from a non-unified source (e.g. raw cloud
+     * repository Songs whose ids are non-numeric strings) and we need the
      * matching negative-Long id to position the song inside the library list.
      */
     @Query("SELECT id FROM songs WHERE content_uri_string = :contentUri LIMIT 1")
@@ -652,28 +558,6 @@ interface MusicDao {
         allowedParentDirs: List<String>,
         applyDirectoryFilter: Boolean
     ): Flow<List<SongEntity>>
-
-    @Query("""
-        SELECT id, parent_directory_path, title, album_art_uri_string FROM songs
-        WHERE (:applyDirectoryFilter = 0 OR id < 0 OR parent_directory_path IN (:allowedParentDirs))
-        AND (
-            :filterMode = 0
-            OR (
-                :filterMode = 1
-                AND source_type = 0
-            )
-            OR (
-                :filterMode = 2
-                AND source_type != 0
-            )
-        )
-        ORDER BY parent_directory_path ASC, title ASC
-    """)
-    fun getFolderSongs(
-        allowedParentDirs: List<String> = emptyList(),
-        applyDirectoryFilter: Boolean = false,
-        filterMode: Int
-    ): Flow<List<FolderSongRow>>
 
     @Query("""
         SELECT id FROM songs

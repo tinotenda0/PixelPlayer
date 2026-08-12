@@ -20,7 +20,7 @@
     <string name="settings_category_device_capabilities_title">设备性能</string>
     <string name="settings_category_device_capabilities_subtitle">音频规格、编解码器和解码器信息</string>
     <string name="settings_category_accounts_title">账户</string>
-    <string name="settings_category_accounts_subtitle">管理 Telegram、Google Drive、网易云音乐等服务</string>
+    <string name="settings_category_accounts_subtitle">管理 Navidrome 账户</string>
     <string name="settings_category_about_title">关于</string>
     <string name="settings_category_about_subtitle">应用信息、版本和鸣谢</string>
 
@@ -36,8 +36,6 @@
 
     <!-- Music Management category -->
     <string name="settings_library_structure_section">媒体库结构</string>
-    <string name="settings_excluded_directories_title">排除的目录</string>
-    <string name="settings_excluded_directories_subtitle">扫描媒体库时将跳过此处的文件夹。</string>
     <string name="settings_artists_title">艺术家</string>
     <string name="settings_artists_subtitle">多艺术家解析和整理选项。</string>
     <string name="settings_filtering_section">过滤</string>
@@ -131,21 +129,6 @@
     <string name="delimiter_label_space">空格</string>
 
     <!-- Word Delimiters -->
-    <string name="word_delimiters_screen_title">单词分隔符</string>
-    <string name="word_delimiter_current_title">当前单词分隔符</string>
-    <string name="word_delimiter_current_subtitle">当这些关键词前后有空格时，会分割艺术家名称。匹配不区分大小写。点击以移除。</string>
-    <string name="word_delimiter_empty">未配置单词分隔符</string>
-    <string name="word_delimiter_add_title">添加新单词分隔符</string>
-    <string name="word_delimiter_add_hint">例如：feat. 或 ft.</string>
-    <string name="word__delimiter_cd_add">添加单词分隔符</string>
-    <string name="word_delimiter_help_title">单词分隔符的工作原理</string>
-    <string name="word_delimiter_help_body">单词分隔符不区分大小写，且要求前后有空格。\n\n单字符分隔符（如 \"x\"）需要在两侧都留有空格以避免误匹配。\n\n示例：\n  \"Drake feat. Rihanna\" -&gt; Drake, Rihanna\n  \"Marshmello x Bastille\" -&gt; Marshmello, Bastille\n  \"A vs. B\" -&gt; A, B</string>
-    <string name="word_delimiter_reset_title">重置单词分隔符？</string>
-    <string name="word_delimiter_reset_message">这将清除您所有自定义的单词分隔符并恢复默认关键词。此操作无法撤销。</string>
-    <string name="word_delimiter_toast_added">已添加单词分隔符</string>
-    <string name="word_delimiter_toast_invalid">已存在或无效</string>
-    <string name="word_delimiter_toast_reset">单词分隔符已重置为默认</string>
-
     <!-- Library Sync flow -->
     <string name="settings_sync_phase_preparing">正在准备同步</string>
     <string name="settings_sync_phase_reading_mediastore">正在读取 MediaStore</string>
@@ -293,9 +276,6 @@
     <string name="settings_show_queue_history_subtitle">在队列中显示以前播放过的歌曲。</string>
 
     <!-- Behavior category -->
-    <string name="settings_folders_section">文件夹</string>
-    <string name="settings_folder_back_gesture_title">返回手势控制文件夹</string>
-    <string name="settings_folder_back_gesture_subtitle">在“文件夹”选项卡中，系统返回手势会在离开媒体库之前导航文件夹层级。</string>
     <string name="settings_player_gestures_section">播放器手势</string>
     <string name="settings_tap_bg_closes_title">点击背景关闭播放器</string>
     <string name="settings_tap_bg_closes_subtitle">点击模糊的背景以关闭播放器面板。</string>
@@ -523,18 +503,13 @@
     <string name="settings_devcaps_unknown">--</string>
     <string name="settings_devcaps_metric_formats">格式</string>
     <string name="settings_devcaps_metric_hw_decoders">硬件解码</string>
-    <string name="settings_devcaps_metric_local_music">本地歌曲</string>
-    <string name="settings_devcaps_storage_title">本地音乐存储</string>
-    <string name="settings_devcaps_storage_music_size">音乐大小</string>
-    <string name="settings_devcaps_storage_music_count">%1$d 首本地歌曲</string>
+    <string name="settings_devcaps_metric_local_music">歌曲</string>
+    <string name="settings_devcaps_storage_title">设备存储</string>
     <string name="settings_devcaps_storage_available">可用空间</string>
     <string name="settings_devcaps_storage_total">总计 %1$s</string>
-    <string name="settings_devcaps_storage_music_footprint">音乐占用</string>
     <string name="settings_devcaps_storage_device_used">设备已用</string>
     <string name="settings_devcaps_storage_percent">%1$d%%</string>
     <string name="settings_devcaps_storage_less_than_one_percent">&lt;1%</string>
-    <string name="settings_devcaps_storage_cloud_count">%1$d 首云端歌曲</string>
-    <string name="settings_devcaps_storage_unavailable_count">%1$d 个文件不可读</string>
     <string name="settings_devcaps_playback_path_title">播放路径</string>
     <string name="settings_devcaps_status_yes">是</string>
     <string name="settings_devcaps_status_no">否</string>
@@ -573,8 +548,6 @@
     <string name="settings_devcaps_finding_clear_body">您已索引的曲目与 Android 报告此设备支持的解码器相匹配。</string>
     <string name="settings_devcaps_finding_unsupported_title">%1$d 首曲目可能无法原生解码</string>
     <string name="settings_devcaps_finding_unsupported_body">需检查的格式：%1$s。</string>
-    <string name="settings_devcaps_finding_resample_title">%1$d 首本地曲目可能会被重采样</string>
-    <string name="settings_devcaps_finding_resample_body">媒体库采样率达到 %1$d Hz，高于当前的输出采样率。</string>
     <string name="settings_devcaps_finding_unknown_title">%1$d 首曲目具有未知的元数据</string>
     <string name="settings_devcaps_finding_unknown_body">进行完整的媒体库重新扫描可以填补缺失的 MIME、比特率和采样率数据。</string>
     <string name="settings_devcaps_device_info_title">设备信息</string>
@@ -614,7 +587,6 @@
     <string name="accounts_no_linked_subtitle">连接一个提供商即可在此界面对其进行管理。</string>
     <string name="accounts_connect_service">连接 %1$s</string>
     <string name="accounts_service_coming_soon">%1$s（敬请期待）</string>
-    <string name="accounts_google_drive_soon">Google Drive 功能即将推出。</string>
     <string name="accounts_unable_open_screen">目前无法打开此屏幕。</string>
 
     <!-- About category -->

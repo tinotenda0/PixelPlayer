@@ -36,14 +36,7 @@ data class Song(
     val mimeType: String?,
     val bitrate: Int?,
     val sampleRate: Int?,
-    val telegramFileId: Int? = null, // ID of the file in Telegram
-    val telegramChatId: Long? = null, // ID of the chat where the file is located
-    val neteaseId: Long? = null, // Netease Cloud Music song ID
-    val gdriveFileId: String? = null, // Google Drive file ID
-    val qqMusicMid: String? = null, // QQ Music song MID
     val navidromeId: String? = null, // Navidrome song ID
-    val jellyfinId: String? = null, // Jellyfin item ID
-    val plexId: String? = null, // Plex track rating key
 ) : Parcelable {
     /**
      * Returns the display string for artists.
@@ -93,14 +86,7 @@ data class Song(
                 mimeType = "-",
                 bitrate = 0,
                 sampleRate = 0,
-                telegramFileId = null,
-                telegramChatId = null,
-                neteaseId = null,
-                gdriveFileId = null,
-                qqMusicMid = null,
-                navidromeId = null,
-                jellyfinId = null,
-                plexId = null
+                navidromeId = null
             )
         }
     }

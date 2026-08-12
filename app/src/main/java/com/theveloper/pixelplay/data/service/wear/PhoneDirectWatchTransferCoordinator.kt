@@ -9,19 +9,14 @@ import android.os.Build
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.core.graphics.get
 import androidx.core.net.toUri
-import com.theveloper.pixelplay.data.gdrive.GDriveStreamProxy
 import com.google.android.gms.wearable.Wearable
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.navidrome.NavidromeStreamProxy
-import com.theveloper.pixelplay.data.netease.NeteaseStreamProxy
 import com.theveloper.pixelplay.data.preferences.AlbumArtPaletteStyle
 import com.theveloper.pixelplay.data.preferences.AlbumArtColorAccuracy
 import com.theveloper.pixelplay.data.preferences.ThemePreferencesRepository
 import com.theveloper.pixelplay.data.preferences.ThemePreference
-import com.theveloper.pixelplay.data.qqmusic.QqMusicStreamProxy
 import com.theveloper.pixelplay.data.repository.MusicRepository
-import com.theveloper.pixelplay.data.telegram.TelegramRepository
-import com.theveloper.pixelplay.data.telegram.TelegramStreamProxy
 import com.theveloper.pixelplay.presentation.viewmodel.ColorSchemeProcessor
 import com.theveloper.pixelplay.shared.WearDataPaths
 import com.theveloper.pixelplay.shared.WearThemePalette
@@ -60,14 +55,7 @@ class PhoneDirectWatchTransferCoordinator @Inject constructor(
     private val colorSchemeProcessor: ColorSchemeProcessor,
     private val transferStateStore: PhoneWatchTransferStateStore,
     private val transferCancellationStore: PhoneWatchTransferCancellationStore,
-    private val telegramRepository: TelegramRepository,
-    private val telegramStreamProxy: Lazy<TelegramStreamProxy>,
-    private val neteaseStreamProxy: NeteaseStreamProxy,
-    private val qqMusicStreamProxy: QqMusicStreamProxy,
     private val navidromeStreamProxy: NavidromeStreamProxy,
-    private val jellyfinStreamProxy: com.theveloper.pixelplay.data.jellyfin.JellyfinStreamProxy,
-    private val plexStreamProxy: com.theveloper.pixelplay.data.plex.PlexStreamProxy,
-    private val gDriveStreamProxy: GDriveStreamProxy,
     private val okHttpClient: OkHttpClient,
 ) {
     private val contentResolver by lazy { application.contentResolver }
@@ -282,15 +270,6 @@ class PhoneDirectWatchTransferCoordinator @Inject constructor(
     }
 
     private fun isSongTransferEligible(song: Song): Boolean {
-        val contentUri = song.contentUriString
-        if (
-            contentUri.startsWith("telegram://") ||
-            contentUri.startsWith("netease://") ||
-            contentUri.startsWith("gdrive://")
-        ) {
-            return false
-        }
-
         val localFile = song.path
             .takeIf { it.isNotBlank() }
             ?.let { File(it) }
@@ -394,85 +373,20 @@ class PhoneDirectWatchTransferCoordinator @Inject constructor(
         val uri = runCatching { rawUri.toUri() }.getOrNull() ?: return null
         return when (uri.scheme?.lowercase()) {
             "http", "https" -> rawUri
-            "telegram" -> resolveTelegramStreamUrl(song, uri, rawUri)
-            "netease" -> {
-                ensureCloudProxyReady(neteaseStreamProxy) || return null
-                neteaseStreamProxy.resolveNeteaseUri(rawUri)
-            }
-            "qqmusic" -> {
-                ensureCloudProxyReady(qqMusicStreamProxy) || return null
-                qqMusicStreamProxy.warmUpStreamUrl(rawUri)
-                qqMusicStreamProxy.resolveQqMusicUri(rawUri)
-            }
             "navidrome" -> {
                 ensureCloudProxyReady(navidromeStreamProxy) || return null
                 navidromeStreamProxy.warmUpStreamUrl(rawUri)
                 navidromeStreamProxy.resolveNavidromeUri(rawUri)
             }
-            "jellyfin" -> {
-                ensureCloudProxyReady(jellyfinStreamProxy) || return null
-                jellyfinStreamProxy.warmUpStreamUrl(rawUri)
-                jellyfinStreamProxy.resolveJellyfinUri(rawUri)
-            }
-            "plex" -> {
-                ensureCloudProxyReady(plexStreamProxy) || return null
-                plexStreamProxy.warmUpStreamUrl(rawUri)
-                plexStreamProxy.resolvePlexUri(rawUri)
-            }
-            "gdrive" -> {
-                ensureGDriveProxyReady() || return null
-                gDriveStreamProxy.resolveGDriveUri(rawUri)
-            }
             else -> null
         }
     }
 
-    private suspend fun resolveTelegramStreamUrl(song: Song, uri: android.net.Uri, rawUri: String): String? {
-        if (!telegramRepository.isReady()) {
-            val ready = telegramRepository.awaitReady(10_000L)
-            if (!ready) {
-                Timber.tag(TAG).w("Telegram repository not ready for watch handoff")
-                return null
-            }
-        }
-
-        val resolved = telegramRepository.resolveTelegramUri(rawUri)
-        val fileId = resolved?.first
-            ?: song.telegramFileId
-            ?: uri.host?.toIntOrNull()
-            ?: uri.pathSegments.firstOrNull()?.toIntOrNull()
-            ?: return null
-        val knownSize = (resolved?.second ?: 0L).coerceAtLeast(0L)
-
-        val proxy = telegramStreamProxy.get()
-        val ready = proxy.ensureReady(5_000L)
-        if (!ready) {
-            Timber.tag(TAG).w("Telegram stream proxy not ready for watch handoff")
-            return null
-        }
-        return proxy.getProxyUrl(fileId, knownSize)
-    }
-
     private suspend fun ensureCloudProxyReady(proxy: Any): Boolean {
         return when (proxy) {
-            is NeteaseStreamProxy -> proxy.ensureReady(5_000L)
-            is QqMusicStreamProxy -> proxy.ensureReady(5_000L)
             is NavidromeStreamProxy -> proxy.ensureReady(5_000L)
-            is com.theveloper.pixelplay.data.jellyfin.JellyfinStreamProxy -> proxy.ensureReady(5_000L)
-            is com.theveloper.pixelplay.data.plex.PlexStreamProxy -> proxy.ensureReady(5_000L)
             else -> false
         }
-    }
-
-    private suspend fun ensureGDriveProxyReady(): Boolean {
-        if (gDriveStreamProxy.isReady()) return true
-        gDriveStreamProxy.start()
-        repeat(50) {
-            if (gDriveStreamProxy.isReady()) return true
-            delay(100L)
-        }
-        Timber.tag(TAG).w("GDrive stream proxy not ready for watch handoff")
-        return false
     }
 
     private suspend fun openHttpSongSource(url: String): OpenedSongSource? {

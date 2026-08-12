@@ -746,17 +746,10 @@ fun SearchScreen(
                 currentSong?.let { favoriteSongIds.contains(it.id) }
             }
         }.value ?: false
-        val removeFromListTrigger = remember(currentSong) {
-            {
-                searchQuery = "$searchQuery "
-            }
-        }
-
         if (currentSong != null) {
             SongInfoBottomSheet(
                 song = currentSong,
                 isFavorite = isFavorite,
-                removeFromListTrigger = removeFromListTrigger,
                 onToggleFavorite = {
                     playerViewModel.toggleFavoriteSpecificSong(currentSong)
                 },
@@ -773,7 +766,6 @@ fun SearchScreen(
                 onAddToPlayList = {
                     showPlaylistBottomSheet = true;
                 },
-                onDeleteFromDevice = playerViewModel::deleteFromDevice,
                 onNavigateToAlbum = {
                     navController.navigateSafelyReplacing(
                         route = Screen.AlbumDetail.createRoute(currentSong.albumId),
@@ -827,7 +819,6 @@ fun SearchScreen(
 
     // Multi-Selection Bottom Sheet
     if (showMultiSelectionSheet && selectedSongs.isNotEmpty()) {
-        val activity = context as? android.app.Activity
         val favoriteIds = favoriteSongIds.toSet()
 
         MultiSelectionBottomSheet(
@@ -862,14 +853,6 @@ fun SearchScreen(
             onShareAll = {
                 playerViewModel.shareSelectedAsZip(selectedSongs)
                 showMultiSelectionSheet = false
-            },
-            onDeleteAll = { _, onComplete ->
-                activity?.let {
-                    playerViewModel.deleteSelectedFromDevice(it, selectedSongs) {
-                        showMultiSelectionSheet = false
-                        onComplete(true)
-                    }
-                }
             },
             onBatchEdit = {
                 showMultiSelectionSheet = false

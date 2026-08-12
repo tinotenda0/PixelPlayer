@@ -15,10 +15,10 @@ import com.theveloper.pixelplay.data.backup.model.BackupOperationType
 import com.theveloper.pixelplay.data.backup.model.BackupSection
 import com.theveloper.pixelplay.data.backup.model.RestorePlan
 import com.theveloper.pixelplay.data.backup.model.RestoreResult
+import com.theveloper.pixelplay.data.navidrome.NavidromeRepository
 import com.theveloper.pixelplay.data.preferences.AppThemeMode
 import com.theveloper.pixelplay.data.preferences.ThemePreferencesRepository
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
-import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.worker.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -29,16 +29,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import java.io.File
 
 data class SetupUiState(
-    val mediaPermissionGranted: Boolean = false,
     val notificationsPermissionGranted: Boolean = false,
-    val isLoadingDirectories: Boolean = false,
-    val blockedDirectories: Set<String> = emptySet(),
     val libraryNavigationMode: String = "tab_row",
     val navBarStyle: String = "default",
     val navBarCornerRadius: Int = 28,
@@ -47,7 +42,10 @@ data class SetupUiState(
     val isInspectingBackup: Boolean = false,
     val isRestoringBackup: Boolean = false,
     val restorePlan: RestorePlan? = null,
-    val backupTransferProgress: BackupTransferProgressUpdate? = null
+    val backupTransferProgress: BackupTransferProgressUpdate? = null,
+    val isGatewayConnected: Boolean = false,
+    val isSigningIntoGateway: Boolean = false,
+    val gatewaySignInError: String? = null
 ) {
     val allPermissionsGranted: Boolean
         get() {
@@ -68,7 +66,7 @@ class SetupViewModel @Inject constructor(
     private val themePreferencesRepository: ThemePreferencesRepository,
     private val syncManager: SyncManager,
     private val backupManager: BackupManager,
-    private val musicRepository: MusicRepository,
+    private val navidromeRepository: NavidromeRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -82,20 +80,6 @@ class SetupViewModel @Inject constructor(
      */
     val isSyncing = syncManager.isSyncing
 
-    private val fileExplorerStateHolder = FileExplorerStateHolder(userPreferencesRepository, viewModelScope, context)
-
-    val currentPath = fileExplorerStateHolder.currentPath
-    val currentDirectoryChildren = fileExplorerStateHolder.currentDirectoryChildren
-    val blockedDirectories = fileExplorerStateHolder.blockedDirectories
-    val availableStorages = fileExplorerStateHolder.availableStorages
-    val selectedStorageIndex = fileExplorerStateHolder.selectedStorageIndex
-    val isLoadingDirectories = fileExplorerStateHolder.isLoading
-    val isExplorerPriming = fileExplorerStateHolder.isPrimingExplorer
-    val isExplorerReady = fileExplorerStateHolder.isExplorerReady
-    val isCurrentDirectoryResolved = fileExplorerStateHolder.isCurrentDirectoryResolved
-    private var hasPendingDirectoryRuleChanges = false
-    private var latestDirectoryRuleUpdateJob: Job? = null
-
     init {
         viewModelScope.launch {
             if (!userPreferencesRepository.initialSetupDoneFlow.first()) {
@@ -106,17 +90,15 @@ class SetupViewModel @Inject constructor(
         // Consolidated collectors using combine() to reduce coroutine overhead
         viewModelScope.launch {
             combine(
-                userPreferencesRepository.blockedDirectoriesFlow,
                 userPreferencesRepository.libraryNavigationModeFlow,
                 userPreferencesRepository.navBarStyleFlow,
                 userPreferencesRepository.navBarCornerRadiusFlow,
                 themePreferencesRepository.appThemeModeFlow
-            ) { blocked, mode, style, radius, appThemeMode ->
-                SetupPrefsUpdate(blocked, mode, style, radius, appThemeMode)
+            ) { mode, style, radius, appThemeMode ->
+                SetupPrefsUpdate(mode, style, radius, appThemeMode)
             }.collect { update ->
                 _uiState.update { state ->
                     state.copy(
-                        blockedDirectories = update.blocked,
                         libraryNavigationMode = update.mode,
                         navBarStyle = update.style,
                         navBarCornerRadius = update.radius,
@@ -127,14 +109,32 @@ class SetupViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            fileExplorerStateHolder.isLoading.collect { loading ->
-                _uiState.update { it.copy(isLoadingDirectories = loading) }
+            navidromeRepository.isLoggedInFlow.collect { connected ->
+                _uiState.update { it.copy(isGatewayConnected = connected) }
             }
         }
     }
-    
+
+    fun signInToGateway(username: String, password: String) {
+        if (_uiState.value.isSigningIntoGateway) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSigningIntoGateway = true, gatewaySignInError = null) }
+            val result = navidromeRepository.login(NavidromeRepository.GATEWAY_URL, username, password)
+            _uiState.update {
+                it.copy(
+                    isSigningIntoGateway = false,
+                    gatewaySignInError = result.exceptionOrNull()?.message
+                )
+            }
+        }
+    }
+
+    fun clearGatewaySignInError() {
+        _uiState.update { it.copy(gatewaySignInError = null) }
+    }
+
     private data class SetupPrefsUpdate(
-        val blocked: Set<String>,
         val mode: String,
         val style: String,
         val radius: Int,
@@ -142,12 +142,6 @@ class SetupViewModel @Inject constructor(
     )
 
     fun checkPermissions(context: Context) {
-        val mediaPermissionGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
-        } else {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-        }
-
         val notificationsPermissionGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         } else {
@@ -163,73 +157,11 @@ class SetupViewModel @Inject constructor(
 
         _uiState.update {
             it.copy(
-                mediaPermissionGranted = mediaPermissionGranted,
                 notificationsPermissionGranted = notificationsPermissionGranted,
                 alarmsPermissionGranted = alarmsPermissionGranted
             )
         }
     }
-
-    fun loadMusicDirectories() {
-        viewModelScope.launch {
-            if (!userPreferencesRepository.initialSetupDoneFlow.first()) {
-                // Blacklist model: default is allow all, so no setup needed.
-            }
-
-            userPreferencesRepository.blockedDirectoriesFlow.first().let { blocked ->
-                _uiState.update { it.copy(blockedDirectories = blocked) }
-            }
-            fileExplorerStateHolder.primeExplorerRoot()?.join()
-        }
-    }
-
-    fun toggleDirectoryAllowed(file: File) {
-        hasPendingDirectoryRuleChanges = true
-        latestDirectoryRuleUpdateJob = viewModelScope.launch {
-            fileExplorerStateHolder.toggleDirectoryAllowed(file)
-        }
-    }
-
-    fun applyPendingDirectoryRuleChanges() {
-        if (!hasPendingDirectoryRuleChanges) return
-        hasPendingDirectoryRuleChanges = false
-        viewModelScope.launch {
-            latestDirectoryRuleUpdateJob?.join()
-            syncManager.forceRefresh()
-        }
-    }
-
-    fun loadDirectory(file: File) {
-        fileExplorerStateHolder.loadDirectory(file)
-    }
-
-    fun selectStorage(index: Int) {
-        fileExplorerStateHolder.selectStorage(index)
-    }
-
-    fun refreshAvailableStorages() {
-        fileExplorerStateHolder.refreshAvailableStorages()
-    }
-
-    fun refreshCurrentDirectory() {
-        fileExplorerStateHolder.refreshCurrentDirectory()
-    }
-
-    fun primeExplorer() {
-        fileExplorerStateHolder.primeExplorerRoot()
-    }
-
-    fun openExplorer() {
-        fileExplorerStateHolder.openExplorerRoot()
-    }
-
-    fun navigateUp() {
-        fileExplorerStateHolder.navigateUp()
-    }
-
-    fun isAtRoot(): Boolean = fileExplorerStateHolder.isAtRoot()
-
-    fun explorerRoot(): File = fileExplorerStateHolder.rootDirectory()
 
     fun setLibraryNavigationMode(mode: String) {
         viewModelScope.launch {
@@ -267,7 +199,7 @@ class SetupViewModel @Inject constructor(
      */
     fun retrySync() {
         viewModelScope.launch {
-            syncManager.fullSync()
+            syncManager.forceRefresh()
         }
     }
 
@@ -388,7 +320,7 @@ class SetupViewModel @Inject constructor(
     private suspend fun completeSetup(syncAfter: Boolean) {
         userPreferencesRepository.setInitialSetupDone(true)
         if (syncAfter) {
-            syncManager.fullSync()
+            syncManager.forceRefresh()
         }
     }
 }

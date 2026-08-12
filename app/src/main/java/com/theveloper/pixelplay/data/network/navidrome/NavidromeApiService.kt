@@ -11,6 +11,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
+import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
 import java.security.MessageDigest
@@ -837,6 +838,78 @@ class NavidromeApiService @Inject constructor(
                 Result.failure(it)
             }
         )
+    }
+
+    // ─── Listening events (custom XPS endpoints, powers the in-app Stats page) ───
+
+    /**
+     * Reports one finished listen. Fully self-contained — title/artist/album/cover travel
+     * with the event so the gateway never depends on a search having happened recently.
+     * [songId] is the raw gateway song id (e.g. "yt-<videoId>"), not the app's unified id.
+     */
+    suspend fun reportListeningEvent(
+        eventId: String,
+        songId: String,
+        title: String,
+        artist: String,
+        album: String,
+        cover: String,
+        durationMs: Long,
+        startTime: Long,
+        endTime: Long
+    ): Result<JSONObject> = xpsCall(
+        "reportListeningEvent", "listeningEvent",
+        mapOf(
+            "eventId" to eventId, "songId" to songId, "title" to title, "artist" to artist,
+            "album" to album, "cover" to cover, "durationMs" to durationMs.toString(),
+            "startTime" to startTime.toString(), "endTime" to endTime.toString()
+        )
+    )
+
+    /**
+     * Listening events for this account. Both bounds optional — omit both for "most recent N".
+     * Range/session/streak bucketing stays entirely client-side; this just returns raw events.
+     */
+    suspend fun getListeningEvents(
+        startTime: Long? = null,
+        endTime: Long? = null,
+        limit: Int = 5000
+    ): Result<JSONObject> = xpsCall(
+        "getListeningEvents", "listeningEvents",
+        buildMap {
+            startTime?.let { put("startTime", it.toString()) }
+            endTime?.let { put("endTime", it.toString()) }
+            put("limit", limit.toString())
+        }
+    )
+
+    /**
+     * Bulk-uploads listening events — used both for the one-time local-history migration and
+     * for draining the offline outbox. POST body because a batch is too large for a query
+     * string (same reasoning as [setYtmCookies]'s cookie jar). Each object needs at least
+     * eventId/songId/durationMs/endTime; startTime/title/artist/album/cover are optional.
+     */
+    suspend fun importListeningEvents(events: List<JSONObject>): Result<JSONObject> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = buildApiUrl("importListeningEvents")
+                val body = JSONArray(events).toString()
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "PixelPlayer/$API_VERSION")
+                    .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .build()
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        return@use Result.failure(Exception("HTTP ${response.code}"))
+                    }
+                    parseResponse(response.body.string())
+                        .map { it.optJSONObject("import") ?: JSONObject() }
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
     }
 
     // ─── Star/Favorite API ───────────────────────────────────────────────

@@ -40,7 +40,7 @@ class LibraryTabIdTest {
         val shuffledOrder = decodeLibraryTabOrder(
             Json.encodeToString(
                 listOf(
-                    LibraryTabId.Folders.stableKey,
+                    LibraryTabId.Liked.stableKey,
                     LibraryTabId.Songs.stableKey,
                     LibraryTabId.Playlists.stableKey
                 )

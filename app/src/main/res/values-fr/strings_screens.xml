@@ -12,13 +12,13 @@
     <string name="setup_beta_symbol">β</string>
     <string name="setup_beta_label">Bêta</string>
     <string name="setup_intro_body">Préparons tout pour vous.</string>
-    <string name="setup_permission_media_title">Autorisation média</string>
-    <string name="setup_permission_media_description">PixelPlayer a besoin d\'accéder à vos fichiers audio pour construire votre bibliothèque musicale.</string>
     <string name="setup_permission_granted">Autorisation accordée</string>
-    <string name="setup_grant_media_permission">Accorder l\'autorisation média</string>
     <string name="setup_permission_notifications_title">Notifications</string>
     <string name="setup_permission_notifications_description">Activez les notifications pour contrôler votre musique depuis l\'écran de verrouillage et le volet de notification.</string>
     <string name="setup_enable_notifications">Activer les notifications</string>
+    <string name="setup_gateway_signin_title">Connectez votre compte</string>
+    <string name="setup_gateway_signin_subtitle">Connectez-vous pour synchroniser votre bibliothèque, vos playlists et vos goûts.</string>
+    <string name="setup_gateway_signin_connected">Vous êtes connecté</string>
     <string name="setup_backup_have_title">Avez-vous une sauvegarde ?</string>
     <string name="setup_backup_have_description">Si vous avez déjà une sauvegarde PixelPlayer, restaurez-la maintenant pour passer la majeure partie de la configuration restante.</string>
     <string name="setup_import_backup">Importer une sauvegarde</string>
@@ -34,10 +34,6 @@
     <string name="setup_backup_unknown_version">Version inconnue</string>
     <string name="setup_restore_selected">Restaurer la sélection</string>
     <string name="setup_restoring">Restauration</string>
-    <string name="setup_excluded_folders_title">Dossiers exclus</string>
-    <string name="setup_excluded_folders_description">Tous les dossiers sont analysés par défaut. Choisissez les emplacements que vous souhaitez ignorer lors de la construction de votre bibliothèque.</string>
-    <string name="setup_choose_folders_ignore">Choisir les dossiers à ignorer</string>
-    <string name="setup_toast_grant_storage_first">Accordez d\'abord les autorisations de stockage</string>
     <string name="setup_theme_title">Thème de l\'application</string>
     <string name="setup_theme_subtitle">Choisissez l\'apparence que vous préférez avant de commencer à explorer votre bibliothèque.</string>
     <string name="setup_theme_dark_title">Sombre</string>

@@ -111,12 +111,6 @@ private fun libraryEmptySpec(
             )
         }
 
-        LibraryTabId.FOLDERS -> LibraryEmptySpec(
-            iconRes = R.drawable.ic_folder,
-            titleRes = R.string.library_empty_folders_title,
-            subtitleRes = R.string.library_empty_folders_subtitle
-        )
-
         LibraryTabId.PLAYLISTS -> LibraryEmptySpec(
             iconRes = R.drawable.rounded_playlist_play_24,
             titleRes = R.string.library_empty_playlists_title,

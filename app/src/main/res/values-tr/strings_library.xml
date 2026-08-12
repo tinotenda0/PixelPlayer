@@ -11,7 +11,6 @@
     <string name="library_tab_albums">Albümler</string>
     <string name="library_tab_artists">Sanatçılar</string>
     <string name="library_tab_playlists">Çalma Listeleri</string>
-    <string name="library_tab_folders">Klasörler</string>
     <string name="library_tab_liked">Beğenilenler</string>
 
     <!-- Library Toasts -->
@@ -30,24 +29,10 @@
 
     <!-- Library Multi-Selection & Folders -->
     <string name="library_toast_max_albums_selection">En fazla %1$d albüm seçebilirsiniz</string>
-    <string name="library_folder_name_fallback">Klasör</string>
-    <string name="library_cd_folder">Klasör</string>
-
     <!-- Library Sort & View Bottom Sheet -->
     <string name="library_sort_by_title">Sıralama ölçütü</string>
-    <string name="library_sort_section_view">Görünüm</string>
-    <string name="library_sort_toggle_playlist_view">Çalma Listesi Görünümü</string>
     <string name="library_view_mode_grid">Izgara</string>
     <string name="library_view_mode_list">Liste</string>
-    <string name="library_storage_internal">Dahili</string>
-    <string name="library_storage_sd_card">SD Kart</string>
-    <string name="library_storage_sd_card_unavailable">SD kart şu anda kullanılamıyor.</string>
-    <string name="library_sort_section_cloud">Bulut</string>
-    <string name="library_sort_toggle_telegram_channels">Telegram Bulut Kanalları</string>
-    <string name="library_telegram_topics_display_title">Konu Görünümü</string>
-    <string name="library_telegram_topic_mode_channels">Kanallar</string>
-    <string name="library_telegram_topic_mode_topics">Konular</string>
-    <string name="library_telegram_topic_mode_both">Her ikisi</string>
     <string name="library_cloud_sources_heading">Bulut</string>
     <string name="library_cloud_only_label">Sadece Bulut</string>
 
@@ -98,7 +83,7 @@
     <string name="library_empty_songs_offline_title">Yerel şarkı bulunamadı</string>
     <string name="library_empty_songs_offline_subtitle">Başka bir kaynak filtresi deneyin veya cihaz kitaplığını yeniden tarayın.</string>
     <string name="library_empty_songs_online_title">Bulut şarkısı bulunamadı</string>
-    <string name="library_empty_songs_online_subtitle">Telegram veya NetEase şarkılarını senkronize edin ya da yerel kaynağa geçin.</string>
+    <string name="library_empty_songs_online_subtitle">Navidrome şarkılarını senkronize edin ya da yerel kaynağa geçin.</string>
     <string name="library_empty_albums_all_title">Kullanılabilir albüm yok</string>
     <string name="library_empty_albums_all_subtitle">Kitaplığınızdaki parçalar gruplandığında albümler burada görünecektir.</string>
     <string name="library_empty_albums_offline_title">Yerel albüm bulunamadı</string>
@@ -116,9 +101,7 @@
     <string name="library_empty_liked_offline_title">Beğenilen yerel şarkı yok</string>
     <string name="library_empty_liked_offline_subtitle">Kaynak filtresini değiştirin veya cihazınızdaki şarkıları beğenin.</string>
     <string name="library_empty_liked_online_title">Beğenilen bulut şarkısı yok</string>
-    <string name="library_empty_liked_online_subtitle">Bu görünümde görmek için Telegram veya NetEase parçalarını beğenin.</string>
-    <string name="library_empty_folders_title">Klasör bulunamadı</string>
-    <string name="library_empty_folders_subtitle">Müzik içeren dahili depolama klasörleri burada görünecektir.</string>
+    <string name="library_empty_liked_online_subtitle">Bu görünümde görmek için Navidrome parçalarını beğenin.</string>
     <string name="library_empty_playlists_title">Henüz çalma listesi yok</string>
     <string name="library_empty_playlists_subtitle">Kitaplığınızı düzenlemek için ilk çalma listenizi oluşturun.</string>
 
@@ -142,7 +125,6 @@
     <string name="song_info_cd_queue_next">Kuyrukta sıradaki olarak oynat</string>
     <string name="song_info_cd_add_to_playlist">Çalma listesine ekle</string>
     <string name="song_info_action_delete">Sil</string>
-    <string name="song_info_action_delete_all">Tümünü sil</string>
     <string name="song_info_checking_watch">Saat kontrol ediliyor</string>
     <string name="song_info_transferring_percent">Aktarılıyor %1$d%%</string>
     <string name="song_info_transferring_to_watch">Saate aktarılıyor</string>
@@ -439,8 +421,6 @@
     <string name="playlist_sheet_search_playlists_hint">Çalma listelerini ara…</string>
     <string name="playlist_sheet_song_added_to_playlists">Şarkılar çalma listelerine eklendi</string>
     <string name="playlist_sheet_created_and_songs_added">Çalma listesi oluşturuldu ve şarkılar eklendi</string>
-    <string name="playlist_sheet_internal_storage">Dahili Depolama</string>
-
     <!-- SongPickerBottomSheet -->
     <string name="song_picker_title">Şarkı ekle</string>
     <string name="song_picker_cd_confirm_add_songs">Seçilen şarkıları ekle</string>
@@ -522,25 +502,6 @@
     <string name="artist_detail_not_found">Sanatçı bulunamadı</string>
 
     <!-- SongRemovalStateHolder -->
-    <string name="song_removal_cannot_delete_currently_playing">Şu anda çalınan şarkı silinemez</string>
-    <string name="song_removal_batch_delete_files_deleted_skipped_format">%1$d dosya silindi (%2$d atlandı - çalınıyor)</string>
-    <string name="song_removal_batch_delete_partial_format">%1$d / %2$d dosya silindi</string>
-    <string name="song_removal_delete_files_failed">Dosyalar silinemedi</string>
-    <string name="song_removal_file_deleted">Dosya silindi</string>
-    <string name="song_removal_delete_file_not_found">Dosya silinemiyor veya dosya bulunamadı</string>
-    <string name="song_removal_deletion_cancelled">Silme işlemi iptal edildi</string>
-    <string name="song_removal_dialog_delete_song_title">Şarkı silinsin mi?</string>
-    <string name="song_removal_dialog_delete_song_message">\"%1$s\" - %2$s\n\nBu şarkı cihazınızdan kalıcı olarak silinecektir ve geri kurtarılamaz.</string>
-    <string name="song_removal_delete_songs_permanent_message">Bu şarkılar cihazınızdan kalıcı olarak silinecektir ve geri getirilemez.</string>
-    <plurals name="song_removal_n_files_deleted">
-        <item quantity="one">%d dosya silindi</item>
-        <item quantity="other">%d dosya silindi</item>
-    </plurals>
-    <plurals name="song_removal_delete_songs_confirmation_title">
-        <item quantity="one">%d şarkı silinsin mi?</item>
-        <item quantity="other">%d şarkı silinsin mi?</item>
-    </plurals>
-
     <!-- MetadataEditStateHolder -->
     <string name="metadata_edit_updated_successfully">Meta veriler başarıyla güncellendi</string>
     <string name="metadata_edit_updating_n_songs">%1$d şarkı güncelleniyor…</string>

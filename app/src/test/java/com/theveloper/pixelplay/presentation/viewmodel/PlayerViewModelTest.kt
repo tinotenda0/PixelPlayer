@@ -48,7 +48,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import com.theveloper.pixelplay.MainCoroutineExtension
 import com.theveloper.pixelplay.data.service.player.DualPlayerEngine
-import com.theveloper.pixelplay.data.telegram.TelegramCacheManager
 import com.theveloper.pixelplay.data.worker.SyncManager
 import com.theveloper.pixelplay.utils.AppShortcutManager
 import com.theveloper.pixelplay.utils.MediaItemBuilder
@@ -73,18 +72,11 @@ class PlayerViewModelTest {
     private val mockSyncManager: SyncManager = mockk(relaxed = true)
     private val mockDualPlayerEngine: DualPlayerEngine = mockk(relaxed = true)
     private val mockAppShortcutManager: AppShortcutManager = mockk(relaxed = true)
-    private val mockTelegramCacheManager: TelegramCacheManager = mockk(relaxed = true)
-    private val mockTelegramCacheManagerProvider: Lazy<TelegramCacheManager> = mockk()
-    private val mockTelegramRepository: com.theveloper.pixelplay.data.telegram.TelegramRepository = mockk(relaxed = true)
     private val mockListeningStatsTracker: ListeningStatsTracker = mockk(relaxed = true)
     private val mockDailyMixStateHolder: DailyMixStateHolder = mockk(relaxed = true)
     private val mockLyricsStateHolder: LyricsStateHolder = mockk(relaxed = true)
     private val mockCastStateHolder: CastStateHolder = mockk(relaxed = true)
     private val mockCastRouteStateHolder: CastRouteStateHolder = mockk(relaxed = true)
-    private val mockPlexRemotePlaybackManager: com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager = mockk(relaxed = true)
-    private val mockPlexConnectClient: com.theveloper.pixelplay.data.plex.connect.PlexConnectClient = mockk(relaxed = true)
-    private val mockRokuEcpClient: com.theveloper.pixelplay.data.network.roku.RokuEcpClient = mockk(relaxed = true)
-    private val mockPlexRepository: com.theveloper.pixelplay.data.plex.PlexRepository = mockk(relaxed = true)
     private val mockQueueStateHolder: QueueStateHolder = mockk(relaxed = true)
     private val mockQueueUndoStateHolder: QueueUndoStateHolder = mockk(relaxed = true)
     private val mockPlaylistDismissUndoStateHolder: PlaylistDismissUndoStateHolder = mockk(relaxed = true)
@@ -94,11 +86,9 @@ class PlayerViewModelTest {
     private val mockSearchStateHolder: SearchStateHolder = mockk(relaxed = true)
     private val mockAiStateHolder: AiStateHolder = mockk(relaxed = true)
     private val mockLibraryStateHolder: LibraryStateHolder = mockk(relaxed = true)
-    private val mockFolderNavigationStateHolder: FolderNavigationStateHolder = mockk(relaxed = true)
     private val mockLibraryTabsStateHolder: LibraryTabsStateHolder = mockk(relaxed = true)
     private val mockCastTransferStateHolder: CastTransferStateHolder = mockk(relaxed = true)
     private val mockMetadataEditStateHolder: MetadataEditStateHolder = mockk(relaxed = true)
-    private val mockSongRemovalStateHolder: SongRemovalStateHolder = mockk(relaxed = true)
     private val mockExternalMediaStateHolder: ExternalMediaStateHolder = mockk(relaxed = true)
     private val mockThemeStateHolder: ThemeStateHolder = mockk(relaxed = true)
     private val mockMultiSelectionStateHolder: MultiSelectionStateHolder = mockk(relaxed = true)
@@ -132,8 +122,6 @@ class PlayerViewModelTest {
         every { android.net.Uri.parse(any()) } returns mockk(relaxed = true)
         val directExecutor = java.util.concurrent.Executor { it.run() }
         every { ContextCompat.getMainExecutor(any()) } returns directExecutor
-        every { mockTelegramCacheManager.embeddedArtUpdated } returns kotlinx.coroutines.flow.MutableSharedFlow()
-        every { mockTelegramCacheManagerProvider.get() } returns mockTelegramCacheManager
 
         // Mock UserPreferences
         coEvery { mockUserPreferencesRepository.favoriteSongIdsFlow } returns flowOf(emptySet())
@@ -148,7 +136,6 @@ class PlayerViewModelTest {
         coEvery { mockUserPreferencesRepository.fullPlayerLoadingTweaksFlow } returns flowOf(com.theveloper.pixelplay.data.preferences.FullPlayerLoadingTweaks())
         coEvery { mockUserPreferencesRepository.tapBackgroundClosesPlayerFlow } returns flowOf(true)
         coEvery { mockUserPreferencesRepository.hapticsEnabledFlow } returns flowOf(true)
-        coEvery { mockUserPreferencesRepository.foldersSortOptionFlow } returns flowOf("FolderNameAZ") // Added missing mock
         coEvery { mockUserPreferencesRepository.persistentShuffleEnabledFlow } returns flowOf(false) // Added missing mock
         coEvery { mockUserPreferencesRepository.isShuffleOnFlow } returns flowOf(false) // Added missing mock
         every { mockUserPreferencesRepository.repeatModeFlow } returns _repeatModeFlow
@@ -164,11 +151,9 @@ class PlayerViewModelTest {
         every { mockLibraryStateHolder.genres } returns MutableStateFlow(persistentListOf())
         every { mockLibraryStateHolder.albums } returns MutableStateFlow(persistentListOf())
         every { mockLibraryStateHolder.artists } returns MutableStateFlow(persistentListOf())
-        every { mockLibraryStateHolder.musicFolders } returns MutableStateFlow(persistentListOf())
         every { mockLibraryStateHolder.currentSongSortOption } returns MutableStateFlow<SortOption>(SortOption.SongTitleAZ)
         every { mockLibraryStateHolder.currentAlbumSortOption } returns MutableStateFlow<SortOption>(SortOption.AlbumTitleAZ)
         every { mockLibraryStateHolder.currentArtistSortOption } returns MutableStateFlow<SortOption>(SortOption.ArtistNameAZ)
-        every { mockLibraryStateHolder.currentFolderSortOption } returns MutableStateFlow<SortOption>(SortOption.FolderNameAZ)
         every { mockLibraryStateHolder.currentFavoriteSortOption } returns MutableStateFlow<SortOption>(SortOption.LikedSongTitleAZ)
         every { mockLibraryStateHolder.currentStorageFilter } returns MutableStateFlow(StorageFilter.ALL)
 
@@ -189,11 +174,6 @@ class PlayerViewModelTest {
         every { mockCastStateHolder.castSession } returns _castSessionFlow
         every { mockCastStateHolder.startDiscovery() } just runs // Added missing mock
         every { mockCastStateHolder.selectedRoute } returns MutableStateFlow<androidx.mediarouter.media.MediaRouter.RouteInfo?>(null) // Added missing mock
-
-        // Plex remote / Connect / Roku flows collected by the ViewModel init.
-        every { mockPlexRemotePlaybackManager.activeDevice } returns MutableStateFlow<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice?>(null)
-        every { mockPlexRemotePlaybackManager.session } returns MutableStateFlow<com.theveloper.pixelplay.data.plex.PlexRemotePlaybackManager.Snapshot?>(null)
-        every { mockPlexConnectClient.session } returns MutableStateFlow<com.theveloper.pixelplay.data.plex.connect.PlexConnectClient.ConnectSession?>(null)
 
         // Connectivity mocks removed as properties differ from expectations
         every { mockConnectivityStateHolder.initialize() } just runs
@@ -230,8 +210,6 @@ class PlayerViewModelTest {
         coEvery { mockMusicRepository.getRandomSongs(any()) } returns emptyList()
         coEvery { mockMusicRepository.getSongIdsSorted(any(), any()) } returns emptyList()
         coEvery { mockMusicRepository.getFavoriteSongIdsSorted(any(), any()) } returns emptyList()
-        every { mockMusicRepository.telegramRepository } returns mockTelegramRepository
-        every { mockTelegramRepository.downloadCompleted } returns MutableSharedFlow<Int>()
         every { mockLyricsStateHolder.songUpdates } returns MutableSharedFlow()
 
         // Initialize PlayerViewModel
@@ -270,9 +248,6 @@ class PlayerViewModelTest {
             mockLibraryStateHolder,
             mockCastStateHolder,
             mockCastTransferStateHolder,
-            mockPlexRemotePlaybackManager,
-            mockPlexConnectClient,
-            mockConnectivityStateHolder,
             mockThemeStateHolder,
             mockContext
         )
@@ -286,9 +261,6 @@ class PlayerViewModelTest {
             mockPlaybackStateHolder,
             mockLibraryStateHolder,
             mockCastStateHolder,
-            mockPlexRemotePlaybackManager,
-            mockPlexConnectClient,
-            mockConnectivityStateHolder,
             mockThemeStateHolder,
             mockLyricsStateHolder,
             mockSleepTimerStateHolder,
@@ -303,17 +275,13 @@ class PlayerViewModelTest {
             mockThemePreferencesRepository,
             mockSyncManager,
             mockDualPlayerEngine,
-            mockTelegramCacheManagerProvider,
             mockListeningStatsTracker,
             mockDailyMixStateHolder,
             mockLyricsStateHolder,
             mockCastStateHolder,
             mockCastRouteStateHolder,
-            mockPlexRemotePlaybackManager,
-            mockPlexConnectClient,
-            mockRokuEcpClient,
-            mockPlexRepository,
             mockk(relaxed = true), // navidromeRepository
+            mockk(relaxed = true), // navidromeDownloadManager
             mockQueueStateHolder,
             mockQueueUndoStateHolder,
             mockPlaylistDismissUndoStateHolder,
@@ -323,11 +291,9 @@ class PlayerViewModelTest {
             mockSearchStateHolder,
             mockAiStateHolder,
             mockLibraryStateHolder,
-            mockFolderNavigationStateHolder,
             mockLibraryTabsStateHolder,
             mockCastTransferStateHolder,
             mockMetadataEditStateHolder,
-            mockSongRemovalStateHolder,
             mockThemeStateHolder,
             mockMultiSelectionStateHolder,
             mockPlaylistSelectionStateHolder,

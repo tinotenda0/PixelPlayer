@@ -12,13 +12,13 @@
     <string name="setup_beta_symbol">β</string>
     <string name="setup_beta_label">Бета</string>
     <string name="setup_intro_body">Давайте всё настроим.</string>
-    <string name="setup_permission_media_title">Доступ к медиафайлам</string>
-    <string name="setup_permission_media_description">PixelPlayer нужен доступ к вашим аудиофайлам для создания музыкальной медиатеки.</string>
     <string name="setup_permission_granted">Разрешение предоставлено</string>
-    <string name="setup_grant_media_permission">Предоставить доступ к медиафайлам</string>
     <string name="setup_permission_notifications_title">Уведомления</string>
     <string name="setup_permission_notifications_description">Включите уведомления, чтобы управлять музыкой с экрана блокировки и панели уведомлений.</string>
     <string name="setup_enable_notifications">Включить уведомления</string>
+    <string name="setup_gateway_signin_title">Подключите аккаунт</string>
+    <string name="setup_gateway_signin_subtitle">Войдите, чтобы синхронизировать библиотеку, плейлисты и музыкальные предпочтения.</string>
+    <string name="setup_gateway_signin_connected">Вы подключены</string>
     <string name="setup_backup_have_title">У вас есть резервная копия?</string>
     <string name="setup_backup_have_description">Если у вас уже есть резервная копия PixelPlayer, восстановите её сейчас и пропустите большую часть настройки на этом устройстве.</string>
     <string name="setup_import_backup">Импортировать резервную копию</string>
@@ -34,10 +34,6 @@
     <string name="setup_backup_unknown_version">Неизвестная версия</string>
     <string name="setup_restore_selected">Восстановить выбранное</string>
     <string name="setup_restoring">Восстановление</string>
-    <string name="setup_excluded_folders_title">Исключённые папки</string>
-    <string name="setup_excluded_folders_description">По умолчанию сканируются все папки. Выберите места, которые нужно игнорировать при создании медиатеки.</string>
-    <string name="setup_choose_folders_ignore">Выбрать папки для игнорирования</string>
-    <string name="setup_toast_grant_storage_first">Сначала предоставьте доступ к хранилищу</string>
     <string name="setup_theme_title">Тема приложения</string>
     <string name="setup_theme_subtitle">Выберите внешний вид приложения перед началом работы.</string>
     <string name="setup_theme_dark_title">Тёмная</string>

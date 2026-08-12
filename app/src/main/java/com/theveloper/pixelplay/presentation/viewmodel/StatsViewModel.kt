@@ -3,6 +3,7 @@ package com.theveloper.pixelplay.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theveloper.pixelplay.data.model.Song
+import com.theveloper.pixelplay.data.navidrome.NavidromeRepository
 import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.stats.PlaybackStatsRepository
 import com.theveloper.pixelplay.data.stats.PlaybackStatsRepository.PlaybackStatsSummary
@@ -23,7 +24,8 @@ import timber.log.Timber
 @HiltViewModel
 class StatsViewModel @Inject constructor(
     private val playbackStatsRepository: PlaybackStatsRepository,
-    private val musicRepository: MusicRepository
+    private val musicRepository: MusicRepository,
+    private val navidromeRepository: NavidromeRepository
 ) : ViewModel() {
 
     data class StatsUiState(
@@ -31,7 +33,10 @@ class StatsViewModel @Inject constructor(
         val isLoading: Boolean = true,
         val isRefreshing: Boolean = false,
         val summary: PlaybackStatsSummary? = null,
-        val availableRanges: List<StatsTimeRange> = StatsTimeRange.entries
+        val availableRanges: List<StatsTimeRange> = StatsTimeRange.entries,
+        // Stats now read from the gateway (see PlaybackStatsRepository) — an unlinked account
+        // has no history to show, distinct from "linked but nothing played yet".
+        val isGatewayLinked: Boolean = true
     )
 
     private val _uiState = MutableStateFlow(StatsUiState())
@@ -48,12 +53,21 @@ class StatsViewModel @Inject constructor(
 
     init {
         observeStatsRefreshFlow()
+        observeGatewayLinkState()
         refreshRange(
             range = StatsTimeRange.WEEK,
             showLoading = true,
             updateWeeklyOverview = true
         )
         refreshHomeOverview()
+    }
+
+    private fun observeGatewayLinkState() {
+        viewModelScope.launch {
+            navidromeRepository.isLoggedInFlow.collectLatest { linked ->
+                _uiState.update { it.copy(isGatewayLinked = linked) }
+            }
+        }
     }
 
     fun onRangeSelected(range: StatsTimeRange) {

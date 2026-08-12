@@ -11,7 +11,6 @@
     <string name="library_tab_albums">Albumer</string>
     <string name="library_tab_artists">Artister</string>
     <string name="library_tab_playlists">Spillelister</string>
-    <string name="library_tab_folders">Mapper</string>
     <string name="library_tab_liked">Likte</string>
 
     <!-- Library Toasts -->
@@ -30,24 +29,10 @@
 
     <!-- Library Multi-Selection & Folders -->
     <string name="library_toast_max_albums_selection">Du kan velge opptil %1$d album</string>
-    <string name="library_folder_name_fallback">Mappe</string>
-    <string name="library_cd_folder">Mappe</string>
-
     <!-- Library Sort & View Bottom Sheet -->
     <string name="library_sort_by_title">Sorter etter</string>
-    <string name="library_sort_section_view">Visning</string>
-    <string name="library_sort_toggle_playlist_view">Spillelistevisning</string>
     <string name="library_view_mode_grid">Rutenett</string>
     <string name="library_view_mode_list">Liste</string>
-    <string name="library_storage_internal">Intern</string>
-    <string name="library_storage_sd_card">SD-kort</string>
-    <string name="library_storage_sd_card_unavailable">SD-kortet er ikke tilgjengelig akkurat nå.</string>
-    <string name="library_sort_section_cloud">Sky</string>
-    <string name="library_sort_toggle_telegram_channels">Telegram-skykanaler</string>
-    <string name="library_telegram_topics_display_title">Emnevisning</string>
-    <string name="library_telegram_topic_mode_channels">Kanaler</string>
-    <string name="library_telegram_topic_mode_topics">Emner</string>
-    <string name="library_telegram_topic_mode_both">Begge</string>
     <string name="library_cloud_sources_heading">Sky</string>
     <string name="library_cloud_only_label">Kun sky</string>
 
@@ -98,7 +83,7 @@
     <string name="library_empty_songs_offline_title">Ingen lokale sanger funnet</string>
     <string name="library_empty_songs_offline_subtitle">Prøv et annet kildefilter eller skann enhetsbiblioteket på nytt.</string>
     <string name="library_empty_songs_online_title">Ingen skysanger funnet</string>
-    <string name="library_empty_songs_online_subtitle">Synkroniser Telegram- eller NetEase-sanger, eller bytt til lokal kilde.</string>
+    <string name="library_empty_songs_online_subtitle">Synkroniser Navidrome-sanger, eller bytt til lokal kilde.</string>
     <string name="library_empty_albums_all_title">Ingen album tilgjengelig</string>
     <string name="library_empty_albums_all_subtitle">Album vises her så snart biblioteket ditt har gruppert spor.</string>
     <string name="library_empty_albums_offline_title">Ingen lokale album funnet</string>
@@ -116,9 +101,7 @@
     <string name="library_empty_liked_offline_title">Ingen likede lokale sanger</string>
     <string name="library_empty_liked_offline_subtitle">Bytt kildefilter eller like sanger fra enheten din.</string>
     <string name="library_empty_liked_online_title">Ingen likede skysanger</string>
-    <string name="library_empty_liked_online_subtitle">Like Telegram- eller NetEase-spor for å se dem i denne visningen.</string>
-    <string name="library_empty_folders_title">Ingen mapper funnet</string>
-    <string name="library_empty_folders_subtitle">Mapper på intern lagring med musikk vises her.</string>
+    <string name="library_empty_liked_online_subtitle">Like Navidrome-spor for å se dem i denne visningen.</string>
     <string name="library_empty_playlists_title">Ingen spillelister ennå</string>
     <string name="library_empty_playlists_subtitle">Opprett din første spilleliste for å organisere biblioteket ditt.</string>
 
@@ -142,7 +125,6 @@
     <string name="song_info_cd_queue_next">Spill neste i køen</string>
     <string name="song_info_cd_add_to_playlist">Legg til i spilleliste</string>
     <string name="song_info_action_delete">Slett</string>
-    <string name="song_info_action_delete_all">Slett alle</string>
     <string name="song_info_checking_watch">Sjekker klokke</string>
     <string name="song_info_transferring_percent">Overfører %1$d%%</string>
     <string name="song_info_transferring_to_watch">Overfører til klokke</string>
@@ -439,8 +421,6 @@
     <string name="playlist_sheet_search_playlists_hint">Søk etter spillelister…</string>
     <string name="playlist_sheet_song_added_to_playlists">Sanger lagt til i spillelister</string>
     <string name="playlist_sheet_created_and_songs_added">Spilleliste opprettet og sanger lagt til</string>
-    <string name="playlist_sheet_internal_storage">Intern lagring</string>
-
     <!-- SongPickerBottomSheet -->
     <string name="song_picker_title">Legg til sanger</string>
     <string name="song_picker_cd_confirm_add_songs">Legg til valgte sanger</string>
@@ -522,25 +502,6 @@
     <string name="artist_detail_not_found">Kunne ikke finne artisten</string>
 
     <!-- SongRemovalStateHolder -->
-    <string name="song_removal_cannot_delete_currently_playing">Kan ikke slette sangen som spilles nå</string>
-    <string name="song_removal_batch_delete_files_deleted_skipped_format">%1$d filer slettet (%2$d hoppet over – spilles av)</string>
-    <string name="song_removal_batch_delete_partial_format">%1$d av %2$d filer slettet</string>
-    <string name="song_removal_delete_files_failed">Kunne ikke slette filer</string>
-    <string name="song_removal_file_deleted">Fil slettet</string>
-    <string name="song_removal_delete_file_not_found">Kan ikke slette filen eller filen ble ikke funnet</string>
-    <string name="song_removal_deletion_cancelled">Sletting avbrutt</string>
-    <string name="song_removal_dialog_delete_song_title">Slett sang?</string>
-    <string name="song_removal_dialog_delete_song_message">\"%1$s\" av %2$s\n\nDenne sangen vil bli permanent slettet fra enheten din og kan ikke gjenopprettes.</string>
-    <string name="song_removal_delete_songs_permanent_message">Disse sangene vil bli permanent slettet fra enheten din og kan ikke gjenopprettes.</string>
-    <plurals name="song_removal_n_files_deleted">
-        <item quantity="one">%d fil slettet</item>
-        <item quantity="other">%d filer slettet</item>
-    </plurals>
-    <plurals name="song_removal_delete_songs_confirmation_title">
-        <item quantity="one">Slett %d sang?</item>
-        <item quantity="other">Slett %d sanger?</item>
-    </plurals>
-
     <!-- MetadataEditStateHolder -->
     <string name="metadata_edit_updated_successfully">Metadata oppdatert</string>
     <string name="metadata_edit_updating_n_songs">Oppdaterer %1$d sanger…</string>

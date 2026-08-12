@@ -10,7 +10,6 @@ import com.theveloper.pixelplay.data.model.Song // Para verificar el mapeo
 import com.theveloper.pixelplay.data.preferences.PlaylistPreferencesRepository
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.database.FavoritesDao
-import com.theveloper.pixelplay.data.database.TelegramDao
 import dagger.Lazy
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
@@ -38,12 +37,6 @@ class MusicRepositoryImplTest {
     private val mockUserPreferencesRepository: UserPreferencesRepository = mockk()
     private val mockPlaylistPreferencesRepository: PlaylistPreferencesRepository = mockk(relaxed = true)
     private val mockLyricsRepository: LyricsRepository = mockk(relaxed = true)
-    private val mockTelegramDao: TelegramDao = mockk(relaxed = true)
-    private val mockTelegramCacheManager: com.theveloper.pixelplay.data.telegram.TelegramCacheManager = mockk(relaxed = true)
-    private val mockTelegramRepository: com.theveloper.pixelplay.data.telegram.TelegramRepository = mockk(relaxed = true)
-    private val mockTelegramCacheManagerProvider: Lazy<com.theveloper.pixelplay.data.telegram.TelegramCacheManager> = mockk()
-    private val mockTelegramRepositoryProvider: Lazy<com.theveloper.pixelplay.data.telegram.TelegramRepository> = mockk()
-    private val mockSongRepository: SongRepository = mockk(relaxed = true)
     private val mockFavoritesDao: FavoritesDao = mockk(relaxed = true)
     private val mockArtistImageRepository: ArtistImageRepository = mockk(relaxed = true)
 
@@ -57,7 +50,6 @@ class MusicRepositoryImplTest {
         coEvery { mockUserPreferencesRepository.blockedDirectoriesFlow } returns flowOf(setOf("/dummy"))
         every { mockUserPreferencesRepository.mockGenresEnabledFlow } returns flowOf(false)
         coEvery { mockUserPreferencesRepository.initialSetupDoneFlow } returns flowOf(true)
-        coEvery { mockUserPreferencesRepository.isFolderFilterActiveFlow } returns flowOf(false)
         // Populate artists
         val dummyArtists = listOf(
             ArtistEntity(101L, "ArtistName1", 5, null),
@@ -66,8 +58,6 @@ class MusicRepositoryImplTest {
         every { mockMusicDao.getAllArtistsRaw() } returns flowOf(dummyArtists)
         coEvery { mockMusicDao.getDistinctParentDirectories() } returns listOf("/music/folder1", "/music/folder2")
         every { mockMusicDao.getDistinctParentDirectoriesFlow() } returns flowOf(listOf("/music/folder1", "/music/folder2"))
-        every { mockTelegramCacheManagerProvider.get() } returns mockTelegramCacheManager
-        every { mockTelegramRepositoryProvider.get() } returns mockTelegramRepository
 
         every { mockMusicDao.getAllSongArtistCrossRefs() } returns flowOf(emptyList())
         every { mockMusicDao.getAllSongs(any(), any()) } answers {
@@ -108,14 +98,8 @@ class MusicRepositoryImplTest {
             searchHistoryDao = mockSearchHistoryDao,
             musicDao = mockMusicDao,
             lyricsRepository = mockLyricsRepository,
-            telegramDao = mockTelegramDao,
-            telegramCacheManagerProvider = mockTelegramCacheManagerProvider,
-            telegramRepositoryProvider = mockTelegramRepositoryProvider,
-            songRepository = mockSongRepository,
-
             favoritesDao = mockFavoritesDao,
             artistImageRepository = mockArtistImageRepository,
-            folderTreeBuilder = mockk(relaxed = true),
             engagementDao = mockk(relaxed = true),
             navidromeRepositoryProvider = dagger.Lazy { mockk(relaxed = true) }
         )
@@ -144,7 +128,6 @@ class MusicRepositoryImplTest {
         every { mockUserPreferencesRepository.allowedDirectoriesFlow } returns flowOf(allowedDirs) // No es suspend
         every { mockUserPreferencesRepository.blockedDirectoriesFlow } returns flowOf(setOf("/dummy")) // Trigger filter
         every { mockUserPreferencesRepository.initialSetupDoneFlow } returns flowOf(true) // No es suspend
-        every { mockUserPreferencesRepository.isFolderFilterActiveFlow } returns flowOf(true)
         coEvery { mockMusicDao.getDistinctParentDirectories() } returns listOf("/allowed/path", "/forbidden/path")
 
         val result: List<Song> = musicRepository.getAudioFiles().first()
@@ -244,7 +227,6 @@ class MusicRepositoryImplTest {
         
         every { mockUserPreferencesRepository.allowedDirectoriesFlow } returns flowOf(allowedDirs)
         every { mockUserPreferencesRepository.initialSetupDoneFlow } returns flowOf(true)
-        every { mockUserPreferencesRepository.isFolderFilterActiveFlow } returns flowOf(true)
 
 
         val result = musicRepository.getArtists().first()

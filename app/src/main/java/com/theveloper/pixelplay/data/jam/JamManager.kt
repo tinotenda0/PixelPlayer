@@ -38,7 +38,7 @@ import kotlin.coroutines.resumeWithException
 
 /**
  * Cross-device playback: one canonical session per account, pushed live over SSE. Both "Jam"
- * (Spotify-Jam-style household control) and personal handoff (Plexamp/Spotify-Connect-style,
+ * (Spotify-Jam-style household control) and personal handoff (Spotify-Connect-style,
  * same account only) share one live connection and one session model — see backend
  * `handoff.py`.
  *

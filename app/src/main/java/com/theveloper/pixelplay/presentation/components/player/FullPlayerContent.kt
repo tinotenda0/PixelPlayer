@@ -712,7 +712,7 @@ fun FullPlayerContent(
                                         fontWeight = FontWeight.SemiBold
                                     )
 
-                                    if (currentSong != null && (currentSong.telegramChatId != null || currentSong.contentUriString.startsWith("telegram:"))) {
+                                    if (currentSong != null && currentSong.navidromeId != null) {
                                         Icon(
                                             imageVector = androidx.compose.material.icons.Icons.Rounded.Cloud,
                                             contentDescription = stringResource(R.string.player_cd_cloud_stream),

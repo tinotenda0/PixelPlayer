@@ -20,7 +20,7 @@
     <string name="settings_category_device_capabilities_title">기기 성능</string>
     <string name="settings_category_device_capabilities_subtitle">오디오 사양, 코덱 및 디코더 정보</string>
     <string name="settings_category_accounts_title">계정</string>
-    <string name="settings_category_accounts_subtitle">Telegram, Google Drive, NetEase Music 및 기타 서비스 관리</string>
+    <string name="settings_category_accounts_subtitle">Navidrome 계정 관리</string>
     <string name="settings_category_about_title">정보</string>
     <string name="settings_category_about_subtitle">앱 정보, 버전 및 제작진</string>
 
@@ -36,8 +36,6 @@
 
     <!-- Music Management category -->
     <string name="settings_library_structure_section">라이브러리 구조</string>
-    <string name="settings_excluded_directories_title">제외된 디렉토리</string>
-    <string name="settings_excluded_directories_subtitle">여기에 있는 폴더는 라이브러리 스캔 시 제외됩니다.</string>
     <string name="settings_artists_title">아티스트</string>
     <string name="settings_artists_subtitle">멀티 아티스트 파싱 및 구성 옵션.</string>
     <string name="settings_filtering_section">필터링</string>
@@ -131,21 +129,6 @@
     <string name="delimiter_label_space">공백</string>
 
     <!-- Word Delimiters -->
-    <string name="word_delimiters_screen_title">단어 구분 기호</string>
-    <string name="word_delimiter_current_title">현재 단어 구분 기호</string>
-    <string name="word_delimiter_current_subtitle">공백으로 둘러싸여 있을 때 아티스트 이름을 분할하는 키워드입니다. 대소문자를 구분하지 않고 일치합니다. 탭하여 제거하세요.</string>
-    <string name="word_delimiter_empty">구성된 단어 구분 기호 없음</string>
-    <string name="word_delimiter_add_title">새 단어 구분 기호 추가</string>
-    <string name="word_delimiter_add_hint">예: feat. 또는 ft.</string>
-    <string name="word__delimiter_cd_add">단어 구분 기호 추가</string>
-    <string name="word_delimiter_help_title">단어 구분 기호 작동 방식</string>
-    <string name="word_delimiter_help_body">단어 구분 기호는 대소문자를 구분하지 않고 주위에 공백이 있는 상태로 일치합니다.\n\n단일 문자 구분 기호(\"x\" 등)는 잘못된 일치를 방지하기 위해 양쪽에 공백이 필요합니다.\n\n예시:\n  \"Drake feat. Rihanna\" -&gt; Drake, Rihanna\n  \"Marshmello x Bastille\" -&gt; Marshmello, Bastille\n  \"A vs. B\" -&gt; A, B</string>
-    <string name="word_delimiter_reset_title">단어 구분 기호를 재설정하시겠습니까?</string>
-    <string name="word_delimiter_reset_message">모든 사용자 지정 단어 구분 기호를 지우고 기본 키워드로 복원합니다. 이 작업은 되돌릴 수 없습니다.</string>
-    <string name="word_delimiter_toast_added">단어 구분 기호가 추가되었습니다</string>
-    <string name="word_delimiter_toast_invalid">이미 존재하거나 유효하지 않습니다</string>
-    <string name="word_delimiter_toast_reset">단어 구분 기호가 기본값으로 재설정되었습니다</string>
-
     <!-- Library Sync flow -->
     <string name="settings_sync_phase_preparing">동기화 준비 중</string>
     <string name="settings_sync_phase_reading_mediastore">MediaStore 읽는 중</string>
@@ -293,9 +276,6 @@
     <string name="settings_show_queue_history_subtitle">대기열에서 이전에 재생된 노래를 표시합니다.</string>
 
     <!-- Behavior category -->
-    <string name="settings_folders_section">폴더</string>
-    <string name="settings_folder_back_gesture_title">뒤로 가기 제스처로 폴더 제어</string>
-    <string name="settings_folder_back_gesture_subtitle">폴더 탭에서 시스템 뒤로 가기가 라이브러리를 나가기 전에 폴더 스택을 탐색합니다.</string>
     <string name="settings_player_gestures_section">플레이어 제스처</string>
     <string name="settings_tap_bg_closes_title">배경 탭 시 플레이어 닫기</string>
     <string name="settings_tap_bg_closes_subtitle">흐릿한 배경을 탭하여 플레이어 시트를 닫습니다.</string>
@@ -523,18 +503,13 @@
     <string name="settings_devcaps_unknown">--</string>
     <string name="settings_devcaps_metric_formats">포맷</string>
     <string name="settings_devcaps_metric_hw_decoders">HW 디코더</string>
-    <string name="settings_devcaps_metric_local_music">로컬 곡</string>
-    <string name="settings_devcaps_storage_title">로컬 음악 저장공간</string>
-    <string name="settings_devcaps_storage_music_size">음악 크기</string>
-    <string name="settings_devcaps_storage_music_count">로컬 곡 %1$d개</string>
+    <string name="settings_devcaps_metric_local_music">곡</string>
+    <string name="settings_devcaps_storage_title">기기 저장공간</string>
     <string name="settings_devcaps_storage_available">사용 가능</string>
     <string name="settings_devcaps_storage_total">총 %1$s</string>
-    <string name="settings_devcaps_storage_music_footprint">음악 점유율</string>
     <string name="settings_devcaps_storage_device_used">기기 사용됨</string>
     <string name="settings_devcaps_storage_percent">%1$d%%</string>
     <string name="settings_devcaps_storage_less_than_one_percent">&lt;1%</string>
-    <string name="settings_devcaps_storage_cloud_count">클라우드 곡 %1$d개</string>
-    <string name="settings_devcaps_storage_unavailable_count">읽을 수 없는 파일 %1$d개</string>
     <string name="settings_devcaps_playback_path_title">재생 경로</string>
     <string name="settings_devcaps_status_yes">예</string>
     <string name="settings_devcaps_status_no">아니요</string>
@@ -573,8 +548,6 @@
     <string name="settings_devcaps_finding_clear_body">인덱싱된 트랙이 이 기기의 Android 디코더 보고와 일치합니다.</string>
     <string name="settings_devcaps_finding_unsupported_title">%1$d개의 트랙이 네이티브로 디코딩되지 않을 수 있음</string>
     <string name="settings_devcaps_finding_unsupported_body">검토할 포맷: %1$s.</string>
-    <string name="settings_devcaps_finding_resample_title">%1$d개의 로컬 트랙이 리샘플링될 수 있음</string>
-    <string name="settings_devcaps_finding_resample_body">라이브러리가 현재 출력 샘플 레이트보다 높은 %1$d Hz에 도달합니다.</string>
     <string name="settings_devcaps_finding_unknown_title">%1$d개의 트랙에 알 수 없는 메타데이터가 있음</string>
     <string name="settings_devcaps_finding_unknown_body">라이브러리 전체 재스캔을 통해 누락된 MIME, 비트레이트 및 샘플 레이트 데이터를 채울 수 있습니다.</string>
     <string name="settings_devcaps_device_info_title">기기 정보</string>
@@ -614,7 +587,6 @@
     <string name="accounts_no_linked_subtitle">이 화면에서 관리할 제공업체를 연결하세요.</string>
     <string name="accounts_connect_service">%1$s 연결</string>
     <string name="accounts_service_coming_soon">%1$s (출시 예정)</string>
-    <string name="accounts_google_drive_soon">Google Drive는 곧 지원될 예정입니다.</string>
     <string name="accounts_unable_open_screen">현재 이 화면을 열 수 없습니다.</string>
 
     <!-- About category -->

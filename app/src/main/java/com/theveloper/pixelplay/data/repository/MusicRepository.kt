@@ -12,7 +12,6 @@ import com.theveloper.pixelplay.data.model.SearchHistoryItem
 import com.theveloper.pixelplay.data.model.SearchResultItem
 import com.theveloper.pixelplay.data.model.Song
 import kotlinx.coroutines.flow.Flow
-import com.theveloper.pixelplay.data.database.TelegramChannelEntity
 
 interface MusicRepository {
     /**
@@ -327,28 +326,7 @@ interface MusicRepository {
 
     suspend fun resetAllLyrics()
 
-    fun getMusicFolders(
-        storageFilter: com.theveloper.pixelplay.data.model.StorageFilter = com.theveloper.pixelplay.data.model.StorageFilter.ALL
-    ): Flow<List<com.theveloper.pixelplay.data.model.MusicFolder>>
-
     suspend fun deleteById(id: Long)
-    suspend fun saveTelegramSongs(songs: List<Song>)
-
-    suspend fun replaceTelegramSongsForChannel(chatId: Long, songs: List<Song>)
-
-    suspend fun clearTelegramData()
-
-    suspend fun saveTelegramChannel(channel: TelegramChannelEntity)
-    fun getAllTelegramChannels(): Flow<List<TelegramChannelEntity>>
-    suspend fun deleteTelegramChannel(chatId: Long)
-    suspend fun saveTelegramTopics(chatId: Long, topics: List<com.theveloper.pixelplay.data.database.TelegramTopicEntity>)
-    /** Replaces the full topic list for a channel, deleting any topics that no longer exist. */
-    suspend fun replaceTopicsForChannel(chatId: Long, freshTopics: List<com.theveloper.pixelplay.data.database.TelegramTopicEntity>)
-    suspend fun getTopicsForChannel(chatId: Long): List<com.theveloper.pixelplay.data.database.TelegramTopicEntity>
-    fun getAllTelegramTopics(): Flow<List<com.theveloper.pixelplay.data.database.TelegramTopicEntity>>
-    suspend fun replaceTelegramSongsForTopic(chatId: Long, threadId: Long, topicName: String, songs: List<Song>)
-
-    val telegramRepository: com.theveloper.pixelplay.data.telegram.TelegramRepository
 
     suspend fun getSongIdsSorted(
         sortOption: com.theveloper.pixelplay.data.model.SortOption,
@@ -366,13 +344,4 @@ interface MusicRepository {
      * sessions where `Song.id` is a non-numeric source-specific string.
      */
     suspend fun getSongIdByContentUri(contentUri: String): Long?
-
-    /**
-     * Enqueues an incremental SyncWorker run with [androidx.work.ExistingWorkPolicy.KEEP].
-     * Use from finally blocks of Telegram ingestion flows to guarantee the unified-table
-     * sync happens even when an exception bypasses the normal end-of-flow
-     * [saveTelegramChannel] call. KEEP avoids cancelling a full/rebuild that may be
-     * in progress under the same unique work name.
-     */
-    fun requestTelegramUnifiedSync()
 }

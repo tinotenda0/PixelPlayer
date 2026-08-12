@@ -180,15 +180,6 @@ fun CastBottomSheet(
     val bluetoothAudioDeviceStates by playerViewModel.bluetoothAudioDeviceStates.collectAsStateWithLifecycle()
     val isRemotePlaybackActive by playerViewModel.isRemotePlaybackActive.collectAsStateWithLifecycle()
     val isCastConnecting by playerViewModel.isCastConnecting.collectAsStateWithLifecycle()
-    val plexRemotePlayers by playerViewModel.plexRemotePlayers.collectAsStateWithLifecycle()
-    val plexRemoteDevice by playerViewModel.plexRemoteDevice.collectAsStateWithLifecycle()
-    val plexRemoteSession by playerViewModel.plexRemoteSession.collectAsStateWithLifecycle()
-    val plexConnectSession by playerViewModel.plexConnectSession.collectAsStateWithLifecycle()
-    val plexNowPlaying by playerViewModel.plexNowPlaying.collectAsStateWithLifecycle()
-    val rokuDevices by playerViewModel.rokuDevices.collectAsStateWithLifecycle()
-    var plexChoiceDevice by remember { mutableStateOf<com.theveloper.pixelplay.data.plex.model.PlexPlayerDevice?>(null) }
-    val activeRokuHost by playerViewModel.activeRokuHost.collectAsStateWithLifecycle()
-    val rokuConnecting by playerViewModel.rokuConnecting.collectAsStateWithLifecycle()
     val trackVolume by playerViewModel.trackVolume.collectAsStateWithLifecycle()
     val isPlaying = playerViewModel.stablePlayerState.collectAsStateWithLifecycle().value.isPlaying
     val context = LocalContext.current
@@ -223,24 +214,9 @@ fun CastBottomSheet(
         if (missingPermissions.isEmpty()) {
             playerViewModel.refreshLocalConnectionInfo(refreshBluetoothDevices = true)
         }
-        playerViewModel.loadPlexRemotePlayers()
-        playerViewModel.loadRokuDevices()
     }
 
     val activeRoute = selectedRoute?.takeUnless { it.isDefault }
-    val isPlexRemote = plexRemoteDevice != null
-    val isRokuActive = activeRokuHost != null
-    val connectSelfId = playerViewModel.plexConnectDeviceId
-    val connectActiveDevice = plexConnectSession?.devices?.firstOrNull { it.isActive }
-    // Intent-gated: only treat the session as "our remote output" when THIS
-    // phone chose that device. A family member's phone being the session's
-    // active player must not flip this sheet into remote mode (its controls
-    // would act on the local player while claiming the remote, and Disconnect
-    // would steal their session).
-    val isConnectRemote = connectActiveDevice != null && connectActiveDevice.id != connectSelfId &&
-        playerViewModel.isConnectRemoteIntended()
-    val connectPlayers = plexConnectSession?.devices.orEmpty()
-        .filter { it.id != connectSelfId && "player" in it.capabilities }
     val isRemoteSession = (isRemotePlaybackActive || isCastConnecting) && activeRoute != null
 
     val availableRoutes = if (isWifiEnabled) {
@@ -288,79 +264,6 @@ fun CastBottomSheet(
             )
         }
 
-        // PixelPlayer Connect devices (web players, other PixelPlayers) on
-        // this user's broker session.
-        connectPlayers.forEach { device ->
-            add(
-                CastDeviceUi(
-                    id = "connect_${device.id}",
-                    name = device.name,
-                    deviceType = MediaRouter.RouteInfo.DEVICE_TYPE_REMOTE_SPEAKER,
-                    playbackType = MediaRouter.RouteInfo.PLAYBACK_TYPE_REMOTE,
-                    connectionState = if (device.isActive) {
-                        MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTED
-                    } else {
-                        MediaRouter.RouteInfo.CONNECTION_STATE_DISCONNECTED
-                    },
-                    volumeHandling = MediaRouter.RouteInfo.PLAYBACK_VOLUME_VARIABLE,
-                    volume = if (device.isActive) device.volume ?: 0 else 0,
-                    volumeMax = 100,
-                    isSelected = device.isActive
-                )
-            )
-        }
-
-        // Roku TVs (cast Plex to the Roku's Plex app via ECP + Companion).
-        rokuDevices.forEach { roku ->
-            val isActive = activeRokuHost == roku.host
-            add(
-                CastDeviceUi(
-                    id = "roku_${roku.host}",
-                    name = roku.name,
-                    deviceType = MediaRouter.RouteInfo.DEVICE_TYPE_TV,
-                    playbackType = MediaRouter.RouteInfo.PLAYBACK_TYPE_REMOTE,
-                    connectionState = if (isActive) {
-                        MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTED
-                    } else {
-                        MediaRouter.RouteInfo.CONNECTION_STATE_DISCONNECTED
-                    },
-                    volumeHandling = MediaRouter.RouteInfo.PLAYBACK_VOLUME_VARIABLE,
-                    volume = if (isActive) plexRemoteSession?.volume ?: 0 else 0,
-                    volumeMax = 100,
-                    isSelected = isActive
-                )
-            )
-        }
-
-        // Plexamp / Plex Companion players on the account. Skip any whose
-        // address is a discovered Roku — it's already listed above as a Roku.
-        val rokuHosts = rokuDevices.map { it.host }.toSet()
-        plexRemotePlayers
-            .filterNot { player ->
-                runCatching { java.net.URI(player.uri).host }.getOrNull() in rokuHosts
-            }
-            .forEach { player ->
-            val isActivePlexDevice = plexRemoteDevice?.clientIdentifier == player.clientIdentifier
-            add(
-                CastDeviceUi(
-                    id = "plex_${player.clientIdentifier}",
-                    name = player.name,
-                    deviceType = MediaRouter.RouteInfo.DEVICE_TYPE_REMOTE_SPEAKER,
-                    playbackType = MediaRouter.RouteInfo.PLAYBACK_TYPE_REMOTE,
-                    connectionState = if (isActivePlexDevice) {
-                        MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTED
-                    } else {
-                        MediaRouter.RouteInfo.CONNECTION_STATE_DISCONNECTED
-                    },
-                    volumeHandling = MediaRouter.RouteInfo.PLAYBACK_VOLUME_VARIABLE,
-                    volume = if (isActivePlexDevice) plexRemoteSession?.volume ?: 0 else 0,
-                    volumeMax = 100,
-                    isSelected = isActivePlexDevice,
-                    nowPlayingTitle = plexNowPlaying[player.clientIdentifier]
-                )
-            )
-        }
-
         if (isBluetoothEnabled) {
             bluetoothDevices.forEach { bluetoothDevice ->
                 val isConnected = bluetoothDevice.name == activeBluetoothName
@@ -387,49 +290,7 @@ fun CastBottomSheet(
         }
     }
 
-    val activeDevice = if (isRokuActive) {
-        // Roku playback runs over Plex Companion, so plexRemoteDevice is set.
-        val rokuName = rokuDevices.firstOrNull { it.host == activeRokuHost }?.name
-            ?: plexRemoteDevice?.name
-            ?: "Roku"
-        ActiveDeviceUi(
-            id = "roku_$activeRokuHost",
-            title = rokuName,
-            subtitle = stringResource(R.string.cast_roku_subtitle),
-            isRemote = true,
-            icon = Icons.Rounded.Tv,
-            isConnecting = rokuConnecting,
-            volume = (plexRemoteSession?.volume ?: 50).toFloat(),
-            volumeRange = 0f..100f,
-            connectionLabel = if (rokuConnecting) stringResource(R.string.cast_connecting) else stringResource(R.string.cast_connected)
-        )
-    } else if (isConnectRemote) {
-        val device = checkNotNull(connectActiveDevice)
-        ActiveDeviceUi(
-            id = "connect_${device.id}",
-            title = device.name,
-            subtitle = device.product.ifBlank { stringResource(R.string.cast_subtitle_session) },
-            isRemote = true,
-            icon = Icons.Rounded.Speaker,
-            isConnecting = false,
-            volume = (device.volume ?: 50).toFloat(),
-            volumeRange = 0f..100f,
-            connectionLabel = stringResource(R.string.cast_connected)
-        )
-    } else if (isPlexRemote) {
-        val plexDevice = checkNotNull(plexRemoteDevice)
-        ActiveDeviceUi(
-            id = "plex_${plexDevice.clientIdentifier}",
-            title = plexDevice.name,
-            subtitle = plexDevice.product.ifBlank { stringResource(R.string.cast_subtitle_session) },
-            isRemote = true,
-            icon = Icons.Rounded.Speaker,
-            isConnecting = false,
-            volume = (plexRemoteSession?.volume ?: 50).toFloat(),
-            volumeRange = 0f..100f,
-            connectionLabel = stringResource(R.string.cast_connected)
-        )
-    } else if (isRemoteSession) {
+    val activeDevice = if (isRemoteSession) {
         val remoteRoute = checkNotNull(activeRoute)
         ActiveDeviceUi(
             id = remoteRoute.id,
@@ -484,31 +345,6 @@ fun CastBottomSheet(
         onDispose { onExpansionChanged(0f) }
     }
 
-    plexChoiceDevice?.let { device ->
-        val nowPlaying = plexNowPlaying[device.clientIdentifier]
-        AlertDialog(
-            onDismissRequest = { plexChoiceDevice = null },
-            title = { Text(device.name) },
-            text = {
-                Text(
-                    if (nowPlaying != null) "Playing: $nowPlaying" else "Choose how to connect."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    playerViewModel.joinPlexRemote(device)
-                    plexChoiceDevice = null
-                }) { Text("Join — control what's playing") }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    playerViewModel.castToPlexRemote(device)
-                    plexChoiceDevice = null
-                }) { Text("Cast — play my queue") }
-            }
-        )
-    }
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -542,52 +378,17 @@ fun CastBottomSheet(
                                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     context.startActivity(intent)
                                 }
-                                id.startsWith("roku_") -> {
-                                    val host = id.removePrefix("roku_")
-                                    rokuDevices.firstOrNull { it.host == host }
-                                        ?.let { playerViewModel.connectRoku(it) }
-                                }
-                                id.startsWith("connect_") -> {
-                                    // Spotify-style transfer through the broker.
-                                    playerViewModel.transferPlaybackTo(id.removePrefix("connect_"))
-                                }
-                                id.startsWith("plex_") -> {
-                                    plexRemotePlayers
-                                        .firstOrNull { "plex_${it.clientIdentifier}" == id }
-                                        ?.let { player ->
-                                            // If the device is already playing, let the
-                                            // user choose Join (control it) vs Cast
-                                            // (replace it); otherwise only Cast makes sense.
-                                            if (plexNowPlaying.containsKey(player.clientIdentifier)) {
-                                                plexChoiceDevice = player
-                                            } else {
-                                                playerViewModel.castToPlexRemote(player)
-                                            }
-                                        }
-                                }
                                 else -> routes.firstOrNull { it.id == id }?.let {
-                                    // Cast and Plex remote sessions are mutually exclusive.
-                                    playerViewModel.disconnectPlexRemote()
                                     playerViewModel.selectRoute(it)
                                 }
                             }
                         },
                         onDisconnect = {
-                            if (isRokuActive) {
-                                playerViewModel.disconnectRoku()
-                            } else if (isConnectRemote) {
-                                playerViewModel.playConnectSessionHere()
-                            } else if (isPlexRemote) {
-                                playerViewModel.disconnectPlexRemote()
-                            } else {
-                                playerViewModel.disconnect()
-                            }
+                            playerViewModel.disconnect()
                             onDismiss()
                         },
                         onVolumeChange = { value ->
                             when {
-                                isConnectRemote -> playerViewModel.setConnectRemoteVolume(value.toInt())
-                                isPlexRemote -> playerViewModel.setPlexRemoteVolume(value.toInt())
                                 uiState.activeDevice.isRemote -> playerViewModel.setRouteVolume(value.toInt())
                                 else -> playerViewModel.setTrackVolume(value)
                             }
@@ -606,7 +407,7 @@ fun CastBottomSheet(
                             playerViewModel.refreshCastRoutes()
                             playerViewModel.refreshLocalConnectionInfo(refreshBluetoothDevices = true)
                         },
-                        startWithControls = isRemoteSession || isPlexRemote || isConnectRemote || isRokuActive
+                        startWithControls = isRemoteSession
                     )
                 }
             }
@@ -625,9 +426,7 @@ private data class CastDeviceUi(
     val volumeMax: Int,
     val isSelected: Boolean,
     val batteryPercent: Int? = null,
-    val isBluetooth: Boolean = false,
-    /** Title the (Plex) device is currently playing, shown under its name. */
-    val nowPlayingTitle: String? = null
+    val isBluetooth: Boolean = false
 )
 
 private data class ActiveDeviceUi(
@@ -1829,17 +1628,6 @@ private fun CastDeviceRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-
-                device.nowPlayingTitle?.let { nowPlaying ->
-                    Text(
-                        text = "♪ $nowPlaying",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = onContainer.copy(alpha = 0.75f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 

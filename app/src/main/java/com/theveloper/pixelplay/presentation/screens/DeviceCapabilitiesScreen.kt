@@ -100,7 +100,7 @@ import com.theveloper.pixelplay.presentation.viewmodel.DeviceCapabilitiesState
 import com.theveloper.pixelplay.presentation.viewmodel.DeviceCapabilitiesViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.ExoPlayerInfo
 import com.theveloper.pixelplay.presentation.viewmodel.FormatSupportInfo
-import com.theveloper.pixelplay.presentation.viewmodel.LocalMusicStorageSummary
+import com.theveloper.pixelplay.presentation.viewmodel.LibraryStorageSummary
 import com.theveloper.pixelplay.presentation.viewmodel.MemorySummary
 import com.theveloper.pixelplay.presentation.viewmodel.PlaybackCompatibilitySummary
 import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
@@ -245,7 +245,7 @@ private fun DeviceCapabilitiesContent(
 
         state.storageSummary?.let { storage ->
             item {
-                LocalMusicStorageCard(storageSummary = storage)
+                DeviceStorageCard(storageSummary = storage)
             }
         }
 
@@ -478,12 +478,12 @@ private fun AdvancedDiagnosticsToggleRow(
 private fun PlaybackReadinessCard(
     deviceInfo: Map<String, String>,
     audioCapabilities: AudioCapabilities?,
-    storageSummary: LocalMusicStorageSummary?,
+    storageSummary: LibraryStorageSummary?,
     playbackCompatibility: PlaybackCompatibilitySummary?,
     modifier: Modifier = Modifier
 ) {
     val needsReview = playbackCompatibility?.let {
-        it.unsupportedLibrarySongCount > 0 || it.resampledLocalSongCount > 0
+        it.unsupportedLibrarySongCount > 0
     } ?: false
     val containerColor = if (needsReview) {
         MaterialTheme.colorScheme.errorContainer
@@ -556,7 +556,7 @@ private fun PlaybackReadinessCard(
                 )
                 HeroMetricTile(
                     label = stringResource(R.string.settings_devcaps_metric_local_music),
-                    value = storageSummary?.localSongCount?.toString()
+                    value = storageSummary?.songCount?.toString()
                         ?: stringResource(R.string.settings_devcaps_unknown),
                     modifier = Modifier.weight(1f),
                     containerColor = contentColor.copy(alpha = 0.10f),
@@ -568,21 +568,17 @@ private fun PlaybackReadinessCard(
 }
 
 @Composable
-private fun LocalMusicStorageCard(
-    storageSummary: LocalMusicStorageSummary,
+private fun DeviceStorageCard(
+    storageSummary: LibraryStorageSummary,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val musicSize = remember(storageSummary.localMusicBytes) {
-        Formatter.formatShortFileSize(context, storageSummary.localMusicBytes)
-    }
     val availableSize = remember(storageSummary.deviceAvailableBytes) {
         Formatter.formatShortFileSize(context, storageSummary.deviceAvailableBytes)
     }
     val totalSize = remember(storageSummary.deviceTotalBytes) {
         Formatter.formatShortFileSize(context, storageSummary.deviceTotalBytes)
     }
-    val musicPercent = storagePercentLabel(storageSummary.localMusicStorageFraction)
     val usedPercent = storagePercentLabel(storageSummary.deviceUsedFraction)
 
     CapabilityCard(
@@ -595,12 +591,8 @@ private fun LocalMusicStorageCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             InfoTile(
-                label = stringResource(R.string.settings_devcaps_storage_music_size),
-                value = musicSize,
-                supporting = stringResource(
-                    R.string.settings_devcaps_storage_music_count,
-                    storageSummary.localSongCount
-                ),
+                label = stringResource(R.string.settings_devcaps_metric_local_music),
+                value = storageSummary.songCount.toString(),
                 modifier = Modifier.weight(1f)
             )
             InfoTile(
@@ -616,39 +608,11 @@ private fun LocalMusicStorageCard(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             ProgressReadout(
-                label = stringResource(R.string.settings_devcaps_storage_music_footprint),
-                value = musicPercent,
-                progress = storageSummary.localMusicStorageFraction
-            )
-            ProgressReadout(
                 label = stringResource(R.string.settings_devcaps_storage_device_used),
                 value = usedPercent,
                 progress = storageSummary.deviceUsedFraction,
                 color = MaterialTheme.colorScheme.secondary
             )
-        }
-
-        if (storageSummary.cloudSongCount > 0 || storageSummary.unavailableLocalFileCount > 0) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (storageSummary.cloudSongCount > 0) {
-                    TonalChip(
-                        text = stringResource(
-                            R.string.settings_devcaps_storage_cloud_count,
-                            storageSummary.cloudSongCount
-                        )
-                    )
-                }
-                if (storageSummary.unavailableLocalFileCount > 0) {
-                    TonalChip(
-                        text = stringResource(
-                            R.string.settings_devcaps_storage_unavailable_count,
-                            storageSummary.unavailableLocalFileCount
-                        ),
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                }
-            }
         }
     }
 }
@@ -824,8 +788,7 @@ private fun PlaybackFindingsCard(
     modifier: Modifier = Modifier
 ) {
     val hasFindings = compatibility.unsupportedLibrarySongCount > 0 ||
-        compatibility.unknownFormatSongCount > 0 ||
-        compatibility.resampledLocalSongCount > 0
+        compatibility.unknownFormatSongCount > 0
 
     CapabilityCard(
         title = stringResource(R.string.settings_devcaps_findings_title),
@@ -854,22 +817,6 @@ private fun PlaybackFindingsCard(
                     compatibility.unsupportedFormats.take(4).joinToString(", ")
                 ),
                 tone = FindingTone.Error
-            )
-        }
-
-        if (compatibility.resampledLocalSongCount > 0) {
-            Spacer(Modifier.height(8.dp))
-            FindingRow(
-                icon = Icons.Rounded.Warning,
-                title = stringResource(
-                    R.string.settings_devcaps_finding_resample_title,
-                    compatibility.resampledLocalSongCount
-                ),
-                body = stringResource(
-                    R.string.settings_devcaps_finding_resample_body,
-                    compatibility.maxLocalSampleRate ?: 0
-                ),
-                tone = FindingTone.Warning
             )
         }
 
