@@ -2138,6 +2138,30 @@ class PlayerViewModel @Inject constructor(
         startAtZero: Boolean = false
     ) = playbackDispatchStateHolder.playSongsShuffled(songsToPlay, queueName, playlistId, startAtZero)
 
+    private val _isBuildingSurpriseMe = MutableStateFlow(false)
+    val isBuildingSurpriseMe: StateFlow<Boolean> = _isBuildingSurpriseMe.asStateFlow()
+
+    /**
+     * Starts an endless queue blending the whole taste signal (liked artists, top artists,
+     * onboarding seeds) — MusicService.maybeExtendEndlessQueue keeps it growing by re-calling the
+     * same blend as it nears the end, rather than radiating off whatever's currently playing.
+     */
+    fun startSurpriseMeQueue() {
+        if (_isBuildingSurpriseMe.value) return
+        viewModelScope.launch {
+            _isBuildingSurpriseMe.value = true
+            val songs = navidromeRepository.buildSurpriseMeQueue().getOrNull().orEmpty()
+            _isBuildingSurpriseMe.value = false
+            if (songs.isNotEmpty()) {
+                playSongs(
+                    songs,
+                    songs.first(),
+                    com.theveloper.pixelplay.data.service.ActiveQueueNameHolder.SURPRISE_ME
+                )
+            }
+        }
+    }
+
     fun playExternalUri(uri: Uri) = playbackDispatchStateHolder.playExternalUri(uri)
 
     fun showPlayer() {

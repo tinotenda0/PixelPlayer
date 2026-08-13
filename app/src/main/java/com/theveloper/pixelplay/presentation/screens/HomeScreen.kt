@@ -24,8 +24,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Card
@@ -59,6 +61,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -159,6 +162,7 @@ fun HomeScreen(
     val curatedHomeRows by playerViewModel.curatedHomeRows.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { playerViewModel.loadCuratedHome() }
     val curatedYourMixSongs by playerViewModel.yourMixSongs.collectAsStateWithLifecycle()
+    val isBuildingSurpriseMe by playerViewModel.isBuildingSurpriseMe.collectAsStateWithLifecycle()
     val homeMixPreviewSongs by playerViewModel.homeMixPreviewSongs.collectAsStateWithLifecycle()
     val playbackHistory by playerViewModel.playbackHistory.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -476,6 +480,16 @@ fun HomeScreen(
                     }
                 }
 
+                item(
+                    key = "surprise_me_card",
+                    contentType = "surprise_me_card"
+                ) {
+                    SurpriseMeCard(
+                        isLoading = isBuildingSurpriseMe,
+                        onClick = { playerViewModel.startSurpriseMeQueue() }
+                    )
+                }
+
                 // Server-curated rows (Your Mix, Discover, Top Charts, per-artist Radio…),
                 // prepopulated from the gateway like YouTube Music. Additive — only shown
                 // when the server returns curated content.
@@ -770,6 +784,63 @@ fun YourMixHeader(
                 contentDescription = stringResource(R.string.common_shuffle_play),
                 modifier = Modifier.size(36.dp)
             )
+        }
+    }
+}
+
+/**
+ * Entry point for the endless "Surprise Me" queue: blends the user's whole taste signal (liked
+ * artists, top artists, onboarding seeds) into a queue that keeps growing anchored to that same
+ * signal, rather than radiating off whatever track happens to be playing.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun SurpriseMeCard(isLoading: Boolean, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clickable(enabled = !isLoading, onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isLoading) {
+                    LoadingIndicator(modifier = Modifier.size(24.dp))
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text(
+                    text = stringResource(R.string.home_surprise_me_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                Text(
+                    text = stringResource(R.string.home_surprise_me_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                )
+            }
         }
     }
 }

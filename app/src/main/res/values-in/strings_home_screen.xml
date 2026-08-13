@@ -103,6 +103,8 @@
     <string name="home_empty_placeholder_title">Belum ada data untuk ditampilkan</string>
     <string name="home_empty_placeholder_subtitle">Mix Anda akan muncul di sini saat PixelPlayer menemukan lagu atau menyinkronkan sumber.</string>
     <string name="home_empty_placeholder_refresh">Refresh</string>
+    <string name="home_surprise_me_title">Surprise Me</string>
+    <string name="home_surprise_me_subtitle">Mix tanpa henti berdasarkan seleramu</string>
 
     <!-- DailyMixSection -->
     <string name="home_daily_mix_title">DAILY MIX</string>

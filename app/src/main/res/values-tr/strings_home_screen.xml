@@ -103,6 +103,8 @@
     <string name="home_empty_placeholder_title">Henüz gösterilecek veri yok</string>
     <string name="home_empty_placeholder_subtitle">PixelPlayer şarkıları bulduğunda veya bir kaynağı senkronize ettiğinde miksiniz burada görünecektir.</string>
     <string name="home_empty_placeholder_refresh">Yenile</string>
+    <string name="home_surprise_me_title">Beni Şaşırt</string>
+    <string name="home_surprise_me_subtitle">Zevkinize göre oluşturulan sonsuz bir mix</string>
 
     <!-- DailyMixSection -->
     <string name="home_daily_mix_title">GÜNLÜK MİX</string>

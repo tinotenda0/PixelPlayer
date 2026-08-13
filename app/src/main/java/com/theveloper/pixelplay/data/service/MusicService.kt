@@ -166,6 +166,8 @@ class MusicService : MediaLibraryService() {
     @Inject
     lateinit var navidromeRepository: NavidromeRepository
     @Inject
+    lateinit var activeQueueNameHolder: ActiveQueueNameHolder
+    @Inject
     lateinit var listeningStatsTracker: ListeningStatsTracker
     @Inject
     @AppScope
@@ -1284,10 +1286,13 @@ class MusicService : MediaLibraryService() {
     /**
      * Endless playback (radio): when the current track is a Subsonic/YouTube item and the
      * queue is running low, fetch similar songs from the server and append them so the music
-     * never stops. No-op unless the "Endless playback" setting is on.
+     * never stops. No-op unless the "Endless playback" setting is on — except for a Surprise Me
+     * queue (see [ActiveQueueNameHolder]), which always keeps extending: a Surprise Me queue
+     * that just stops isn't really surprise-me.
      */
     private fun maybeExtendEndlessQueue() {
-        if (!endlessPlaybackEnabled || isExtendingEndlessQueue) return
+        val isSurpriseMe = activeQueueNameHolder.name.value == ActiveQueueNameHolder.SURPRISE_ME
+        if ((!endlessPlaybackEnabled && !isSurpriseMe) || isExtendingEndlessQueue) return
         val player = mediaSession?.player ?: engine.masterPlayer
         if (player.repeatMode != Player.REPEAT_MODE_OFF) return
 
@@ -1305,17 +1310,43 @@ class MusicService : MediaLibraryService() {
         }
         if (!nearEnd) return
 
-        val seedId = getNavidromeId(player.currentMediaItem) ?: return
-        if (seedId == lastEndlessSeedId) return // already extended off this seed
-
-        lastEndlessSeedId = seedId
-        isExtendingEndlessQueue = true
-
         val existingIds = buildSet {
             for (i in 0 until count) {
                 runCatching { player.getMediaItemAt(i) }.getOrNull()?.let { add(it.mediaId) }
             }
         }
+
+        if (isSurpriseMe) {
+            // Anchored to the whole taste signal, not to whatever's currently playing — re-blend
+            // every time instead of radiating off a single seed via getSimilarSongs, so the queue
+            // doesn't drift into YouTube's own radio graph. No single seed here, so no
+            // lastEndlessSeedId gate either.
+            isExtendingEndlessQueue = true
+            appScope.launch(Dispatchers.IO) {
+                val songs = navidromeRepository.buildSurpriseMeQueue()
+                    .getOrNull().orEmpty()
+                    .filter { it.id !in existingIds }
+                withContext(Dispatchers.Main) {
+                    try {
+                        if (songs.isNotEmpty()) {
+                            player.addMediaItems(songs.map { MediaItemBuilder.build(it) })
+                            Timber.tag(TAG).d("Endless playback: appended ${songs.size} Surprise Me songs")
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).w(e, "Endless playback: failed to extend Surprise Me queue")
+                    } finally {
+                        isExtendingEndlessQueue = false
+                    }
+                }
+            }
+            return
+        }
+
+        val seedId = getNavidromeId(player.currentMediaItem) ?: return
+        if (seedId == lastEndlessSeedId) return // already extended off this seed
+
+        lastEndlessSeedId = seedId
+        isExtendingEndlessQueue = true
 
         appScope.launch(Dispatchers.IO) {
             val songs = navidromeRepository.getSimilarSongs(seedId, count = 25)

@@ -92,6 +92,7 @@ class PlaybackDispatchStateHolder @Inject constructor(
     private val castStateHolder: CastStateHolder,
     private val castTransferStateHolder: CastTransferStateHolder,
     private val themeStateHolder: ThemeStateHolder,
+    private val activeQueueNameHolder: com.theveloper.pixelplay.data.service.ActiveQueueNameHolder,
     @param:ApplicationContext private val context: Context,
 ) {
 
@@ -785,6 +786,10 @@ class PlaybackDispatchStateHolder @Inject constructor(
             clearPreparingSongIfMatching()
             return
         }
+        // Single chokepoint every queue-start path funnels through, so this is also the one
+        // place that needs to keep MusicService's endless-queue extension logic aware of what
+        // kind of queue is now playing (see ActiveQueueNameHolder).
+        activeQueueNameHolder.set(queueName)
         val effectiveStartSong = songsToPlay.firstOrNull { it.id == startSong.id } ?: songsToPlay.first()
 
         // Update dynamic shortcut for last played playlist

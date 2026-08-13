@@ -1069,6 +1069,31 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
+    /**
+     * An ephemeral queue blending the whole taste signal (liked artists, top artists, onboarding
+     * seeds) server-side — never persisted. Powers the endless "Surprise Me" queue: called once
+     * to start it, then again every time it needs to grow, so it stays anchored to taste instead
+     * of drifting via a single track's radio graph.
+     */
+    suspend fun buildSurpriseMeQueue(): Result<List<Song>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) {
+            try {
+                val obj = api.getSurpriseMe().getOrThrow()
+                val arr = obj.optJSONArray("entry")
+                val jsons = (0 until (arr?.length() ?: 0)).mapNotNull { arr?.optJSONObject(it) }
+                val songs = NavidromeResponseParser.parseSongs(jsons).map { it.toSong() }
+                if (songs.isEmpty()) {
+                    Result.failure(Exception("Nothing to blend yet"))
+                } else {
+                    Result.success(songs)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: buildSurpriseMeQueue failed"); Result.failure(e)
+            }
+        }
+    }
+
     /** Album detail fetched live for a gateway `yt-album-…` id: the album + its tracks. */
     suspend fun getAlbumDetail(albumId: String): Result<Pair<Album, List<Song>>> {
         if (!isLoggedIn) return Result.failure(Exception("Not logged in"))

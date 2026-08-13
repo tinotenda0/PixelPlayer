@@ -103,6 +103,8 @@
     <string name="home_empty_placeholder_title">Ingen data å vise ennå</string>
     <string name="home_empty_placeholder_subtitle">Miksen din vises her når PixelPlayer finner sanger eller synkroniserer en kilde.</string>
     <string name="home_empty_placeholder_refresh">Oppdater</string>
+    <string name="home_surprise_me_title">Surprise Me</string>
+    <string name="home_surprise_me_subtitle">En uendelig miks basert på din smak</string>
 
     <!-- DailyMixSection -->
     <string name="home_daily_mix_title">DAILY MIX</string>

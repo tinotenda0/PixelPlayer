@@ -103,6 +103,8 @@
     <string name="home_empty_placeholder_title">표시할 데이터가 아직 없습니다</string>
     <string name="home_empty_placeholder_subtitle">PixelPlayer가 곡을 찾거나 소스를 동기화하면 믹스가 여기에 표시됩니다.</string>
     <string name="home_empty_placeholder_refresh">새로고침</string>
+    <string name="home_surprise_me_title">Surprise Me</string>
+    <string name="home_surprise_me_subtitle">당신의 취향을 기반으로 한 끝없는 믹스</string>
 
     <!-- DailyMixSection -->
     <string name="home_daily_mix_title">DAILY MIX</string>

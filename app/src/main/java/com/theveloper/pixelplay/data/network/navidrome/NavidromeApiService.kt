@@ -422,6 +422,16 @@ class NavidromeApiService @Inject constructor(
             .map { it.optJSONObject("playlist") ?: JSONObject() }
     }
 
+    /**
+     * An ephemeral queue blending the signed-in user's whole taste signal (liked artists, top
+     * artists, onboarding seeds) — never persisted. Falls back to the charts server-side when
+     * there's no signal yet.
+     */
+    suspend fun getSurpriseMe(): Result<JSONObject> {
+        return requestAndParse("getSurpriseMe")
+            .map { it.optJSONObject("playlist") ?: JSONObject() }
+    }
+
     // ─── Taste onboarding (custom XPS endpoints) ─────────────────────────
 
     private fun extractTasteArtists(resp: JSONObject): List<JSONObject> {

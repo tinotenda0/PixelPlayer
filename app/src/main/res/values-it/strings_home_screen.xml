@@ -103,6 +103,8 @@
     <string name="home_empty_placeholder_title">Ancora nessun dato da mostrare</string>
     <string name="home_empty_placeholder_subtitle">Il tuo mix apparirà qui quando PixelPlayer troverà brani o sincronizzerà una sorgente.</string>
     <string name="home_empty_placeholder_refresh">Aggiorna</string>
+    <string name="home_surprise_me_title">Sorprendimi</string>
+    <string name="home_surprise_me_subtitle">Un mix infinito basato sui tuoi gusti</string>
 
     <!-- DailyMixSection -->
     <string name="home_daily_mix_title">DAILY MIX</string>
