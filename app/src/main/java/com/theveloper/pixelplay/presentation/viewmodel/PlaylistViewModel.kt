@@ -689,7 +689,9 @@ class PlaylistViewModel @Inject constructor(
             if (currentPlaylistId != null && removedFromPlaylists.contains (currentPlaylistId)) {
                 removeSongFromPlaylist(currentPlaylistId, songId)
             }
-            playlistIds.forEach { pushPlaylistSongsToGateway(it) }
+            // removedFromPlaylists is disjoint from playlistIds by construction (it's exactly
+            // the playlists NOT in the desired set that had the song), so both need pushing.
+            (playlistIds + removedFromPlaylists).forEach { pushPlaylistSongsToGateway(it) }
         }
     }
 
