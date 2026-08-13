@@ -673,6 +673,22 @@ class NavidromeApiService @Inject constructor(
     }
 
     /**
+     * Pushes edits onto a *linked YouTube Music* playlist (`ytmpl-...`). [songIds] is the full
+     * desired song list — the gateway diffs it against the playlist's live contents and pushes
+     * only the delta to the real account. [name] renames it when set.
+     */
+    suspend fun updateYtmPlaylist(
+        playlistId: String,
+        songIds: List<String>? = null,
+        name: String? = null
+    ): Result<JSONObject> {
+        val params = mutableListOf<Pair<String, String>>("playlistId" to playlistId)
+        songIds?.forEach { params.add("songId" to it) }
+        name?.let { params.add("name" to it) }
+        return requestAndParseRepeated("updateYtmPlaylist", params)
+    }
+
+    /**
      * Deletes a gateway playlist.
      */
     suspend fun deletePlaylist(playlistId: String): Result<Boolean> {

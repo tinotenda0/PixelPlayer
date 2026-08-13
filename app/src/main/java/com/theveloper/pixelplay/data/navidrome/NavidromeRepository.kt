@@ -865,6 +865,28 @@ class NavidromeRepository @Inject constructor(
     }
 
     /**
+     * Pushes a linked YouTube Music playlist's full desired song list — the gateway diffs it
+     * against the playlist's live contents on the real account and pushes only the delta.
+     */
+    suspend fun replaceGatewayYtmPlaylistSongs(ytmPlaylistId: String, navidromeSongIds: List<String>): Boolean {
+        if (!isLoggedIn) return false
+        return withContext(Dispatchers.IO) {
+            api.updateYtmPlaylist(ytmPlaylistId, songIds = navidromeSongIds)
+                .onFailure { Timber.w(it, "$TAG: replaceGatewayYtmPlaylistSongs failed for $ytmPlaylistId") }
+                .isSuccess
+        }
+    }
+
+    suspend fun renameGatewayYtmPlaylist(ytmPlaylistId: String, name: String): Boolean {
+        if (!isLoggedIn) return false
+        return withContext(Dispatchers.IO) {
+            api.updateYtmPlaylist(ytmPlaylistId, name = name)
+                .onFailure { Timber.w(it, "$TAG: renameGatewayYtmPlaylist failed for $ytmPlaylistId") }
+                .isSuccess
+        }
+    }
+
+    /**
      * Which gateway id-space [playlistId] belongs to, so callers (chiefly [PlaylistViewModel])
      * can branch on playlist type without hardcoding the prefix scheme themselves.
      */

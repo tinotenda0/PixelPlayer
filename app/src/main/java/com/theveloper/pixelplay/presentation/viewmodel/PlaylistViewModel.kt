@@ -576,8 +576,12 @@ class PlaylistViewModel @Inject constructor(
                     )
                 }
             }
-            if (navidromeRepository.gatewayPlaylistClassOf(targetId) == GatewayPlaylistClass.LOCAL_GATEWAY) {
-                navidromeRepository.renameGatewayPlaylist(targetId, newName)
+            when (navidromeRepository.gatewayPlaylistClassOf(targetId)) {
+                GatewayPlaylistClass.LOCAL_GATEWAY ->
+                    navidromeRepository.renameGatewayPlaylist(targetId, newName)
+                GatewayPlaylistClass.LINKED_YTM ->
+                    navidromeRepository.renameGatewayYtmPlaylist(targetId, newName)
+                else -> {}
             }
         }
     }
@@ -864,17 +868,25 @@ class PlaylistViewModel @Inject constructor(
     }
 
     /**
-     * Pushes a `pl-` playlist's current local song list to the gateway so the next library sync
-     * sees the edit instead of overwriting it. No-op for playlist classes not yet wired for push
-     * (curated rows fork instead — see [forkCuratedPlaylistIfNeeded]; linked YT Music playlists
-     * sync separately — see #50).
+     * Pushes a `pl-` or linked-YTM playlist's current local song list to the gateway so the next
+     * library sync sees the edit instead of overwriting it. No-op for playlist classes not wired
+     * for push (curated rows fork instead — see [forkCuratedPlaylistIfNeeded]).
      */
     private suspend fun pushPlaylistSongsToGateway(playlistId: String) {
-        if (navidromeRepository.gatewayPlaylistClassOf(playlistId) != GatewayPlaylistClass.LOCAL_GATEWAY) return
+        val gatewayClass = navidromeRepository.gatewayPlaylistClassOf(playlistId)
+        if (gatewayClass != GatewayPlaylistClass.LOCAL_GATEWAY &&
+            gatewayClass != GatewayPlaylistClass.LINKED_YTM
+        ) return
         val songIds = playlistPreferencesRepository.userPlaylistsFlow.first()
             .find { it.id == playlistId }?.songIds ?: return
         val gatewayIds = musicRepository.getSongsByIds(songIds).first().mapNotNull { it.navidromeId }
-        navidromeRepository.replaceGatewayPlaylistSongs(playlistId, gatewayIds)
+        when (gatewayClass) {
+            GatewayPlaylistClass.LOCAL_GATEWAY ->
+                navidromeRepository.replaceGatewayPlaylistSongs(playlistId, gatewayIds)
+            GatewayPlaylistClass.LINKED_YTM ->
+                navidromeRepository.replaceGatewayYtmPlaylistSongs(playlistId, gatewayIds)
+            else -> {}
+        }
     }
 
     /** Deletes a playlist locally and, if it's a `pl-` gateway playlist, on the gateway too. */
