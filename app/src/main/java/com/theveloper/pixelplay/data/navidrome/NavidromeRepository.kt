@@ -897,6 +897,20 @@ class NavidromeRepository @Inject constructor(
         else -> GatewayPlaylistClass.NOT_GATEWAY
     }
 
+    /**
+     * Mirrors a favorite/unfavorite onto the gateway (star/unstar) so it round-trips across
+     * devices and survives a library sync, instead of living only in this device's local
+     * favorites table like it did before.
+     */
+    suspend fun setSongFavoriteOnGateway(navidromeSongId: String, isFavorite: Boolean): Boolean {
+        if (!isLoggedIn) return false
+        return withContext(Dispatchers.IO) {
+            val result = if (isFavorite) api.star(id = navidromeSongId) else api.unstar(id = navidromeSongId)
+            result.onFailure { Timber.w(it, "$TAG: setSongFavoriteOnGateway failed for $navidromeSongId") }
+            result.isSuccess
+        }
+    }
+
     /** How many gateway songs are cached locally. Zero means the library needs a re-sync. */
     suspend fun cachedSongCount(): Int = withContext(Dispatchers.IO) {
         runCatching { dao.countNavidromeSongs() }.getOrDefault(0)

@@ -815,6 +815,10 @@ class MusicRepositoryImpl @Inject constructor(
         } else {
             favoritesDao.removeFavorite(id)
         }
+        val navidromeId = getSong(songId).first()?.navidromeId
+        if (navidromeId != null) {
+            navidromeRepositoryProvider.get().setSongFavoriteOnGateway(navidromeId, isFavorite)
+        }
     }
 
     override suspend fun getFavoriteSongIdsOnce(): Set<String> = withContext(Dispatchers.IO) {
