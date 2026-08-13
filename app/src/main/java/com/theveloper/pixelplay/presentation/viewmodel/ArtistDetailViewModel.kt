@@ -279,6 +279,29 @@ class ArtistDetailViewModel @Inject constructor(
         return queue
     }
 
+    /** Session-scoped: avoids re-fetching the full discography on a second shuffle/play tap
+     * during the same screen visit. The server already caches it durably — this just saves a
+     * round-trip within one visit. */
+    private var cachedFullDiscography: List<Song>? = null
+
+    /**
+     * Every song by this artist, for shuffle/play-all — not just [ArtistDetailUiState.topSongs]
+     * / [ArtistDetailUiState.songs], which are a bounded top-songs shelf (or, for a local-only
+     * artist, whatever handful of tracks happened to be in a playlist). Falls back to whatever's
+     * already shown on failure or when there's no gateway id to fetch a full discography with,
+     * rather than leaving shuffle/play with nothing to do.
+     */
+    suspend fun getFullDiscography(): List<Song> {
+        cachedFullDiscography?.let { return it }
+        val fallback = _uiState.value.topSongs.ifEmpty { _uiState.value.songs }
+        val gatewayId = _uiState.value.artist?.navidromeId?.takeIf { it.startsWith("yt-") }
+            ?: return fallback
+        val full = navidromeRepository.getArtistAllSongs(gatewayId).getOrNull()
+        if (full.isNullOrEmpty()) return fallback
+        cachedFullDiscography = full
+        return full
+    }
+
     /** Finds the gateway id for a local artist by name, requiring a confident name match. */
     private suspend fun resolveGatewayId(name: String): String? {
         if (name.isBlank()) return null

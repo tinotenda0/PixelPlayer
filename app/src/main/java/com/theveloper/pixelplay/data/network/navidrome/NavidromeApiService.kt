@@ -367,6 +367,17 @@ class NavidromeApiService @Inject constructor(
     }
 
     /**
+     * An artist's FULL discography flattened to a song list — every album's tracks, not just
+     * the bounded top-songs shelf getArtistWithAlbums() returns. Powers shuffle/play-all.
+     */
+    suspend fun getArtistSongs(id: String): Result<List<JSONObject>> {
+        return requestAndParse("getArtistSongs", mapOf("id" to id)).map { response ->
+            val songs = response.optJSONObject("artistSongs")?.optJSONArray("song")
+            (0 until (songs?.length() ?: 0)).mapNotNull { songs?.optJSONObject(it) }
+        }
+    }
+
+    /**
      * Full album object (metadata + its `song` array) for the album detail screen.
      */
     suspend fun getAlbumWithSongs(id: String): Result<JSONObject> {

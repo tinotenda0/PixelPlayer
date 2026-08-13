@@ -782,6 +782,22 @@ class NavidromeRepository @Inject constructor(
     }
 
     /**
+     * An artist's full discography, flattened to a song list — every album's tracks, not just
+     * [getArtistDetail]'s bounded topSongs shelf. Powers shuffle/play-all on the artist page.
+     */
+    suspend fun getArtistAllSongs(artistId: String): Result<List<Song>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        return withContext(Dispatchers.IO) {
+            try {
+                val songJsons = api.getArtistSongs(artistId).getOrThrow()
+                Result.success(NavidromeResponseParser.parseSongs(songJsons).map { it.toSong() })
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: getArtistAllSongs failed"); Result.failure(e)
+            }
+        }
+    }
+
+    /**
      * Fetches a gateway playlist live: its name plus its tracks. Needed because the DAO only holds
      * playlists that a sync has already pulled down — a playlist created seconds ago (a custom mix)
      * isn't there yet, and its songs are gateway ids the local song table has never seen.

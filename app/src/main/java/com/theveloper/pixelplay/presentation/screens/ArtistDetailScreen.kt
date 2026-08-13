@@ -138,6 +138,7 @@ fun ArtistDetailScreen(
     // Discography shows a horizontal shelf until expanded into the full album list.
     var discographyExpanded by rememberSaveable(artistId) { mutableStateOf(false) }
     var isBuildingRadio by remember { mutableStateOf(false) }
+    var isLoadingFullDiscography by remember { mutableStateOf(false) }
     val selectedSongForInfo by playerViewModel.selectedSongForInfo.collectAsStateWithLifecycle()
     val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
@@ -550,12 +551,17 @@ fun ArtistDetailScreen(
                             hasCustomImage = !artist.customImageUri.isNullOrBlank(),
                             onBackPressed = { navController.popBackStack() },
                             onPlayClick = {
-                                if (songs.isNotEmpty()) {
-                                    playerViewModel.playSongsShuffled(
-                                        songs,
-                                        artist.name,
-                                        startAtZero = true
-                                    )
+                                if (!isLoadingFullDiscography && songs.isNotEmpty()) {
+                                    isLoadingFullDiscography = true
+                                    coroutineScope.launch {
+                                        val fullDiscography = viewModel.getFullDiscography()
+                                        isLoadingFullDiscography = false
+                                        playerViewModel.playSongsShuffled(
+                                            fullDiscography.ifEmpty { songs },
+                                            artist.name,
+                                            startAtZero = true
+                                        )
+                                    }
                                 }
                             },
                             onChangeImage = { imagePickerLauncher.launch("image/*") },
@@ -572,12 +578,17 @@ fun ArtistDetailScreen(
                             headerImageRequestSize = headerImageRequestSize,
                             onBackPressed = { navController.popBackStack() },
                             onPlayClick = {
-                                if (songs.isNotEmpty()) {
-                                    playerViewModel.playSongsShuffled(
-                                        songs,
-                                        artist.name,
-                                        startAtZero = true
-                                    )
+                                if (!isLoadingFullDiscography && songs.isNotEmpty()) {
+                                    isLoadingFullDiscography = true
+                                    coroutineScope.launch {
+                                        val fullDiscography = viewModel.getFullDiscography()
+                                        isLoadingFullDiscography = false
+                                        playerViewModel.playSongsShuffled(
+                                            fullDiscography.ifEmpty { songs },
+                                            artist.name,
+                                            startAtZero = true
+                                        )
+                                    }
                                 }
                             },
                             onChangeImage = { imagePickerLauncher.launch("image/*") },
