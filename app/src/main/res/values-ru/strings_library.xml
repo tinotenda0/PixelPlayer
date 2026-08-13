@@ -115,10 +115,7 @@
     <string name="song_info_cd_add_to_favorites_all">Добавить всё в избранное</string>
     <string name="song_info_cd_remove_from_favorites">Удалить из избранного</string>
     <string name="song_info_cd_remove_from_favorites_all">Удалить всё из избранного</string>
-    <string name="song_info_share_chooser_title">Поделиться аудиофайлом через</string>
-    <string name="song_info_cd_share_song_file">Поделиться аудиофайлом</string>
     <string name="song_info_cd_share_all_as_zip">Поделиться всем как ZIP</string>
-    <string name="song_info_error_share_song">Не удалось поделиться треком: %1$s</string>
     <string name="song_info_action_add_to_queue">Добавить в очередь</string>
     <string name="song_info_cd_add_to_queue">Добавить в очередь</string>
     <string name="song_info_action_queue_next">Следующий</string>

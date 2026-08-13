@@ -70,6 +70,14 @@ object SearchRanker {
     // history already lifts songs.
     private const val AFFINITY_BONUS_CAP = 250
 
+    // Search runs local results first, then re-ranks once slower live gateway results land —
+    // without this, a marginal score change between those two passes visibly swaps whatever was
+    // showing in the prominent "top result" slot for something else, even when the original was
+    // just as good a match. Small enough to never flip a genuinely better match (tiers are spaced
+    // by 1000), large enough to win a near-tie against the same item's own score drifting between
+    // passes (source-rank/affinity bonuses shift as more results arrive).
+    private const val STABILITY_BONUS = 150
+
     private const val FUZZY_ACCEPT = 0.84       // min similarity to count as a fuzzy match
     private const val RECENCY_WINDOW_MS = 30L * 24 * 60 * 60 * 1000
 
@@ -101,7 +109,8 @@ object SearchRanker {
         items: List<SearchResultItem>,
         playStats: Map<String, PlayStat>,
         sourceRanks: Map<String, Int> = emptyMap(),
-        nowMs: Long = System.currentTimeMillis()
+        nowMs: Long = System.currentTimeMillis(),
+        previousTopKey: String? = null
     ): List<SearchResultItem> {
         val nq = normalize(query)
         if (nq.isEmpty()) return items
@@ -116,7 +125,9 @@ object SearchRanker {
             .withIndex()
             .map { (index, item) ->
                 val rank = sourceRanks[itemKey(item)] ?: index
-                Triple(item, score(nq, qWords, item, playStats, affinity, rank, nowMs), index)
+                var s = score(nq, qWords, item, playStats, affinity, rank, nowMs)
+                if (previousTopKey != null && itemKey(item) == previousTopKey) s += STABILITY_BONUS
+                Triple(item, s, index)
             }
             // Tiebreak on the ORIGINAL order, not the name. Results arrive already ordered by
             // source relevance (the gateway returns best-match-first), and equal-scoring items are

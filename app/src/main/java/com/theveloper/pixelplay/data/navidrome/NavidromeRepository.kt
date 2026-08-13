@@ -27,6 +27,7 @@ import com.theveloper.pixelplay.data.navidrome.model.NavidromeArtist
 import com.theveloper.pixelplay.data.navidrome.model.NavidromeCredentials
 import com.theveloper.pixelplay.data.navidrome.model.NavidromeSong
 import com.theveloper.pixelplay.data.network.navidrome.NavidromeApiService
+import com.theveloper.pixelplay.data.network.navidrome.SubsonicApiException
 import com.theveloper.pixelplay.data.network.navidrome.NavidromeResponseParser
 import com.theveloper.pixelplay.data.preferences.PlaylistPreferencesRepository
 import com.theveloper.pixelplay.data.stream.BulkSyncResult
@@ -88,7 +89,6 @@ class NavidromeRepository @Inject constructor(
         private const val NAVIDROME_ALBUM_ID_OFFSET = 10_000_000_000_000L
         private const val NAVIDROME_ARTIST_ID_OFFSET = 11_000_000_000_000L
         private const val NAVIDROME_PARENT_DIRECTORY = "/Cloud/Navidrome"
-        private const val NAVIDROME_GENRE = "Navidrome"
         private const val NAVIDROME_PLAYLIST_PREFIX = "navidrome_playlist:"
         private const val LIBRARY_PLAYLIST_ID = "__library__"
     }
@@ -1496,7 +1496,7 @@ class NavidromeRepository @Inject constructor(
                     albumArtUriString = navidromeSong.coverArtId?.takeIf { it.isNotBlank() }
                         ?.let { "navidrome_cover://$it" },
                     duration = navidromeSong.duration,
-                    genre = navidromeSong.genre ?: NAVIDROME_GENRE,
+                    genre = navidromeSong.genre,
                     filePath = navidromeSong.path,
                     parentDirectoryPath = NAVIDROME_PARENT_DIRECTORY,
                     isFavorite = false,
@@ -1629,11 +1629,10 @@ class NavidromeRepository @Inject constructor(
             playbackRate = playbackRate,
             ignoreScrobble = ignoreScrobble
         )
-        // Fallback to standard scrobble if reportPlayback is not supported.
-        // PS: The latest release of Navidrome currently doesn't support the
-        // standard OpenSubsonic API (reportPlayback) at the time of writing
-        // See: (https://github.com/navidrome/navidrome/pull/5442), so this is required.
-        if (result.isFailure && result.exceptionOrNull()?.message?.contains("404") == true) {
+        // Fallback to standard scrobble if reportPlayback isn't implemented server-side
+        // (Subsonic error code 90, "unknown method" — see subsonic.py's dispatch fallback).
+        val isUnknownMethod = (result.exceptionOrNull() as? SubsonicApiException)?.code == 90
+        if (result.isFailure && isUnknownMethod) {
             if (state == "playing" || state == "starting") {
                 return api.scrobble(id = navidromeId, submission = false)
             }

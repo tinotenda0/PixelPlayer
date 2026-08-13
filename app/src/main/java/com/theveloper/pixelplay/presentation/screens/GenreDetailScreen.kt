@@ -1035,7 +1035,7 @@ fun GenreSongItemWrapper(
             if (!isFirstInAlbum) Spacer(Modifier.height(2.dp))
             
             // Optimization: De-reference stable state values to avoid observing the whole object
-            val isCurrent = stablePlayerState.currentSong?.id == song.id
+            val isCurrent = song.isSamePlaybackEntity(stablePlayerState.currentSong)
             val isPlaying = stablePlayerState.isPlaying
 
             EnhancedSongListItem(

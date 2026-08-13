@@ -90,7 +90,6 @@
     <string name="edit_song_unable_to_load_image">تعذر تحميل الصورة المحددة</string>
 
     <!-- Song info bottom sheet -->
-    <string name="song_info_share_chooser_title">مشاركة ملف الأغنية عبر</string>
     <string name="cd_play_song_action">تشغيل الأغنية</string>
     <string name="cd_share_song_file">مشاركة ملف الأغنية</string>
     <string name="cd_add_to_queue">إضافة إلى قائمة الانتظار</string>

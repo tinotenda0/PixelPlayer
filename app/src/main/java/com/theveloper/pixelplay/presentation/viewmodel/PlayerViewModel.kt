@@ -69,6 +69,7 @@ import com.theveloper.pixelplay.data.service.player.CastPlayer
 import com.theveloper.pixelplay.data.service.http.MediaFileHttpServerService
 import com.theveloper.pixelplay.data.service.player.DualPlayerEngine
 import com.theveloper.pixelplay.data.worker.SyncManager
+import com.theveloper.pixelplay.utils.MediaItemBuilder
 import com.theveloper.pixelplay.utils.ValidatedLyricsImport
 import com.theveloper.pixelplay.utils.LocalArtworkUri
 import com.theveloper.pixelplay.utils.LyricsUtils
@@ -1928,9 +1929,19 @@ class PlayerViewModel @Inject constructor(
                 val key = s.navidromeId ?: s.id
                 if (seen.add(key)) queue.add(s)
             }
-            // Re-issue with the full queue; the current track keeps playing because it stays
-            // at index 0.
-            showAndPlaySong(song, queue, queueName)
+            val controller = mediaController
+            if (controller != null && controller.currentMediaItem?.mediaId == song.id) {
+                // Still playing the song we started on a moment ago: append the radio behind it
+                // instead of re-issuing showAndPlaySong, which would rebuild the timeline from a
+                // 1-song context to a 41-song one and reset playback to 0 (queue sizes never
+                // match, so the reuse fast-path in showAndPlaySong can't kick in).
+                controller.addMediaItems(queue.drop(1).map { MediaItemBuilder.build(it) })
+                _playerUiState.update { it.copy(currentPlaybackQueue = queue.toPlaybackQueue()) }
+            } else {
+                // Playback moved on in the meantime (or the controller isn't ready) — nothing to
+                // preserve, so a normal replace is correct here.
+                showAndPlaySong(song, queue, queueName)
+            }
         }
     }
 

@@ -60,6 +60,16 @@ data class Song(
             ?: artists.firstOrNull()
             ?: ArtistRef(id = artistId, name = artist, isPrimary = true)
 
+    /**
+     * True if [other] is the same underlying song, even if the two [Song] instances were built
+     * from different sources and so carry different [id] values — a Room-synced song's [id] is
+     * a hashed unified Long, while a live-gateway-fetched song's [id] is `"navidrome_<rawId>"`.
+     * [navidromeId] is populated consistently on both paths, so it's the stable identity to
+     * compare on wherever "is this the same song" actually matters (e.g. now-playing highlights).
+     */
+    fun isSamePlaybackEntity(other: Song?): Boolean =
+        other != null && navidromeId != null && navidromeId == other.navidromeId
+
     companion object {
         fun emptySong(): Song {
             return Song(

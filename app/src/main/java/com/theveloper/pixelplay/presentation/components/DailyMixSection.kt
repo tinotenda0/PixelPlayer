@@ -348,8 +348,8 @@ private fun DailyMixSongList(
         songs.forEach { song ->
             EnhancedSongListItem(
                 song = song,
-                isCurrentSong = stablePlayerState.currentSong?.id == song.id,
-                isPlaying = stablePlayerState.isPlaying && stablePlayerState.currentSong?.id == song.id,
+                isCurrentSong = song.isSamePlaybackEntity(stablePlayerState.currentSong),
+                isPlaying = stablePlayerState.isPlaying && song.isSamePlaybackEntity(stablePlayerState.currentSong),
                 containerColorOverride = itemContainerColor,
                 onMoreOptionsClick = onMoreOptionsClick,
                 customShape = RoundedCornerShape(10.dp),

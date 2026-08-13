@@ -115,10 +115,7 @@
     <string name="song_info_cd_add_to_favorites_all">Sukai semua</string>
     <string name="song_info_cd_remove_from_favorites">Hapus dari favorit</string>
     <string name="song_info_cd_remove_from_favorites_all">Batal sukai semua</string>
-    <string name="song_info_share_chooser_title">Bagikan file lagu melalui</string>
-    <string name="song_info_cd_share_song_file">Bagikan file lagu</string>
     <string name="song_info_cd_share_all_as_zip">Bagikan semua sebagai ZIP</string>
-    <string name="song_info_error_share_song">Tidak dapat membagikan lagu: %1$s</string>
     <string name="song_info_action_add_to_queue">Tambah ke antrean</string>
     <string name="song_info_cd_add_to_queue">Tambah ke antrean</string>
     <string name="song_info_action_queue_next">Putar berikutnya</string>

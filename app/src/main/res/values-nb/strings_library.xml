@@ -115,10 +115,7 @@
     <string name="song_info_cd_add_to_favorites_all">Legg alle til i favoritter</string>
     <string name="song_info_cd_remove_from_favorites">Fjern fra favoritter</string>
     <string name="song_info_cd_remove_from_favorites_all">Fjern alle fra favoritter</string>
-    <string name="song_info_share_chooser_title">Del sangfil via</string>
-    <string name="song_info_cd_share_song_file">Del sangfil</string>
     <string name="song_info_cd_share_all_as_zip">Del alle som ZIP</string>
-    <string name="song_info_error_share_song">Kunne ikke dele sang: %1$s</string>
     <string name="song_info_action_add_to_queue">Legg til i kø</string>
     <string name="song_info_cd_add_to_queue">Legg til i kø</string>
     <string name="song_info_action_queue_next">Neste</string>

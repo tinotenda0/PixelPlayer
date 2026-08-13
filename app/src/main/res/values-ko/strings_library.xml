@@ -115,10 +115,7 @@
     <string name="song_info_cd_add_to_favorites_all">모두 즐겨찾기에 추가</string>
     <string name="song_info_cd_remove_from_favorites">즐겨찾기에서 제거</string>
     <string name="song_info_cd_remove_from_favorites_all">모두 즐겨찾기에서 제거</string>
-    <string name="song_info_share_chooser_title">곡 파일 공유 방법</string>
-    <string name="song_info_cd_share_song_file">곡 파일 공유</string>
     <string name="song_info_cd_share_all_as_zip">모두 ZIP으로 공유</string>
-    <string name="song_info_error_share_song">곡을 공유할 수 없음: %1$s</string>
     <string name="song_info_action_add_to_queue">대기열에 추가</string>
     <string name="song_info_cd_add_to_queue">대기열에 추가</string>
     <string name="song_info_action_queue_next">다음에 재생</string>

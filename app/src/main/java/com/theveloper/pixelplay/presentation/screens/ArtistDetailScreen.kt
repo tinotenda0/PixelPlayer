@@ -359,7 +359,7 @@ fun ArtistDetailScreen(
                                     song = song,
                                     songIndex = songIndex,
                                     songCount = shown.size,
-                                    isCurrentSong = stablePlayerState.currentSong?.id == song.id,
+                                    isCurrentSong = song.isSamePlaybackEntity(stablePlayerState.currentSong),
                                     isPlaying = stablePlayerState.isPlaying,
                                     onSongClick = {
                                         playerViewModel.showAndPlaySong(song, uiState.topSongs)
@@ -499,7 +499,7 @@ fun ArtistDetailScreen(
                                         song = song,
                                         songIndex = songIndex,
                                         songCount = section.songs.size,
-                                        isCurrentSong = stablePlayerState.currentSong?.id == song.id,
+                                        isCurrentSong = song.isSamePlaybackEntity(stablePlayerState.currentSong),
                                         isPlaying = stablePlayerState.isPlaying,
                                         onSongClick = {
                                             playerViewModel.showAndPlaySong(song, section.songs)

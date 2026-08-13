@@ -74,11 +74,19 @@ class SearchStateHolder @Inject constructor(
             // De-dup on the GATEWAY id: a synced library row carries id="<unified Long>" while the
             // same track from live search carries id="navidrome_<gatewayId>". Those id spaces are
             // disjoint, so comparing Song.id would never match and every synced track would double up.
-            val seen = out.mapNotNull { (it as? SearchResultItem.SongItem)?.song }
-                .map { it.navidromeId ?: it.id }
+            val localSongs = out.mapNotNull { (it as? SearchResultItem.SongItem)?.song }
+            val seenIds = localSongs.map { it.navidromeId ?: it.id }.toHashSet()
+            // Also de-dup on normalized title+artist: song resolution against YouTube isn't
+            // deterministic, so the SAME song already in a local playlist/favorite can resolve to
+            // a genuinely different gateway id from a fresh live search — that isn't a new result,
+            // it's the item the user already has, and showing it twice with two different scores is
+            // exactly what makes the "top result" visibly swap once live search lands.
+            val seenTitleArtist = localSongs
+                .map { "${SearchRanker.normalize(it.title)}|${SearchRanker.normalize(it.displayArtist)}" }
                 .toHashSet()
             out = out + live.songs
-                .filterNot { (it.navidromeId ?: it.id) in seen }
+                .filterNot { (it.navidromeId ?: it.id) in seenIds }
+                .filterNot { "${SearchRanker.normalize(it.title)}|${SearchRanker.normalize(it.displayArtist)}" in seenTitleArtist }
                 .map { SearchResultItem.SongItem(it) }
         }
         if ((filter == SearchFilterType.ALL || filter == SearchFilterType.ARTISTS) && live.artists.isNotEmpty()) {
@@ -186,6 +194,12 @@ class SearchStateHolder @Inject constructor(
 
                     try {
                         val currentFilter = _selectedSearchFilter.value
+                        // Tracks the top result across this one request's passes (local-only,
+                        // then re-ranked once live results land) so a marginal score change
+                        // between those passes can't visibly swap the prominent "top result" slot.
+                        // Local to this collectLatest iteration — a new query starts at null, never
+                        // anchored to a stale, unrelated previous search's top result.
+                        var previousTopKey: String? = null
 
                         // Live on-demand search against the Subsonic/Navidrome gateway
                         // (which augments results with streamable "yt-" YouTube songs
@@ -243,8 +257,10 @@ class SearchStateHolder @Inject constructor(
                                     normalizedQuery,
                                     merged,
                                     playStats,
-                                    buildSourceRanks(resultsList, liveResults)
+                                    buildSourceRanks(resultsList, liveResults),
+                                    previousTopKey = previousTopKey
                                 )
+                                previousTopKey = ranked.firstOrNull()?.let { SearchRanker.itemKey(it) }
 
                                 // NOTE: deliberately no `requestId != latest` guard here.
                                 // collectLatest already cancels this block the moment a newer

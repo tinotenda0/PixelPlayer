@@ -115,10 +115,7 @@
     <string name="song_info_cd_add_to_favorites_all">全部添加到收藏</string>
     <string name="song_info_cd_remove_from_favorites">取消收藏</string>
     <string name="song_info_cd_remove_from_favorites_all">全部取消收藏</string>
-    <string name="song_info_share_chooser_title">分享歌曲文件</string>
-    <string name="song_info_cd_share_song_file">分享歌曲文件</string>
     <string name="song_info_cd_share_all_as_zip">作为 ZIP 全部打包分享</string>
-    <string name="song_info_error_share_song">无法分享歌曲：%1$s</string>
     <string name="song_info_action_add_to_queue">添加到队列</string>
     <string name="song_info_cd_add_to_queue">添加到队列</string>
     <string name="song_info_action_queue_next">下一首播放</string>

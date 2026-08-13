@@ -336,7 +336,7 @@ fun AlbumDetailScreen(
                             ) { _, song ->
                                 EnhancedSongListItem(
                                     song = song,
-                                    isCurrentSong = stablePlayerState.currentSong?.id == song.id,
+                                    isCurrentSong = song.isSamePlaybackEntity(stablePlayerState.currentSong),
                                     isPlaying = stablePlayerState.isPlaying,
                                     showAlbumArt = false,
                                     onMoreOptionsClick = {

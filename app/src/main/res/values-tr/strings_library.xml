@@ -115,10 +115,7 @@
     <string name="song_info_cd_add_to_favorites_all">Tümünü favorilere ekle</string>
     <string name="song_info_cd_remove_from_favorites">Favorilerden kaldır</string>
     <string name="song_info_cd_remove_from_favorites_all">Tümünü favorilerden kaldır</string>
-    <string name="song_info_share_chooser_title">Şarkı dosyasını şununla paylaş:</string>
-    <string name="song_info_cd_share_song_file">Şarkı dosyasını paylaş</string>
     <string name="song_info_cd_share_all_as_zip">Tümünü ZIP olarak paylaş</string>
-    <string name="song_info_error_share_song">Şarkı paylaşılamadı: %1$s</string>
     <string name="song_info_action_add_to_queue">Kuyruğa ekle</string>
     <string name="song_info_cd_add_to_queue">Kuyruğa ekle</string>
     <string name="song_info_action_queue_next">Sıradaki</string>

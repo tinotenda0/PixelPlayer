@@ -775,7 +775,7 @@ fun PlaylistDetailScreen(
                                             )
                                         },
                                         song = song,
-                                        isCurrentSong = playerStableState.currentSong?.id == song.id,
+                                        isCurrentSong = song.isSamePlaybackEntity(playerStableState.currentSong),
                                         isPlaying = playerStableState.isPlaying,
                                         isDragging = isDragging,
                                         onRemoveClick = {

@@ -37,7 +37,7 @@ internal fun LibraryPlaybackAwareSongItem(
     val playbackUiState by remember(song.id, playerViewModel) {
         playerViewModel.stablePlayerState
             .map { state ->
-                val isCurrentSong = state.currentSong?.id == song.id
+                val isCurrentSong = song.isSamePlaybackEntity(state.currentSong)
                 LibrarySongPlaybackUiState(
                     isCurrentSong = isCurrentSong,
                     isPlaying = isCurrentSong && state.isPlaying

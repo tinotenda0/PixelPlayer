@@ -487,7 +487,7 @@ fun HomeScreen(
                     CuratedSection(
                         title = row.title,
                         songs = row.songs,
-                        currentSongId = currentSong?.id,
+                        currentSongNavidromeId = currentSong?.navidromeId,
                         onSongClick = { song ->
                             playerViewModel.playSongs(
                                 songsToPlay = row.songs,
@@ -873,11 +873,6 @@ fun SongListItemFavsWrapper(
     // Collect the stablePlayerState once
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
 
-    // Derive isThisSongPlaying using remember
-    val isThisSongPlaying = remember(song.id, stablePlayerState.currentSong?.id, stablePlayerState.isPlaying) {
-        song.id == stablePlayerState.currentSong?.id
-    }
-
     // Call the presentational composable
     SongListItemFavs(
         modifier = modifier,
@@ -886,7 +881,7 @@ fun SongListItemFavsWrapper(
         artist = song.displayArtist,
         albumArtUrl = song.albumArtUriString,
         isPlaying = stablePlayerState.isPlaying,
-        isCurrentSong = song.id == stablePlayerState.currentSong?.id,
+        isCurrentSong = song.isSamePlaybackEntity(stablePlayerState.currentSong),
         isExplicit = song.isExplicit,
         isDownloaded = song.navidromeId?.let {
             it in com.theveloper.pixelplay.presentation.components.LocalDownloadedSongIds.current

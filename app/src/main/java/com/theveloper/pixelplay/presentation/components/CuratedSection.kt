@@ -33,7 +33,7 @@ import com.theveloper.pixelplay.data.model.Song
 fun CuratedSection(
     title: String,
     songs: List<Song>,
-    currentSongId: String?,
+    currentSongNavidromeId: String?,
     onSongClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -71,7 +71,7 @@ fun CuratedSection(
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        color = if (song.id == currentSongId) {
+                        color = if (song.navidromeId != null && song.navidromeId == currentSongNavidromeId) {
                             MaterialTheme.colorScheme.primary
                         } else {
                             MaterialTheme.colorScheme.onSurface

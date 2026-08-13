@@ -434,7 +434,7 @@ fun LibrarySongsTabPaginated(
                             ) { index ->
                                 val song = paginatedSongs[index]
                                 if (song != null) {
-                                    val isPlayingThisSong = song.id == stablePlayerState.currentSong?.id && stablePlayerState.isPlaying
+                                    val isPlayingThisSong = song.isSamePlaybackEntity(stablePlayerState.currentSong) && stablePlayerState.isPlaying
 
                                     val rememberedOnMoreOptionsClick: (Song) -> Unit = remember(onMoreOptionsClick) {
                                         { songFromListItem -> onMoreOptionsClick(songFromListItem) }
@@ -446,7 +446,7 @@ fun LibrarySongsTabPaginated(
                                     EnhancedSongListItem(
                                         song = song,
                                         isPlaying = isPlayingThisSong,
-                                        isCurrentSong = stablePlayerState.currentSong?.id == song.id,
+                                        isCurrentSong = song.isSamePlaybackEntity(stablePlayerState.currentSong),
                                         isLoading = false,
                                         onMoreOptionsClick = rememberedOnMoreOptionsClick,
                                         onClick = rememberedOnClick

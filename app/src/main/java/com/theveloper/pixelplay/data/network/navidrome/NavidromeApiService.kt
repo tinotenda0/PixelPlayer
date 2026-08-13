@@ -21,6 +21,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
+ * A Subsonic API error response, with the numeric code preserved (not just embedded in a
+ * string) so callers can branch on it reliably — e.g. code 90, "unknown method", means the
+ * server doesn't implement this custom endpoint yet, distinct from every other failure mode.
+ */
+class SubsonicApiException(val code: Int, override val message: String) : Exception(message)
+
+/**
  * Client for the XPS gateway's Navidrome/Subsonic-protocol API.
  *
  * Implements the Subsonic API protocol with token-based authentication. PixelPlayer is a
@@ -195,7 +202,7 @@ class NavidromeApiService @Inject constructor(
                 val error = subsonicResponse.optJSONObject("error")
                 val code = error?.optInt("code", -1) ?: -1
                 val message = error?.optString("message", "Unknown error") ?: "Unknown error"
-                return Result.failure(Exception("API Error $code: $message"))
+                return Result.failure(SubsonicApiException(code, "API Error $code: $message"))
             }
 
             Result.success(subsonicResponse)

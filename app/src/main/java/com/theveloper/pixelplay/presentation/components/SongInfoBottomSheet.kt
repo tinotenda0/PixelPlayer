@@ -89,7 +89,6 @@ import com.theveloper.pixelplay.presentation.components.subcomps.AutoSizingTextT
 import com.theveloper.pixelplay.utils.formatDuration
 import com.theveloper.pixelplay.utils.shapes.RoundedStarShape
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
-import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.theveloper.pixelplay.data.media.CoverArtUpdate
 import com.theveloper.pixelplay.ui.theme.MontserratFamily
@@ -151,8 +150,6 @@ fun SongInfoBottomSheet(
     val context = LocalContext.current
     val ringtonePermissionMissingMsg = stringResource(R.string.song_info_ringtone_permission_missing)
     val ringtoneFailedFormat = stringResource(R.string.song_info_ringtone_failed)
-    val shareChooserTitle = stringResource(R.string.song_info_share_chooser_title)
-    val errorShareSongFormat = stringResource(R.string.song_info_error_share_song)
     var showEditSheet by remember { mutableStateOf(false) }
     var showArtistPicker by remember { mutableStateOf(false) }
     var showTonePickerDialog by remember { mutableStateOf(false) }
@@ -505,27 +502,6 @@ fun SongInfoBottomSheet(
                                             isFavorite = isFavorite,
                                             onPlaySong = onPlaySong,
                                             onToggleFavorite = onToggleFavorite,
-                                            onShareClick = {
-                                                try {
-                                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                        type = "audio/*"
-                                                        putExtra(Intent.EXTRA_STREAM, song.contentUriString.toUri())
-                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                    }
-                                                    context.startActivity(
-                                                        Intent.createChooser(
-                                                            shareIntent,
-                                                            shareChooserTitle
-                                                        )
-                                                    )
-                                                } catch (e: Exception) {
-                                                    Toast.makeText(
-                                                        context,
-                                                        errorShareSongFormat.format(e.localizedMessage ?: ""),
-                                                        Toast.LENGTH_LONG
-                                                    ).show()
-                                                }
-                                            },
                                             playButtonShape = playButtonShape,
                                             evenCornerRadiusElems = evenCornerRadiusElems
                                         )
@@ -1138,7 +1114,6 @@ private fun Row1Actions(
     isFavorite: Boolean,
     onPlaySong: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onShareClick: () -> Unit,
     playButtonShape: Shape,
     evenCornerRadiusElems: androidx.compose.ui.unit.Dp
 ) {
@@ -1169,18 +1144,6 @@ private fun Row1Actions(
         }
     }
 
-    val shareInteractionSource = remember { MutableInteractionSource() }
-    val isSharePressed by shareInteractionSource.collectIsPressedAsState()
-    var shareVisualPressed by remember { mutableStateOf(false) }
-    LaunchedEffect(isSharePressed) {
-        if (isSharePressed) {
-            shareVisualPressed = true
-        } else {
-            kotlinx.coroutines.delay(180)
-            shareVisualPressed = false
-        }
-    }
-
     val pressSpec = spring<Float>(
         dampingRatio = 0.8f,
         stiffness = 300f
@@ -1196,15 +1159,9 @@ private fun Row1Actions(
         animationSpec = pressSpec,
         label = "FavoritePressFraction"
     )
-    val pressFractionShare by animateFloatAsState(
-        targetValue = if (shareVisualPressed) 1f else 0f,
-        animationSpec = pressSpec,
-        label = "SharePressFraction"
-    )
 
-    val weightPlay = (0.5f + 0.08f * pressFractionPlay - 0.05f * pressFractionFavorite - 0.05f * pressFractionShare).coerceAtLeast(0.1f)
-    val weightFavorite = (0.25f + 0.08f * pressFractionFavorite - 0.04f * pressFractionPlay - 0.03f * pressFractionShare).coerceAtLeast(0.05f)
-    val weightShare = (0.25f + 0.08f * pressFractionShare - 0.04f * pressFractionPlay - 0.03f * pressFractionFavorite).coerceAtLeast(0.05f)
+    val weightPlay = (0.67f + 0.08f * pressFractionPlay - 0.05f * pressFractionFavorite).coerceAtLeast(0.1f)
+    val weightFavorite = (0.33f + 0.08f * pressFractionFavorite - 0.04f * pressFractionPlay).coerceAtLeast(0.05f)
 
     // Local favorite button animations
     val favoriteButtonCornerRadius by animateDpAsState(
@@ -1303,32 +1260,6 @@ private fun Row1Actions(
                 contentDescription = stringResource(
                     if (isFavorite) R.string.song_info_cd_remove_from_favorites else R.string.song_info_cd_add_to_favorites
                 )
-            )
-        }
-
-        FilledTonalIconButton(
-            modifier = Modifier
-                .weight(weightShare)
-                .fillMaxHeight(),
-            onClick = {
-                if (clickPending) return@FilledTonalIconButton
-                clickPending = true
-                shareVisualPressed = true
-                android.util.Log.d("PixelPlayerDebug", "Row1Actions: Share clicked")
-                coroutineScope.launch {
-                    kotlinx.coroutines.delay(180)
-                    shareVisualPressed = false
-                    clickPending = false
-                    onShareClick()
-                }
-            },
-            shape = CircleShape,
-            interactionSource = shareInteractionSource
-        ) {
-            Icon(
-                modifier = Modifier.size(FloatingActionButtonDefaults.LargeIconSize),
-                imageVector = Icons.Rounded.Share,
-                contentDescription = stringResource(R.string.song_info_cd_share_song_file)
             )
         }
     }

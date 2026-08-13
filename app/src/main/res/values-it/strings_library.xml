@@ -115,10 +115,7 @@
     <string name="song_info_cd_add_to_favorites_all">Aggiungi tutti ai preferiti</string>
     <string name="song_info_cd_remove_from_favorites">Rimuovi dai preferiti</string>
     <string name="song_info_cd_remove_from_favorites_all">Rimuovi tutti dai preferiti</string>
-    <string name="song_info_share_chooser_title">Condividi file brano tramite</string>
-    <string name="song_info_cd_share_song_file">Condividi file brano</string>
     <string name="song_info_cd_share_all_as_zip">Condividi tutti come ZIP</string>
-    <string name="song_info_error_share_song">Impossibile condividere il brano: %1$s</string>
     <string name="song_info_action_add_to_queue">Aggiungi alla coda</string>
     <string name="song_info_cd_add_to_queue">Aggiungi alla coda</string>
     <string name="song_info_action_queue_next">Dopo</string>
