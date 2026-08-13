@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -74,6 +75,18 @@ class AlbumDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
+                // Room only ever caches whatever subset of an album's tracks happened to sync
+                // (playlist/favorite/download members) — it's never a reliable full tracklist.
+                // Whenever this album's real gateway id is known, fetch it live for the complete,
+                // authoritative track list instead of showing whatever partial set is local.
+                // Reached from any "View Album" call site that only had a local Long id to work
+                // with (e.g. from a song's own info sheet), not just gateway-id-aware navigation.
+                val gatewayId = musicRepository.getAlbumById(id).first()?.navidromeId
+                if (gatewayId != null) {
+                    loadGatewayAlbum(gatewayId)
+                    return@launch
+                }
+
                 val albumDetailsFlow = musicRepository.getAlbumById(id)
                 val albumSongsFlow = musicRepository.getSongsForAlbum(id)
 
