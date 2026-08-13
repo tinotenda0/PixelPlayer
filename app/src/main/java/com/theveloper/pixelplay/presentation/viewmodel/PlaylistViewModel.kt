@@ -338,21 +338,42 @@ class PlaylistViewModel @Inject constructor(
                 else -> source
             }
 
-            playlistPreferencesRepository.createPlaylist(
-                name = name,
-                songIds = resolvedSongIds,
-                isAiGenerated = isAiGenerated,
-                isQueueGenerated = isQueueGenerated,
-                coverImageUri = savedCoverPath,
-                coverColorArgb = coverColor,
-                coverIconName = coverIcon,
-                coverShapeType = coverShapeType,
-                coverShapeDetail1 = coverShapeDetail1,
-                coverShapeDetail2 = coverShapeDetail2,
-                coverShapeDetail3 = coverShapeDetail3,
-                coverShapeDetail4 = coverShapeDetail4,
-                source = resolvedSource
-            )
+            if (resolvedSmartRule != null) {
+                // Smart playlists recompute their contents from local listening history on each
+                // device — a live view, not a fixed list — so they stay local rather than
+                // pushing a snapshot that would immediately go stale.
+                playlistPreferencesRepository.createPlaylist(
+                    name = name,
+                    songIds = resolvedSongIds,
+                    isAiGenerated = isAiGenerated,
+                    isQueueGenerated = isQueueGenerated,
+                    coverImageUri = savedCoverPath,
+                    coverColorArgb = coverColor,
+                    coverIconName = coverIcon,
+                    coverShapeType = coverShapeType,
+                    coverShapeDetail1 = coverShapeDetail1,
+                    coverShapeDetail2 = coverShapeDetail2,
+                    coverShapeDetail3 = coverShapeDetail3,
+                    coverShapeDetail4 = coverShapeDetail4,
+                    source = resolvedSource
+                )
+            } else {
+                createGatewayBackedPlaylist(
+                    name = name,
+                    songIds = resolvedSongIds,
+                    isAiGenerated = isAiGenerated,
+                    isQueueGenerated = isQueueGenerated,
+                    coverImageUri = savedCoverPath,
+                    coverColorArgb = coverColor,
+                    coverIconName = coverIcon,
+                    coverShapeType = coverShapeType,
+                    coverShapeDetail1 = coverShapeDetail1,
+                    coverShapeDetail2 = coverShapeDetail2,
+                    coverShapeDetail3 = coverShapeDetail3,
+                    coverShapeDetail4 = coverShapeDetail4,
+                    source = resolvedSource
+                )
+            }
             _playlistCreationEvent.emit(true)
         }
     }
@@ -539,7 +560,7 @@ class PlaylistViewModel @Inject constructor(
             try {
                 val (name, songIds) = m3uManager.parseM3u(uri)
                 if (songIds.isNotEmpty()) {
-                    playlistPreferencesRepository.createPlaylist(name, songIds)
+                    createGatewayBackedPlaylist(name, songIds)
                 }
             } catch (e: Exception) {
                 Log.e("PlaylistViewModel", "Error importing M3U", e)
@@ -870,6 +891,51 @@ class PlaylistViewModel @Inject constructor(
     }
 
     /**
+     * Creates a playlist on the gateway first (so it shows up on every signed-in device, the
+     * same as any other playlist here), then locally using that same id. If the gateway create
+     * fails (e.g. offline) this falls back to a plain local id — creation never hard-fails, it
+     * just won't be gateway-backed until a later edit successfully pushes it.
+     */
+    private suspend fun createGatewayBackedPlaylist(
+        name: String,
+        songIds: List<String>,
+        isAiGenerated: Boolean = false,
+        isQueueGenerated: Boolean = false,
+        coverImageUri: String? = null,
+        coverColorArgb: Int? = null,
+        coverIconName: String? = null,
+        coverShapeType: String? = null,
+        coverShapeDetail1: Float? = null,
+        coverShapeDetail2: Float? = null,
+        coverShapeDetail3: Float? = null,
+        coverShapeDetail4: Float? = null,
+        source: String = "LOCAL"
+    ): Playlist {
+        val gatewaySongIds = if (songIds.isEmpty()) {
+            emptyList()
+        } else {
+            musicRepository.getSongsByIds(songIds).first().mapNotNull { it.navidromeId }
+        }
+        val gatewayId = navidromeRepository.createGatewayPlaylist(name, gatewaySongIds)
+        return playlistPreferencesRepository.createPlaylist(
+            name = name,
+            songIds = songIds,
+            isAiGenerated = isAiGenerated,
+            isQueueGenerated = isQueueGenerated,
+            coverImageUri = coverImageUri,
+            coverColorArgb = coverColorArgb,
+            coverIconName = coverIconName,
+            coverShapeType = coverShapeType,
+            coverShapeDetail1 = coverShapeDetail1,
+            coverShapeDetail2 = coverShapeDetail2,
+            coverShapeDetail3 = coverShapeDetail3,
+            coverShapeDetail4 = coverShapeDetail4,
+            source = source,
+            customId = gatewayId
+        )
+    }
+
+    /**
      * Pushes a `pl-` or linked-YTM playlist's current local song list to the gateway so the next
      * library sync sees the edit instead of overwriting it. No-op for playlist classes not wired
      * for push (curated rows fork instead — see [forkCuratedPlaylistIfNeeded]).
@@ -1026,7 +1092,7 @@ class PlaylistViewModel @Inject constructor(
                     // Create Playlist
                     val playlistName = "AI: $prompt".take(50)
 
-                    playlistPreferencesRepository.createPlaylist(
+                    createGatewayBackedPlaylist(
                         name = playlistName,
                         songIds = selectedSongs.map { it.id },
                         isAiGenerated = true,
@@ -1083,7 +1149,7 @@ class PlaylistViewModel @Inject constructor(
 
                 if (mergedSongIds.isNotEmpty()) {
                     // Create new playlist with merged songs
-                    playlistPreferencesRepository.createPlaylist(newPlaylistName, mergedSongIds)
+                    createGatewayBackedPlaylist(newPlaylistName, mergedSongIds)
                     _playlistCreationEvent.emit(true)
                 }
             } catch (e: Exception) {
@@ -1224,17 +1290,7 @@ class PlaylistViewModel @Inject constructor(
                 }
 
                 // Create new playlist with merged songs
-                val newPlaylist = Playlist(
-                    id = UUID.randomUUID().toString(),
-                    name = newPlaylistName,
-                    songIds = allSongs.toList(),
-                    createdAt = System.currentTimeMillis(),
-                    lastModified = System.currentTimeMillis(),
-                    isAiGenerated = false,
-                    isQueueGenerated = false
-                )
-
-                playlistPreferencesRepository.createPlaylist(
+                createGatewayBackedPlaylist(
                     name = newPlaylistName,
                     songIds = allSongs.toList(),
                     isAiGenerated = false,
