@@ -403,14 +403,21 @@ class NavidromeApiService @Inject constructor(
      * Builds a playlist by blending the given artists and saves it on the gateway.
      * [artistIds] are gateway artist ids (`yt-artist-<browseId>`).
      */
-    suspend fun buildMix(name: String, artistIds: List<String>, count: Int = 40): Result<JSONObject> {
+    suspend fun buildMix(
+        name: String,
+        artistIds: List<String>,
+        count: Int = 40,
+        save: Boolean = true
+    ): Result<JSONObject> {
         val params = mutableListOf<Pair<String, String>>(
             "name" to name,
             "count" to count.toString()
         )
         // Repeated `artistId` params, matching how setSeeds passes multi-valued arguments.
         artistIds.forEach { params.add("artistId" to it) }
-        // The gateway answers with a standard Subsonic `playlist` object for the saved mix.
+        if (!save) params.add("save" to "false")
+        // The gateway answers with a standard Subsonic `playlist` object either way — its `entry`
+        // array carries the blended songs whether or not it was actually persisted.
         return requestAndParseRepeated("buildMix", params)
             .map { it.optJSONObject("playlist") ?: JSONObject() }
     }

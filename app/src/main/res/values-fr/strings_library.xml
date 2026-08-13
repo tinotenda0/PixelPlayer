@@ -13,6 +13,7 @@
     <string name="library_tab_playlists">Playlists</string>
     <string name="library_tab_liked">Favoris</string>
     <string name="library_liked_artists_section_title">Artistes favoris</string>
+    <string name="library_liked_artists_radio_chip">Radio</string>
 
     <!-- Library Toasts -->
     <string name="library_toast_playlist_created">Playlist créée avec succès</string>

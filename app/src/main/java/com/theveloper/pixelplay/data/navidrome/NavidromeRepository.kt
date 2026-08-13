@@ -1041,6 +1041,34 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
+    /**
+     * Blends [artistIds] into a queue without saving anything — used for liked-artist radio,
+     * where a playlist getting left behind on every play would be unwanted clutter.
+     */
+    suspend fun buildEphemeralMix(
+        name: String,
+        artistIds: List<String>,
+        count: Int = 40
+    ): Result<List<Song>> {
+        if (!isLoggedIn) return Result.failure(Exception("Not logged in"))
+        if (artistIds.isEmpty()) return Result.failure(Exception("Pick at least one artist"))
+        return withContext(Dispatchers.IO) {
+            try {
+                val obj = api.buildMix(name, artistIds, count, save = false).getOrThrow()
+                val arr = obj.optJSONArray("entry")
+                val jsons = (0 until (arr?.length() ?: 0)).mapNotNull { arr?.optJSONObject(it) }
+                val songs = NavidromeResponseParser.parseSongs(jsons).map { it.toSong() }
+                if (songs.isEmpty()) {
+                    Result.failure(Exception("Couldn't find those artists upstream"))
+                } else {
+                    Result.success(songs)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: buildEphemeralMix failed"); Result.failure(e)
+            }
+        }
+    }
+
     /** Album detail fetched live for a gateway `yt-album-…` id: the album + its tracks. */
     suspend fun getAlbumDetail(albumId: String): Result<Pair<Album, List<Song>>> {
         if (!isLoggedIn) return Result.failure(Exception("Not logged in"))

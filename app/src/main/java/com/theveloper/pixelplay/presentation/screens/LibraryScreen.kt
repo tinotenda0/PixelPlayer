@@ -515,6 +515,7 @@ fun LibraryScreen(
     var likedShowLocateButton by remember { mutableStateOf(false) }
     var songsLocateAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var likedLocateAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var isBuildingLikedArtistsRadio by remember { mutableStateOf(false) }
 
     // Multi-selection callbacks
     val onSongLongPress: (Song) -> Unit = remember(multiSelectionState, haptic) {
@@ -1424,6 +1425,23 @@ fun LibraryScreen(
                                                     route = Screen.ArtistDetail.createRoute(artistId, name),
                                                     patternToPop = Screen.ArtistDetail.route
                                                 )
+                                            },
+                                            isBuildingLikedArtistsRadio = isBuildingLikedArtistsRadio,
+                                            onPlayLikedArtistsRadio = {
+                                                if (!isBuildingLikedArtistsRadio) {
+                                                    isBuildingLikedArtistsRadio = true
+                                                    scope.launch {
+                                                        val songs = libraryViewModel.buildLikedArtistsRadio()
+                                                        isBuildingLikedArtistsRadio = false
+                                                        if (songs.isNotEmpty()) {
+                                                            playerViewModel.playSongs(
+                                                                songs,
+                                                                songs.first(),
+                                                                "Liked Artists Radio"
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                             }
                                         )
                                     }

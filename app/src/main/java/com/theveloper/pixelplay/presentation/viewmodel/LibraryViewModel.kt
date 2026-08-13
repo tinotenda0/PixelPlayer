@@ -31,4 +31,12 @@ class LibraryViewModel @Inject constructor(
     init {
         viewModelScope.launch { navidromeRepository.refreshLikedArtists() }
     }
+
+    /** An ephemeral queue blending every liked artist, in gateway-chosen (round-robin) order. */
+    suspend fun buildLikedArtistsRadio(): List<com.theveloper.pixelplay.data.model.Song> {
+        val artistIds = likedArtists.value.map { it.id }
+        if (artistIds.isEmpty()) return emptyList()
+        return navidromeRepository.buildEphemeralMix("Liked Artists Radio", artistIds)
+            .getOrDefault(emptyList())
+    }
 }

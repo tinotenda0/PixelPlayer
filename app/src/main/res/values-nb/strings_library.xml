@@ -13,6 +13,7 @@
     <string name="library_tab_playlists">Spillelister</string>
     <string name="library_tab_liked">Likte</string>
     <string name="library_liked_artists_section_title">Favorittartister</string>
+    <string name="library_liked_artists_radio_chip">Radio</string>
 
     <!-- Library Toasts -->
     <string name="library_toast_playlist_created">Spilleliste opprettet</string>

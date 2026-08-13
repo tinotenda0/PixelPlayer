@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -83,7 +85,9 @@ import androidx.compose.ui.text.style.TextOverflow
 @Composable
 private fun LikedArtistsRow(
     artists: List<LikedArtistSummary>,
-    onArtistClick: (String, String) -> Unit
+    isBuildingRadio: Boolean,
+    onArtistClick: (String, String) -> Unit,
+    onPlayRadio: () -> Unit
 ) {
     Column {
         Text(
@@ -96,11 +100,50 @@ private fun LikedArtistsRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
         ) {
+            item(key = "liked_artists_radio") {
+                LikedArtistsRadioChip(isLoading = isBuildingRadio, onClick = onPlayRadio)
+            }
             items(artists, key = { it.id }) { artist ->
                 LikedArtistChip(artist = artist, onClick = { onArtistClick(artist.id, artist.name) })
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun LikedArtistsRadioChip(isLoading: Boolean, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(76.dp)
+            .clickable(enabled = !isLoading, onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.secondaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isLoading) {
+                LoadingIndicator(modifier = Modifier.size(28.dp))
+            } else {
+                Icon(
+                    imageVector = Icons.Rounded.Radio,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = stringResource(R.string.library_liked_artists_radio_chip),
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
@@ -169,7 +212,9 @@ fun LibraryFavoritesTab(
     storageFilter: StorageFilter = StorageFilter.ALL,
     hasCurrentSong: Boolean = false,
     likedArtists: List<com.theveloper.pixelplay.data.navidrome.LikedArtistSummary> = emptyList(),
-    onArtistClick: (String, String) -> Unit = { _, _ -> }
+    onArtistClick: (String, String) -> Unit = { _, _ -> },
+    isBuildingLikedArtistsRadio: Boolean = false,
+    onPlayLikedArtistsRadio: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -325,7 +370,9 @@ fun LibraryFavoritesTab(
                             item(key = "liked_artists_row", contentType = "liked_artists_row") {
                                 LikedArtistsRow(
                                     artists = likedArtists,
-                                    onArtistClick = onArtistClick
+                                    isBuildingRadio = isBuildingLikedArtistsRadio,
+                                    onArtistClick = onArtistClick,
+                                    onPlayRadio = onPlayLikedArtistsRadio
                                 )
                             }
                         }

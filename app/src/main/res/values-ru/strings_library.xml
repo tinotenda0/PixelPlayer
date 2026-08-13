@@ -13,6 +13,7 @@
     <string name="library_tab_playlists">Плейлисты</string>
     <string name="library_tab_liked">Избранное</string>
     <string name="library_liked_artists_section_title">Любимые исполнители</string>
+    <string name="library_liked_artists_radio_chip">Радио</string>
 
     <!-- Library Toasts -->
     <string name="library_toast_playlist_created">Плейлист успешно создан</string>

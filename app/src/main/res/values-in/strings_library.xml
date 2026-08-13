@@ -13,6 +13,7 @@
     <string name="library_tab_playlists">Playlist</string>
     <string name="library_tab_liked">Disukai</string>
     <string name="library_liked_artists_section_title">Artis favorit</string>
+    <string name="library_liked_artists_radio_chip">Radio</string>
 
     <!-- Library Toasts -->
     <string name="library_toast_playlist_created">Playlist berhasil dibuat</string>

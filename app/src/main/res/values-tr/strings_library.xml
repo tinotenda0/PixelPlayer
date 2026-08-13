@@ -13,6 +13,7 @@
     <string name="library_tab_playlists">Çalma Listeleri</string>
     <string name="library_tab_liked">Beğenilenler</string>
     <string name="library_liked_artists_section_title">Favori sanatçılar</string>
+    <string name="library_liked_artists_radio_chip">Radyo</string>
 
     <!-- Library Toasts -->
     <string name="library_toast_playlist_created">Çalma listesi başarıyla oluşturuldu</string>
