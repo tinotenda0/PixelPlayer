@@ -953,8 +953,15 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
-    /** Likes/unlikes an artist on the gateway and updates [likedArtistIds] on success. */
-    suspend fun setArtistFavoriteStatus(navidromeArtistId: String, isFavorite: Boolean): Boolean {
+    /** Likes/unlikes an artist on the gateway and updates [likedArtistIds]/[likedArtists] on success.
+     * [name]/[coverArt] are only needed when [isFavorite] is true, to build the summary the Liked
+     * tab's artist row renders without waiting on a full [refreshLikedArtists] round-trip. */
+    suspend fun setArtistFavoriteStatus(
+        navidromeArtistId: String,
+        isFavorite: Boolean,
+        name: String? = null,
+        coverArt: String? = null
+    ): Boolean {
         if (!isLoggedIn) return false
         return withContext(Dispatchers.IO) {
             val result = if (isFavorite) {
@@ -968,6 +975,14 @@ class NavidromeRepository @Inject constructor(
             if (success) {
                 _likedArtistIds.update { current ->
                     if (isFavorite) current + navidromeArtistId else current - navidromeArtistId
+                }
+                _likedArtists.update { current ->
+                    if (isFavorite) {
+                        if (current.any { it.id == navidromeArtistId }) current
+                        else current + LikedArtistSummary(navidromeArtistId, name ?: navidromeArtistId, coverArt)
+                    } else {
+                        current.filterNot { it.id == navidromeArtistId }
+                    }
                 }
             }
             success

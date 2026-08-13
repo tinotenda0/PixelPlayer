@@ -324,7 +324,7 @@ fun LibraryFavoritesTab(
         }
     }
 
-    if (favoriteSongs.itemCount == 0 && favoriteSongs.loadState.refresh !is LoadState.Loading) {
+    if (favoriteSongs.itemCount == 0 && favoriteSongs.loadState.refresh !is LoadState.Loading && likedArtists.isEmpty()) {
         LibraryExpressiveEmptyState(
             tabId = LibraryTabId.LIKED,
             storageFilter = storageFilter,

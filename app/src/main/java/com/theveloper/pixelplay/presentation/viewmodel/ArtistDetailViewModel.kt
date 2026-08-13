@@ -103,10 +103,16 @@ class ArtistDetailViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     fun toggleArtistLike() {
-        val gatewayId = _uiState.value.artist?.navidromeId ?: return
+        val artist = _uiState.value.artist ?: return
+        val gatewayId = artist.navidromeId ?: return
         val currentlyLiked = navidromeRepository.likedArtistIds.value.contains(gatewayId)
         viewModelScope.launch {
-            navidromeRepository.setArtistFavoriteStatus(gatewayId, !currentlyLiked)
+            navidromeRepository.setArtistFavoriteStatus(
+                navidromeArtistId = gatewayId,
+                isFavorite = !currentlyLiked,
+                name = artist.name,
+                coverArt = artist.effectiveImageUrl
+            )
         }
     }
 
@@ -262,6 +268,10 @@ class ArtistDetailViewModel @Inject constructor(
                 // The user may have navigated on while this was in flight.
                 if (state.artist?.id != artist.id) state
                 else state.copy(
+                    // Without this, a locally-sourced artist's navidromeId stays null forever —
+                    // silently breaking full-discography shuffle and the like toggle, both of
+                    // which key off artist.navidromeId.
+                    artist = state.artist?.copy(navidromeId = gatewayId),
                     isUpgradingToGatewayProfile = false,
                     songs = detail.topSongs.ifEmpty { state.songs },
                     // Cleared so the Spotify-style sections render instead of the sparse
