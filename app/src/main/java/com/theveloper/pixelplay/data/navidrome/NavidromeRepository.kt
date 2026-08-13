@@ -816,6 +816,65 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
+    /**
+     * Creates a brand-new gateway playlist. Used by local-playlist push (a playlist created in
+     * the app becomes a real `pl-` playlist on the gateway) and by curated-playlist forking
+     * (editing a Mix snapshots it into a new one of these). Returns the new gateway id, or null.
+     */
+    suspend fun createGatewayPlaylist(name: String, navidromeSongIds: List<String>): String? {
+        if (!isLoggedIn) return null
+        return withContext(Dispatchers.IO) {
+            try {
+                api.createPlaylist(name = name, songIds = navidromeSongIds).getOrThrow()
+                    .optString("id").takeIf { it.isNotBlank() }
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: createGatewayPlaylist failed"); null
+            }
+        }
+    }
+
+    /**
+     * Full-replaces a gateway playlist's songs — the single mechanism behind every local-playlist
+     * content edit (add/remove/reorder all collapse to "here's the new full list").
+     */
+    suspend fun replaceGatewayPlaylistSongs(gatewayPlaylistId: String, navidromeSongIds: List<String>): Boolean {
+        if (!isLoggedIn) return false
+        return withContext(Dispatchers.IO) {
+            api.createPlaylist(playlistId = gatewayPlaylistId, songIds = navidromeSongIds)
+                .onFailure { Timber.w(it, "$TAG: replaceGatewayPlaylistSongs failed for $gatewayPlaylistId") }
+                .isSuccess
+        }
+    }
+
+    suspend fun renameGatewayPlaylist(gatewayPlaylistId: String, name: String): Boolean {
+        if (!isLoggedIn) return false
+        return withContext(Dispatchers.IO) {
+            api.updatePlaylist(gatewayPlaylistId, name)
+                .onFailure { Timber.w(it, "$TAG: renameGatewayPlaylist failed for $gatewayPlaylistId") }
+                .isSuccess
+        }
+    }
+
+    suspend fun deleteGatewayPlaylist(gatewayPlaylistId: String): Boolean {
+        if (!isLoggedIn) return false
+        return withContext(Dispatchers.IO) {
+            api.deletePlaylist(gatewayPlaylistId)
+                .onFailure { Timber.w(it, "$TAG: deleteGatewayPlaylist failed for $gatewayPlaylistId") }
+                .isSuccess
+        }
+    }
+
+    /**
+     * Which gateway id-space [playlistId] belongs to, so callers (chiefly [PlaylistViewModel])
+     * can branch on playlist type without hardcoding the prefix scheme themselves.
+     */
+    fun gatewayPlaylistClassOf(playlistId: String): GatewayPlaylistClass = when {
+        playlistId.startsWith("pl-") -> GatewayPlaylistClass.LOCAL_GATEWAY
+        playlistId.startsWith("cur-ytm-") -> GatewayPlaylistClass.CURATED
+        playlistId.startsWith("ytmpl-") -> GatewayPlaylistClass.LINKED_YTM
+        else -> GatewayPlaylistClass.NOT_GATEWAY
+    }
+
     /** How many gateway songs are cached locally. Zero means the library needs a re-sync. */
     suspend fun cachedSongCount(): Int = withContext(Dispatchers.IO) {
         runCatching { dao.countNavidromeSongs() }.getOrDefault(0)
@@ -1701,8 +1760,15 @@ class NavidromeRepository @Inject constructor(
         dao.deletePlaylist(playlistId)
         deleteAppPlaylistForNavidromePlaylist(playlistId)
         syncUnifiedLibrarySongsFromNavidrome()
+        if (isLoggedIn) {
+            api.deletePlaylist(playlistId)
+                .onFailure { Timber.w(it, "$TAG: deletePlaylist gateway call failed for $playlistId") }
+        }
     }
 }
+
+/** Which gateway id-space a playlist id belongs to (see [NavidromeRepository.gatewayPlaylistClassOf]). */
+enum class GatewayPlaylistClass { LOCAL_GATEWAY, CURATED, LINKED_YTM, NOT_GATEWAY }
 
 /** Whether the signed-in gateway user has linked a YouTube Music account, and which one. */
 data class YtmStatus(

@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theveloper.pixelplay.data.DailyMixManager
+import com.theveloper.pixelplay.data.navidrome.GatewayPlaylistClass
 import com.theveloper.pixelplay.data.model.Playlist
 import com.theveloper.pixelplay.data.model.SmartPlaylistRule
 import com.theveloper.pixelplay.data.model.Song
@@ -527,7 +528,7 @@ class PlaylistViewModel @Inject constructor(
 
     fun deletePlaylist(playlistId: String) {
         viewModelScope.launch {
-            playlistPreferencesRepository.deletePlaylist(playlistId)
+            deletePlaylistEverywhere(playlistId)
         }
     }
 
@@ -571,6 +572,9 @@ class PlaylistViewModel @Inject constructor(
                         )
                     )
                 }
+            }
+            if (navidromeRepository.gatewayPlaylistClassOf(playlistId) == GatewayPlaylistClass.LOCAL_GATEWAY) {
+                navidromeRepository.renameGatewayPlaylist(playlistId, newName)
             }
         }
     }
@@ -656,6 +660,7 @@ class PlaylistViewModel @Inject constructor(
             if (_uiState.value.currentPlaylistDetails?.id == playlistId) {
                 loadPlaylistDetails(playlistId)
             }
+            pushPlaylistSongsToGateway(playlistId)
         }
     }
 
@@ -673,6 +678,7 @@ class PlaylistViewModel @Inject constructor(
             if (currentPlaylistId != null && removedFromPlaylists.contains (currentPlaylistId)) {
                 removeSongFromPlaylist(currentPlaylistId, songId)
             }
+            playlistIds.forEach { pushPlaylistSongsToGateway(it) }
         }
     }
 
@@ -680,6 +686,7 @@ class PlaylistViewModel @Inject constructor(
         viewModelScope.launch {
             playlistIds.forEach { playlistId ->
                 playlistPreferencesRepository.addSongsToPlaylist(playlistId, songIds)
+                pushPlaylistSongsToGateway(playlistId)
             }
         }
     }
@@ -692,6 +699,7 @@ class PlaylistViewModel @Inject constructor(
                     it.copy(currentPlaylistSongs = it.currentPlaylistSongs.filterNot { s -> s.id == songIdToRemove })
                 }
             }
+            pushPlaylistSongsToGateway(playlistId)
         }
     }
 
@@ -715,6 +723,7 @@ class PlaylistViewModel @Inject constructor(
                         playlistOrderModes = updatedModes
                     )
                 }
+                pushPlaylistSongsToGateway(playlistId)
             }
         }
     }
@@ -792,9 +801,29 @@ class PlaylistViewModel @Inject constructor(
      * (a curated home row).
      */
     private fun isGatewayPlaylistId(playlistId: String): Boolean =
-        playlistId.startsWith("pl-") ||
-            playlistId.startsWith("ytmpl-") ||
-            playlistId.startsWith("cur-ytm-")
+        navidromeRepository.gatewayPlaylistClassOf(playlistId) != GatewayPlaylistClass.NOT_GATEWAY
+
+    /**
+     * Pushes a `pl-` playlist's current local song list to the gateway so the next library sync
+     * sees the edit instead of overwriting it. No-op for playlist classes not yet wired for push
+     * (curated rows fork instead — see #49; linked YT Music playlists sync separately — see #50).
+     */
+    private suspend fun pushPlaylistSongsToGateway(playlistId: String) {
+        if (navidromeRepository.gatewayPlaylistClassOf(playlistId) != GatewayPlaylistClass.LOCAL_GATEWAY) return
+        val songIds = playlistPreferencesRepository.userPlaylistsFlow.first()
+            .find { it.id == playlistId }?.songIds ?: return
+        val gatewayIds = musicRepository.getSongsByIds(songIds).first().mapNotNull { it.navidromeId }
+        navidromeRepository.replaceGatewayPlaylistSongs(playlistId, gatewayIds)
+    }
+
+    /** Deletes a playlist locally and, if it's a `pl-` gateway playlist, on the gateway too. */
+    private suspend fun deletePlaylistEverywhere(playlistId: String) {
+        val gatewayClass = navidromeRepository.gatewayPlaylistClassOf(playlistId)
+        playlistPreferencesRepository.deletePlaylist(playlistId)
+        if (gatewayClass == GatewayPlaylistClass.LOCAL_GATEWAY) {
+            navidromeRepository.deleteGatewayPlaylist(playlistId)
+        }
+    }
 
     private fun applySortToSongs(songs: List<Song>, sortOption: SortOption): List<Song> {
         return sortSongsList(songs, sortOption)
@@ -956,7 +985,7 @@ class PlaylistViewModel @Inject constructor(
     fun deletePlaylistsInBatch(playlistIds: List<String>) {
         viewModelScope.launch {
             playlistIds.forEach { playlistId ->
-                playlistPreferencesRepository.deletePlaylist(playlistId)
+                deletePlaylistEverywhere(playlistId)
             }
         }
     }

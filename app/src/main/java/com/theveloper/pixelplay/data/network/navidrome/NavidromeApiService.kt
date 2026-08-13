@@ -647,6 +647,38 @@ class NavidromeApiService @Inject constructor(
         }
     }
 
+    /**
+     * Creates a new gateway playlist (when [playlistId] is null) or fully replaces an existing
+     * one's songs (when [playlistId] is set) — the backend's `createPlaylist` endpoint does both,
+     * so this mirrors it rather than exposing two calls for one wire method.
+     */
+    suspend fun createPlaylist(
+        name: String? = null,
+        playlistId: String? = null,
+        songIds: List<String> = emptyList()
+    ): Result<JSONObject> {
+        val params = mutableListOf<Pair<String, String>>()
+        name?.let { params.add("name" to it) }
+        playlistId?.let { params.add("playlistId" to it) }
+        songIds.forEach { params.add("songId" to it) }
+        return requestAndParseRepeated("createPlaylist", params)
+            .map { it.optJSONObject("playlist") ?: JSONObject() }
+    }
+
+    /**
+     * Renames a gateway playlist.
+     */
+    suspend fun updatePlaylist(playlistId: String, name: String): Result<JSONObject> {
+        return requestAndParse("updatePlaylist", mapOf("playlistId" to playlistId, "name" to name))
+    }
+
+    /**
+     * Deletes a gateway playlist.
+     */
+    suspend fun deletePlaylist(playlistId: String): Result<Boolean> {
+        return requestAndParse("deletePlaylist", mapOf("id" to playlistId)).map { true }
+    }
+
     // ─── Search API ──────────────────────────────────────────────────────
 
     /**
