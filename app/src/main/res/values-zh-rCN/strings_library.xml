@@ -12,6 +12,7 @@
     <string name="library_tab_artists">艺术家</string>
     <string name="library_tab_playlists">播放列表</string>
     <string name="library_tab_liked">已收藏</string>
+    <string name="library_liked_artists_section_title">喜欢的艺术家</string>
 
     <!-- Library Toasts -->
     <string name="library_toast_playlist_created">播放列表创建成功</string>

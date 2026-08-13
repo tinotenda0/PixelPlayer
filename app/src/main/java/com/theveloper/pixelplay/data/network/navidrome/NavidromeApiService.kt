@@ -982,6 +982,13 @@ class NavidromeApiService @Inject constructor(
     // ─── Star/Favorite API ───────────────────────────────────────────────
 
     /**
+     * The signed-in user's starred songs and artists.
+     */
+    suspend fun getStarred2(): Result<JSONObject> {
+        return requestAndParse("getStarred2")
+    }
+
+    /**
      * Star a song, album, or artist.
      */
     suspend fun star(id: String? = null, albumId: String? = null, artistId: String? = null): Result<Boolean> {

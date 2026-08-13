@@ -32,6 +32,8 @@ import androidx.compose.material.icons.rounded.AddAPhoto
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MusicNote
@@ -121,7 +123,8 @@ fun ArtistDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
-    
+    val isCurrentArtistLiked by viewModel.isCurrentArtistLiked.collectAsStateWithLifecycle()
+
     // Optimization: Defer heavy list rendering until navigation transition settles
     var isTransitionFinished by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -549,6 +552,7 @@ fun ArtistDetailScreen(
                             headerHeight = currentTopBarHeightDp,
                             headerImageRequestSize = headerImageRequestSize,
                             hasCustomImage = !artist.customImageUri.isNullOrBlank(),
+                            isLiked = isCurrentArtistLiked,
                             onBackPressed = { navController.popBackStack() },
                             onPlayClick = {
                                 if (!isLoadingFullDiscography && songs.isNotEmpty()) {
@@ -565,7 +569,8 @@ fun ArtistDetailScreen(
                                 }
                             },
                             onChangeImage = { imagePickerLauncher.launch("image/*") },
-                            onClearCustomImage = { viewModel.clearCustomImage() }
+                            onClearCustomImage = { viewModel.clearCustomImage() },
+                            onToggleLike = { viewModel.toggleArtistLike() }
                         )
                     } else {
                         CustomCollapsingTopBar(
@@ -872,10 +877,12 @@ private fun SharedArtistTopBarProbe(
     headerHeight: Dp,
     headerImageRequestSize: Size,
     hasCustomImage: Boolean,
+    isLiked: Boolean,
     onBackPressed: () -> Unit,
     onPlayClick: () -> Unit,
     onChangeImage: () -> Unit,
-    onClearCustomImage: () -> Unit
+    onClearCustomImage: () -> Unit,
+    onToggleLike: () -> Unit
 ) {
     var showImageMenu by remember { mutableStateOf(false) }
     val surfaceColor = MaterialTheme.colorScheme.surface
@@ -977,6 +984,20 @@ private fun SharedArtistTopBarProbe(
             fadeSubtitleOnCollapse = false,
             syncStatusBarWithContainer = false,
             actions = {
+                FilledIconButton(
+                    modifier = Modifier.padding(end = 4.dp, top = 4.dp),
+                    onClick = onToggleLike,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    )
+                ) {
+                    Icon(
+                        imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                        contentDescription = stringResource(
+                            if (isLiked) R.string.artist_cd_unlike_artist else R.string.artist_cd_like_artist
+                        )
+                    )
+                }
                 Box(
                     modifier = Modifier.padding(end = 12.dp, top = 4.dp)
                 ) {

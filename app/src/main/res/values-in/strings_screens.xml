@@ -94,6 +94,8 @@
     <string name="artist_action_change_photo">Ubah foto</string>
     <string name="artist_action_reset_to_default">Reset ke default</string>
     <string name="artist_cd_shuffle_play">Putar acak artis</string>
+    <string name="artist_cd_like_artist">Tambahkan artis ke favorit</string>
+    <string name="artist_cd_unlike_artist">Hapus artis dari favorit</string>
 
     <!-- AlbumDetailScreen -->
     <string name="album_disc_number_header">Disc %d</string>

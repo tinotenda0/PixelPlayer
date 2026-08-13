@@ -94,6 +94,8 @@
     <string name="artist_action_change_photo">Endre bilde</string>
     <string name="artist_action_reset_to_default">Nullstill til standard</string>
     <string name="artist_cd_shuffle_play">Bland artist</string>
+    <string name="artist_cd_like_artist">Legg til artist i favoritter</string>
+    <string name="artist_cd_unlike_artist">Fjern artist fra favoritter</string>
 
     <!-- AlbumDetailScreen -->
     <string name="album_disc_number_header">Disk %d</string>

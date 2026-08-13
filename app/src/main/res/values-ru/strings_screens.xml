@@ -94,6 +94,8 @@
     <string name="artist_action_change_photo">Изменить фото</string>
     <string name="artist_action_reset_to_default">Сбросить по умолчанию</string>
     <string name="artist_cd_shuffle_play">Перемешать треки исполнителя</string>
+    <string name="artist_cd_like_artist">Добавить исполнителя в избранное</string>
+    <string name="artist_cd_unlike_artist">Удалить исполнителя из избранного</string>
 
     <!-- AlbumDetailScreen -->
     <string name="album_disc_number_header">Диск %d</string>

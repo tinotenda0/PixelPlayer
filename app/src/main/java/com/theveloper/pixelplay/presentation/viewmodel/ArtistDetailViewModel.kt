@@ -18,12 +18,14 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -92,7 +94,24 @@ class ArtistDetailViewModel @Inject constructor(
     /** Display name carried alongside the id, used to recover when the id resolves to nothing. */
     private val fallbackName: String? = savedStateHandle.get<String>("name")?.takeIf { it.isNotBlank() }
 
+    val isCurrentArtistLiked: StateFlow<Boolean> = combine(
+        navidromeRepository.likedArtistIds,
+        uiState
+    ) { likedIds, state ->
+        val gatewayId = state.artist?.navidromeId
+        gatewayId != null && likedIds.contains(gatewayId)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun toggleArtistLike() {
+        val gatewayId = _uiState.value.artist?.navidromeId ?: return
+        val currentlyLiked = navidromeRepository.likedArtistIds.value.contains(gatewayId)
+        viewModelScope.launch {
+            navidromeRepository.setArtistFavoriteStatus(gatewayId, !currentlyLiked)
+        }
+    }
+
     init {
+        viewModelScope.launch { navidromeRepository.refreshLikedArtists() }
         savedStateHandle.getStateFlow<String?>("artistId", null)
             .onEach { idString ->
                 if (idString != null) {

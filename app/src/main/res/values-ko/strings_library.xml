@@ -12,6 +12,7 @@
     <string name="library_tab_artists">아티스트</string>
     <string name="library_tab_playlists">플레이리스트</string>
     <string name="library_tab_liked">좋아요 표시한 곡</string>
+    <string name="library_liked_artists_section_title">좋아하는 아티스트</string>
 
     <!-- Library Toasts -->
     <string name="library_toast_playlist_created">플레이리스트가 생성되었습니다</string>

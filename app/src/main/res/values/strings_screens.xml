@@ -104,6 +104,8 @@
     <string name="artist_action_change_photo">Change photo</string>
     <string name="artist_action_reset_to_default">Reset to default</string>
     <string name="artist_cd_shuffle_play">Shuffle play artist</string>
+    <string name="artist_cd_like_artist">Add artist to favorites</string>
+    <string name="artist_cd_unlike_artist">Remove artist from favorites</string>
 
     <!-- AlbumDetailScreen -->
     <string name="album_disc_number_header">Disc %d</string>

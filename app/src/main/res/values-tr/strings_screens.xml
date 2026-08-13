@@ -94,6 +94,8 @@
     <string name="artist_action_change_photo">Fotoğrafı değiştir</string>
     <string name="artist_action_reset_to_default">Varsayılana sıfırla</string>
     <string name="artist_cd_shuffle_play">Sanatçıyı karışık çal</string>
+    <string name="artist_cd_like_artist">Sanatçıyı favorilere ekle</string>
+    <string name="artist_cd_unlike_artist">Sanatçıyı favorilerden kaldır</string>
 
     <!-- AlbumDetailScreen -->
     <string name="album_disc_number_header">Disk %d</string>

@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -111,6 +112,16 @@ class NavidromeRepository @Inject constructor(
 
     private val _isLoggedInFlow = MutableStateFlow(false)
     val isLoggedInFlow: StateFlow<Boolean> = _isLoggedInFlow.asStateFlow()
+
+    /** Gateway ids of artists the signed-in user has liked. Empty until [refreshLikedArtists]
+     *  runs — callers that need it (ArtistDetailScreen, the Liked tab) refresh on load. */
+    private val _likedArtistIds = MutableStateFlow<Set<String>>(emptySet())
+    val likedArtistIds: StateFlow<Set<String>> = _likedArtistIds.asStateFlow()
+
+    /** Same data as [likedArtistIds], with the name/cover needed to render the Liked tab's
+     *  "Liked Artists" row without a separate fetch per artist. */
+    private val _likedArtists = MutableStateFlow<List<LikedArtistSummary>>(emptyList())
+    val likedArtists: StateFlow<List<LikedArtistSummary>> = _likedArtists.asStateFlow()
 
     init {
         initFromSavedCredentials()
@@ -908,6 +919,58 @@ class NavidromeRepository @Inject constructor(
             val result = if (isFavorite) api.star(id = navidromeSongId) else api.unstar(id = navidromeSongId)
             result.onFailure { Timber.w(it, "$TAG: setSongFavoriteOnGateway failed for $navidromeSongId") }
             result.isSuccess
+        }
+    }
+
+    /**
+     * Refreshes [likedArtistIds] and [likedArtists] from the gateway. Cheap and safe to call
+     * repeatedly (e.g. from every screen that needs it on load) — it's just a starred2 fetch.
+     */
+    suspend fun refreshLikedArtists() {
+        if (!isLoggedIn) {
+            _likedArtistIds.value = emptySet()
+            _likedArtists.value = emptyList()
+            return
+        }
+        withContext(Dispatchers.IO) {
+            try {
+                val artists = api.getStarred2().getOrThrow()
+                    .optJSONObject("starred2")?.optJSONArray("artist")
+                val summaries = (0 until (artists?.length() ?: 0)).mapNotNull { i ->
+                    val a = artists?.optJSONObject(i) ?: return@mapNotNull null
+                    val id = a.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    LikedArtistSummary(
+                        id = id,
+                        name = a.optString("name"),
+                        coverArt = a.optString("coverArt").takeIf { it.isNotBlank() }
+                    )
+                }
+                _likedArtistIds.value = summaries.map { it.id }.toSet()
+                _likedArtists.value = summaries
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: refreshLikedArtists failed")
+            }
+        }
+    }
+
+    /** Likes/unlikes an artist on the gateway and updates [likedArtistIds] on success. */
+    suspend fun setArtistFavoriteStatus(navidromeArtistId: String, isFavorite: Boolean): Boolean {
+        if (!isLoggedIn) return false
+        return withContext(Dispatchers.IO) {
+            val result = if (isFavorite) {
+                api.star(artistId = navidromeArtistId)
+            } else {
+                api.unstar(artistId = navidromeArtistId)
+            }
+            val success = result
+                .onFailure { Timber.w(it, "$TAG: setArtistFavoriteStatus failed for $navidromeArtistId") }
+                .isSuccess
+            if (success) {
+                _likedArtistIds.update { current ->
+                    if (isFavorite) current + navidromeArtistId else current - navidromeArtistId
+                }
+            }
+            success
         }
     }
 
@@ -1805,6 +1868,9 @@ class NavidromeRepository @Inject constructor(
 
 /** Which gateway id-space a playlist id belongs to (see [NavidromeRepository.gatewayPlaylistClassOf]). */
 enum class GatewayPlaylistClass { LOCAL_GATEWAY, CURATED, LINKED_YTM, NOT_GATEWAY }
+
+/** Enough to render a liked-artist chip without a separate per-artist fetch. */
+data class LikedArtistSummary(val id: String, val name: String, val coverArt: String?)
 
 /** Whether the signed-in gateway user has linked a YouTube Music account, and which one. */
 data class YtmStatus(

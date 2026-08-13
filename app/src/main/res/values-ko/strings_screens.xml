@@ -94,6 +94,8 @@
     <string name="artist_action_change_photo">사진 변경</string>
     <string name="artist_action_reset_to_default">기본값으로 초기화</string>
     <string name="artist_cd_shuffle_play">아티스트 셔플 재생</string>
+    <string name="artist_cd_like_artist">아티스트를 즐겨찾기에 추가</string>
+    <string name="artist_cd_unlike_artist">아티스트를 즐겨찾기에서 제거</string>
 
     <!-- AlbumDetailScreen -->
     <string name="album_disc_number_header">디스크 %d</string>

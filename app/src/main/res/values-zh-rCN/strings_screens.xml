@@ -94,6 +94,8 @@
     <string name="artist_action_change_photo">更改照片</string>
     <string name="artist_action_reset_to_default">恢复默认</string>
     <string name="artist_cd_shuffle_play">随机播放艺术家</string>
+    <string name="artist_cd_like_artist">将艺术家添加到收藏</string>
+    <string name="artist_cd_unlike_artist">将艺术家从收藏中移除</string>
 
     <!-- AlbumDetailScreen -->
     <string name="album_disc_number_header">唱片 %d</string>

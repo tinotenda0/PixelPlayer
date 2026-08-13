@@ -12,6 +12,7 @@
     <string name="library_tab_artists">Artists</string>
     <string name="library_tab_playlists">Playlists</string>
     <string name="library_tab_liked">Liked</string>
+    <string name="library_liked_artists_section_title">Liked Artists</string>
 
     <!-- Library Toasts -->
     <string name="library_toast_playlist_created">Playlist created successfully</string>

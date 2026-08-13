@@ -94,6 +94,8 @@
     <string name="artist_action_change_photo">Cambia foto</string>
     <string name="artist_action_reset_to_default">Reimposta a predefinito</string>
     <string name="artist_cd_shuffle_play">Riproduzione casuale artista</string>
+    <string name="artist_cd_like_artist">Aggiungi artista ai preferiti</string>
+    <string name="artist_cd_unlike_artist">Rimuovi artista dai preferiti</string>
 
     <!-- AlbumDetailScreen -->
     <string name="album_disc_number_header">Disco %d</string>

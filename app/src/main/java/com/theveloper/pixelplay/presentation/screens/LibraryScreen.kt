@@ -1397,6 +1397,7 @@ fun LibraryScreen(
 
                                     LibraryTabId.LIKED -> {
                                         val favoritePagingItems = libraryViewModel.favoritesPagingFlow.collectAsLazyPagingItems()
+                                        val likedArtists by libraryViewModel.likedArtists.collectAsStateWithLifecycle()
                                         LibraryFavoritesTab(
                                             favoriteSongs = favoritePagingItems,
                                             playerViewModel = playerViewModel,
@@ -1416,7 +1417,14 @@ fun LibraryScreen(
                                             onLocateCurrentSongVisibilityChanged = { likedShowLocateButton = it },
                                             onRegisterLocateCurrentSongAction = { likedLocateAction = it },
                                             storageFilter = playerUiState.currentStorageFilter,
-                                            hasCurrentSong = hasCurrentSong
+                                            hasCurrentSong = hasCurrentSong,
+                                            likedArtists = likedArtists,
+                                            onArtistClick = { artistId, name ->
+                                                navController.navigateSafelyReplacing(
+                                                    route = Screen.ArtistDetail.createRoute(artistId, name),
+                                                    patternToPop = Screen.ArtistDetail.route
+                                                )
+                                            }
                                         )
                                     }
 
