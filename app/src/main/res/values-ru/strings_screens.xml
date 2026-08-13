@@ -114,6 +114,7 @@
     <string name="playlist_dialog_delete_body">Вы уверены, что хотите удалить этот плейлист?</string>
     <string name="playlist_action_set_default_transition">Установить переход по умолчанию</string>
     <string name="playlist_action_export_playlist">Экспортировать плейлист</string>
+    <string name="playlist_forked_from_mix_message">Редактирование Mix создаёт вашу собственную копию</string>
     <string name="playlist_song_duration_line">%1$s • %2$s</string>
     <string name="playlist_action_play_it">Воспроизвести</string>
     <string name="playlist_action_add_songs">Добавить</string>

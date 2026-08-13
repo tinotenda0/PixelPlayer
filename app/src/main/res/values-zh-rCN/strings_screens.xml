@@ -114,6 +114,7 @@
     <string name="playlist_dialog_delete_body">您确定要删除此播放列表吗？</string>
     <string name="playlist_action_set_default_transition">设置默认过渡效果</string>
     <string name="playlist_action_export_playlist">导出播放列表</string>
+    <string name="playlist_forked_from_mix_message">编辑 Mix 会创建您自己的副本</string>
     <string name="playlist_song_duration_line">%1$s • %2$s</string>
     <string name="playlist_action_play_it">播放</string>
     <string name="playlist_action_add_songs">添加</string>

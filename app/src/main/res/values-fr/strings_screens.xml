@@ -114,6 +114,7 @@
     <string name="playlist_dialog_delete_body">Êtes-vous sûr de vouloir supprimer cette liste de lecture ?</string>
     <string name="playlist_action_set_default_transition">Définir la transition par défaut</string>
     <string name="playlist_action_export_playlist">Exporter la liste de lecture</string>
+    <string name="playlist_forked_from_mix_message">Modifier un Mix crée votre propre copie</string>
     <string name="playlist_song_duration_line">%1$s • %2$s</string>
     <string name="playlist_action_play_it">Lancer</string>
     <string name="playlist_action_add_songs">Ajouter</string>

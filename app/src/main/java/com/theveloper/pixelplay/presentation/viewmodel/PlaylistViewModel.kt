@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import java.io.OutputStreamWriter
@@ -563,8 +565,9 @@ class PlaylistViewModel @Inject constructor(
 
     fun renamePlaylist(playlistId: String, newName: String) {
         viewModelScope.launch {
-            playlistPreferencesRepository.renamePlaylist(playlistId, newName)
-            if (_uiState.value.currentPlaylistDetails?.id == playlistId) {
+            val targetId = forkCuratedPlaylistIfNeeded(playlistId)
+            playlistPreferencesRepository.renamePlaylist(targetId, newName)
+            if (_uiState.value.currentPlaylistDetails?.id == targetId) {
                 _uiState.update {
                     it.copy(
                         currentPlaylistDetails = it.currentPlaylistDetails?.copy(
@@ -573,8 +576,8 @@ class PlaylistViewModel @Inject constructor(
                     )
                 }
             }
-            if (navidromeRepository.gatewayPlaylistClassOf(playlistId) == GatewayPlaylistClass.LOCAL_GATEWAY) {
-                navidromeRepository.renameGatewayPlaylist(playlistId, newName)
+            if (navidromeRepository.gatewayPlaylistClassOf(targetId) == GatewayPlaylistClass.LOCAL_GATEWAY) {
+                navidromeRepository.renameGatewayPlaylist(targetId, newName)
             }
         }
     }
@@ -656,11 +659,15 @@ class PlaylistViewModel @Inject constructor(
 
     fun addSongsToPlaylist(playlistId: String, songIdsToAdd: List<String>) {
         viewModelScope.launch {
-            playlistPreferencesRepository.addSongsToPlaylist(playlistId, songIdsToAdd)
-            if (_uiState.value.currentPlaylistDetails?.id == playlistId) {
-                loadPlaylistDetails(playlistId)
+            val targetId = forkCuratedPlaylistIfNeeded(playlistId)
+            playlistPreferencesRepository.addSongsToPlaylist(targetId, songIdsToAdd)
+            // Push before reloading: for a gateway-class playlist, loadPlaylistDetails re-fetches
+            // over the network rather than from local Room, so it must run after the push lands
+            // or it shows the pre-add state.
+            pushPlaylistSongsToGateway(targetId)
+            if (_uiState.value.currentPlaylistDetails?.id == targetId) {
+                loadPlaylistDetails(targetId)
             }
-            pushPlaylistSongsToGateway(playlistId)
         }
     }
 
@@ -693,37 +700,39 @@ class PlaylistViewModel @Inject constructor(
 
     fun removeSongFromPlaylist(playlistId: String, songIdToRemove: String) {
         viewModelScope.launch {
-            playlistPreferencesRepository.removeSongFromPlaylist(playlistId, songIdToRemove)
-            if (_uiState.value.currentPlaylistDetails?.id == playlistId) {
+            val targetId = forkCuratedPlaylistIfNeeded(playlistId)
+            playlistPreferencesRepository.removeSongFromPlaylist(targetId, songIdToRemove)
+            if (_uiState.value.currentPlaylistDetails?.id == targetId) {
                 _uiState.update {
                     it.copy(currentPlaylistSongs = it.currentPlaylistSongs.filterNot { s -> s.id == songIdToRemove })
                 }
             }
-            pushPlaylistSongsToGateway(playlistId)
+            pushPlaylistSongsToGateway(targetId)
         }
     }
 
     fun reorderSongsInPlaylist(playlistId: String, fromIndex: Int, toIndex: Int) {
         viewModelScope.launch {
+            val targetId = forkCuratedPlaylistIfNeeded(playlistId)
             val currentSongs = _uiState.value.currentPlaylistSongs.toMutableList()
             if (fromIndex in currentSongs.indices && toIndex in currentSongs.indices) {
                 val item = currentSongs.removeAt(fromIndex)
                 currentSongs.add(toIndex, item)
                 val newSongOrderIds = currentSongs.map { it.id }
-                playlistPreferencesRepository.reorderSongsInPlaylist(playlistId, newSongOrderIds)
+                playlistPreferencesRepository.reorderSongsInPlaylist(targetId, newSongOrderIds)
                 playlistPreferencesRepository.setPlaylistSongOrderMode(
-                    playlistId,
+                    targetId,
                     MANUAL_ORDER_MODE
                 )
                 _uiState.update {
-                    val updatedModes = it.playlistOrderModes + (playlistId to PlaylistSongsOrderMode.Manual)
+                    val updatedModes = it.playlistOrderModes + (targetId to PlaylistSongsOrderMode.Manual)
                     it.copy(
                         currentPlaylistSongs = currentSongs,
                         playlistSongsOrderMode = PlaylistSongsOrderMode.Manual,
                         playlistOrderModes = updatedModes
                     )
                 }
-                pushPlaylistSongsToGateway(playlistId)
+                pushPlaylistSongsToGateway(targetId)
             }
         }
     }
@@ -803,10 +812,62 @@ class PlaylistViewModel @Inject constructor(
     private fun isGatewayPlaylistId(playlistId: String): Boolean =
         navidromeRepository.gatewayPlaylistClassOf(playlistId) != GatewayPlaylistClass.NOT_GATEWAY
 
+    // Guards forkCuratedPlaylistIfNeeded so two near-simultaneous edits on the same curated
+    // playlist (e.g. a fast double-tap) can't both pass the "not forked yet" check and each
+    // create their own copy.
+    private val forkMutex = Mutex()
+
+    /**
+     * Curated rows (`cur-ytm-*`: home shelf "mixes") aren't stored server-side — they're
+     * recomputed live on every read, so there's nothing to persist an edit onto. The first
+     * mutation attempt on one snapshots its current contents into a brand-new real playlist
+     * (locally and on the gateway) and redirects [PlaylistUiState.currentPlaylistDetails] to it,
+     * so this edit and every later one in the same screen session lands somewhere durable.
+     * Returns the id callers should actually write to: unchanged for any non-curated playlist.
+     */
+    private suspend fun forkCuratedPlaylistIfNeeded(playlistId: String): String {
+        if (navidromeRepository.gatewayPlaylistClassOf(playlistId) != GatewayPlaylistClass.CURATED) {
+            return playlistId
+        }
+        forkMutex.withLock {
+            val current = _uiState.value.currentPlaylistDetails
+            if (current == null || current.id != playlistId) {
+                // Someone else already forked this (or the screen moved on) — if the current
+                // playlist is no longer curated, it's the fork; otherwise fall back to the
+                // original id rather than fork a second time mid-race.
+                return current?.id?.takeIf {
+                    navidromeRepository.gatewayPlaylistClassOf(it) != GatewayPlaylistClass.CURATED
+                } ?: playlistId
+            }
+            val songs = _uiState.value.currentPlaylistSongs
+            val gatewayId = navidromeRepository.createGatewayPlaylist(
+                current.name, songs.mapNotNull { it.navidromeId }
+            )
+            val forked = playlistPreferencesRepository.createPlaylist(
+                name = current.name,
+                songIds = songs.map { it.id },
+                customId = gatewayId
+            )
+            _uiState.update {
+                it.copy(
+                    currentPlaylistDetails = forked,
+                    playlistSongsOrderMode = PlaylistSongsOrderMode.Manual
+                )
+            }
+            Toast.makeText(
+                context,
+                context.getString(R.string.playlist_forked_from_mix_message),
+                Toast.LENGTH_LONG
+            ).show()
+            return forked.id
+        }
+    }
+
     /**
      * Pushes a `pl-` playlist's current local song list to the gateway so the next library sync
      * sees the edit instead of overwriting it. No-op for playlist classes not yet wired for push
-     * (curated rows fork instead — see #49; linked YT Music playlists sync separately — see #50).
+     * (curated rows fork instead — see [forkCuratedPlaylistIfNeeded]; linked YT Music playlists
+     * sync separately — see #50).
      */
     private suspend fun pushPlaylistSongsToGateway(playlistId: String) {
         if (navidromeRepository.gatewayPlaylistClassOf(playlistId) != GatewayPlaylistClass.LOCAL_GATEWAY) return

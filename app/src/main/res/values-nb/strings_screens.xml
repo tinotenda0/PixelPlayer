@@ -114,6 +114,7 @@
     <string name="playlist_dialog_delete_body">Er du sikker på at du vil slette denne spillelisten?</string>
     <string name="playlist_action_set_default_transition">Angi standard overgang</string>
     <string name="playlist_action_export_playlist">Eksporter spilleliste</string>
+    <string name="playlist_forked_from_mix_message">Å redigere en Mix oppretter din egen kopi</string>
     <string name="playlist_song_duration_line">%1$s • %2$s</string>
     <string name="playlist_action_play_it">Spill den</string>
     <string name="playlist_action_add_songs">Legg til</string>
