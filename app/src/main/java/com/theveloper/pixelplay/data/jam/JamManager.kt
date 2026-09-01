@@ -92,6 +92,15 @@ class JamManager @Inject constructor(
     private var suppressNextPublish = false
     private var reconnectAttempt = 0
 
+    /** Set by whoever owns real playback (PlaybackDispatchStateHolder) — JamManager only knows
+     *  the raw MediaController, not this app's own shuffle-reordering/repeat-mode logic, so it
+     *  reaches out through these rather than reimplementing them. [shuffleRepeatProvider] feeds
+     *  the current values into every publish; [onRemoteShuffle]/[onRemoteRepeat] apply an
+     *  incoming remote command from another of this account's own devices. */
+    var shuffleRepeatProvider: (() -> Pair<Boolean, String>)? = null
+    var onRemoteShuffle: ((Boolean) -> Unit)? = null
+    var onRemoteRepeat: ((String) -> Unit)? = null
+
     /** Start the session role. Called once, app-scoped, from PixelPlayApplication. */
     fun start() {
         scope.launch {
@@ -136,6 +145,12 @@ class JamManager @Inject constructor(
                 scope.launch { applyCommand(cmd) }
             },
             onClosed = { scope.launch { reconnectWithBackoff() } },
+            onDevice = { device ->
+                reconnectAttempt = 0
+                // Instant pick-up for an already-open Devices screen, instead of waiting for
+                // the next hygiene tick — same merge-by-id the hygiene refresh does.
+                _devices.value = _devices.value.filter { it.id != device.id } + device
+            },
         )
     }
 
@@ -146,6 +161,16 @@ class JamManager @Inject constructor(
         connect()
     }
 
+    /** Pulls the device/household lists immediately — for the Devices screen to call as soon
+     *  as it opens, rather than showing whatever was last known (possibly up to
+     *  [HYGIENE_REFRESH_MS] stale) until the next background tick. */
+    suspend fun refreshDevices() {
+        runCatching {
+            _devices.value = navidromeRepository.getDevices(sessionId)
+            _householdSessions.value = navidromeRepository.getHouseholdSessions()
+        }
+    }
+
     /** Refreshes the device/household lists on a slow timer — the fast path is push, this just
      *  catches a device that vanished without a clean disconnect (crash, force-quit, dead
      *  network) rather than lingering forever in someone else's list. */
@@ -153,10 +178,7 @@ class JamManager @Inject constructor(
         scope.launch {
             while (true) {
                 delay(HYGIENE_REFRESH_MS)
-                runCatching {
-                    _devices.value = navidromeRepository.getDevices(sessionId)
-                    _householdSessions.value = navidromeRepository.getHouseholdSessions()
-                }
+                refreshDevices()
             }
         }
     }
@@ -172,10 +194,26 @@ class JamManager @Inject constructor(
     }
 
     // ── Personal handoff (same account) ─────────────────────────────────────
-    suspend fun controlSelf(action: String, positionMs: Long? = null, volume: Float? = null): Boolean =
+    suspend fun controlSelf(
+        action: String, positionMs: Long? = null, volume: Float? = null,
+        shuffle: Boolean? = null, repeat: String? = null,
+    ): Boolean =
         navidromeRepository.sendCommand(
-            action, positionMs, volume, targetUser = navidromeRepository.username
+            action, positionMs, volume, targetUser = navidromeRepository.username,
+            shuffle = shuffle, repeat = repeat,
         )
+
+    /** Sends a freshly-selected queue to whichever device is currently this account's active
+     *  one — used when a song/playlist/artist is picked here while a DIFFERENT device already
+     *  holds the active slot, so the selection controls that device instead of silently
+     *  starting a competing local session here (Spotify-Connect style). No target id needed:
+     *  targetUser always resolves server-side to "whichever device is active for this user". */
+    suspend fun sendQueueToActiveSession(songIds: List<String>): Boolean {
+        if (songIds.isEmpty()) return false
+        return navidromeRepository.sendCommand(
+            "play", songIds = songIds, targetUser = navidromeRepository.username
+        )
+    }
 
     /** Push this device's current queue+position onto [targetId] (may be idle), then pause
      *  here. Once that device actually starts and publishes, the server's supersede push
@@ -261,6 +299,7 @@ class JamManager @Inject constructor(
         val c = ensureController() ?: return@withContext null
         val item = c.currentMediaItem ?: return@withContext null
         val md = item.mediaMetadata
+        val (shuffleNow, repeatNow) = shuffleRepeatProvider?.invoke() ?: (false to "off")
         val state = JamState(
             songId = item.wireId(),
             title = md.title?.toString().orEmpty(),
@@ -269,7 +308,9 @@ class JamManager @Inject constructor(
             coverArt = md.artworkUri?.toString().orEmpty(),
             positionMs = c.currentPosition.coerceAtLeast(0),
             durationMs = c.duration.coerceAtLeast(0),
-            isPlaying = c.isPlaying
+            isPlaying = c.isPlaying,
+            shuffle = shuffleNow,
+            repeat = repeatNow
         )
         val queueIds = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).wireId() }
         LocalSnapshot(state, queueIds, c.currentMediaItemIndex.coerceAtLeast(0))
@@ -311,6 +352,8 @@ class JamManager @Inject constructor(
             "previous" -> c.seekToPreviousMediaItem()
             "seek" -> if (cmd.songIds.isEmpty()) cmd.positionMs?.let { c.seekTo(it) }
             "volume" -> cmd.volume?.let { c.volume = it.coerceIn(0f, 1f) }
+            "shuffle" -> cmd.shuffle?.let { onRemoteShuffle?.invoke(it) }
+            "repeat" -> cmd.repeat?.let { onRemoteRepeat?.invoke(it) }
             else -> Unit
         }
     }

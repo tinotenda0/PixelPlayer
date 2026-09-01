@@ -93,6 +93,7 @@ class PlaybackDispatchStateHolder @Inject constructor(
     private val castTransferStateHolder: CastTransferStateHolder,
     private val themeStateHolder: ThemeStateHolder,
     private val activeQueueNameHolder: com.theveloper.pixelplay.data.service.ActiveQueueNameHolder,
+    private val jamManager: com.theveloper.pixelplay.data.jam.JamManager,
     @param:ApplicationContext private val context: Context,
 ) {
 
@@ -100,6 +101,41 @@ class PlaybackDispatchStateHolder @Inject constructor(
 
     fun initialize(callbacks: PlaybackDispatchCallbacks) {
         cb = callbacks
+        // JamManager only knows the raw MediaController, not this app's own shuffle-reordering
+        // / repeat-mode logic — feed it through so a remote command from another of this
+        // account's own devices can actually be applied here, and so what it publishes about
+        // shuffle/repeat is accurate rather than always "off".
+        jamManager.shuffleRepeatProvider = {
+            val s = playbackStateHolder.stablePlayerState.value
+            s.isShuffleEnabled to repeatModeToWire(s.repeatMode)
+        }
+        jamManager.onRemoteShuffle = { target ->
+            if (playbackStateHolder.stablePlayerState.value.isShuffleEnabled != target) {
+                playbackStateHolder.toggleShuffle(
+                    currentSongs = cb.getUiState().currentPlaybackQueue.toList(),
+                    currentSong = playbackStateHolder.stablePlayerState.value.currentSong,
+                    currentQueueSourceName = cb.getUiState().currentQueueSourceName,
+                    updateQueueCallback = { newQueue ->
+                        cb.updateUiState { it.copy(currentPlaybackQueue = newQueue.toPlaybackQueue()) }
+                    }
+                )
+            }
+        }
+        jamManager.onRemoteRepeat = { target ->
+            playbackStateHolder.setRepeatMode(wireToRepeatMode(target))
+        }
+    }
+
+    private fun repeatModeToWire(mode: Int): String = when (mode) {
+        Player.REPEAT_MODE_ALL -> "all"
+        Player.REPEAT_MODE_ONE -> "one"
+        else -> "off"
+    }
+
+    private fun wireToRepeatMode(wire: String): Int = when (wire) {
+        "all" -> Player.REPEAT_MODE_ALL
+        "one" -> Player.REPEAT_MODE_ONE
+        else -> Player.REPEAT_MODE_OFF
     }
 
     // Token + job machinery guarding the two kinds of playback requests so that a
@@ -797,6 +833,23 @@ class PlaybackDispatchStateHolder @Inject constructor(
             appShortcutManager.updateLastPlaylistShortcut(playlistId, queueName)
         }
 
+        // A DIFFERENT one of this account's own devices already holds the active session — route
+        // this selection to it instead of silently starting a competing local (or Cast) session
+        // here, Spotify-Connect style. `sendQueueToActiveSession`'s targetUser resolves
+        // server-side to whichever device is currently active, so no device id is needed here.
+        val remoteSession = jamManager.mySession.value
+        if (remoteSession != null && remoteSession.activeDeviceId != jamManager.sessionId) {
+            val startIdx = songsToPlay.indexOfFirst { it.id == effectiveStartSong.id }.coerceAtLeast(0)
+            val remoteIds = songsToPlay.drop(startIdx).mapNotNull { it.navidromeId }
+            if (remoteIds.isNotEmpty()) {
+                clearPreparingSongIfMatching()
+                jamManager.sendQueueToActiveSession(remoteIds)
+                return
+            }
+            // No gateway ids to hand off (e.g. a purely local queue) — nothing to route
+            // remotely, so fall through and just play here.
+        }
+
         val castSession = castStateHolder.castSession.value
         if (castSession != null && castSession.remoteMediaClient != null) {
             clearPreparingSongIfMatching()
@@ -978,6 +1031,13 @@ class PlaybackDispatchStateHolder @Inject constructor(
     }
 
     fun playPause() {
+        // A DIFFERENT one of this account's own devices already holds the active session —
+        // this button controls THAT device's playback instead of touching anything local.
+        val remoteSession = jamManager.mySession.value
+        if (remoteSession != null && remoteSession.activeDeviceId != jamManager.sessionId) {
+            cb.scope.launch { jamManager.controlSelf("playpause") }
+            return
+        }
         val castSession = castStateHolder.castSession.value
         if (castSession != null && castSession.remoteMediaClient != null) {
             val remoteMediaClient = castSession.remoteMediaClient!!

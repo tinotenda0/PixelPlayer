@@ -1325,7 +1325,9 @@ class NavidromeRepository @Inject constructor(
                 "durationMs" to state.durationMs.toString(),
                 "isPlaying" to state.isPlaying.toString(),
                 "queueIndex" to queueIndex.toString(),
-                "queue" to queueIds.joinToString(",")
+                "queue" to queueIds.joinToString(","),
+                "shuffle" to state.shuffle.toString(),
+                "repeat" to state.repeat
             )
             api.publishState(params).isSuccess
         }
@@ -1368,7 +1370,7 @@ class NavidromeRepository @Inject constructor(
     suspend fun sendCommand(
         action: String, positionMs: Long? = null, volume: Float? = null,
         songIds: List<String> = emptyList(), targetUser: String? = null,
-        targetSessionId: String? = null
+        targetSessionId: String? = null, shuffle: Boolean? = null, repeat: String? = null
     ): Boolean {
         if (!isLoggedIn) return false
         return withContext(Dispatchers.IO) {
@@ -1379,6 +1381,8 @@ class NavidromeRepository @Inject constructor(
                 if (songIds.isNotEmpty()) put("songIds", songIds.joinToString(","))
                 targetUser?.let { put("targetUser", it) }
                 targetSessionId?.let { put("targetSessionId", it) }
+                shuffle?.let { put("shuffle", it.toString()) }
+                repeat?.let { put("repeat", it) }
             }
             api.sendCommand(params).getOrNull()?.optBoolean("accepted", false) ?: false
         }
@@ -1393,6 +1397,7 @@ class NavidromeRepository @Inject constructor(
         onSession: (ActiveSession) -> Unit,
         onCommand: (JamCommand) -> Unit,
         onClosed: () -> Unit,
+        onDevice: (DeviceSession) -> Unit = {},
     ): EventSource {
         return api.subscribeSession(sessionId, object : EventSourceListener() {
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
@@ -1401,6 +1406,7 @@ class NavidromeRepository @Inject constructor(
                     when (type) {
                         "session" -> onSession(parseActiveSession(json))
                         "command" -> onCommand(parseJamCommand(json))
+                        "device" -> onDevice(parseDeviceSession(json))
                     }
                 } catch (e: Exception) {
                     Timber.w(e, "$TAG: failed to parse subscribeSession event type=$type")
@@ -1423,7 +1429,9 @@ class NavidromeRepository @Inject constructor(
             action = c.optString("action"),
             positionMs = payload?.optLong("positionMs")?.takeIf { payload.has("positionMs") },
             volume = payload?.optDouble("volume")?.takeIf { payload.has("volume") }?.toFloat(),
-            songIds = (0 until (ids?.length() ?: 0)).mapNotNull { j -> ids?.optString(j) }
+            songIds = (0 until (ids?.length() ?: 0)).mapNotNull { j -> ids?.optString(j) },
+            shuffle = payload?.takeIf { it.has("shuffle") }?.optBoolean("shuffle"),
+            repeat = payload?.takeIf { it.has("repeat") }?.optString("repeat")
         )
     }
 
@@ -1448,7 +1456,8 @@ class NavidromeRepository @Inject constructor(
                 coverArt = s.optString("coverArt"),
                 positionMs = s.optLong("positionMs"), durationMs = s.optLong("durationMs"),
                 isPlaying = s.optBoolean("isPlaying"), queueIndex = s.optInt("queueIndex"),
-                queue = (0 until (queueArr?.length() ?: 0)).mapNotNull { i -> queueArr?.optString(i) }
+                queue = (0 until (queueArr?.length() ?: 0)).mapNotNull { i -> queueArr?.optString(i) },
+                shuffle = s.optBoolean("shuffle"), repeat = s.optString("repeat", "off")
             ),
             updatedAt = o.optLong("updatedAt")
         )
@@ -1990,7 +1999,9 @@ data class JamState(
     val coverArt: String = "",
     val positionMs: Long = 0,
     val durationMs: Long = 0,
-    val isPlaying: Boolean = false
+    val isPlaying: Boolean = false,
+    val shuffle: Boolean = false,
+    val repeat: String = "off"
 )
 
 /** A command pushed to this device over its live subscribeSession connection - remote control,
@@ -1999,7 +2010,9 @@ data class JamCommand(
     val action: String,
     val positionMs: Long? = null,
     val volume: Float? = null,
-    val songIds: List<String> = emptyList()
+    val songIds: List<String> = emptyList(),
+    val shuffle: Boolean? = null,
+    val repeat: String? = null
 )
 
 /** One account's canonical active session — the "who/what/where" a device publishing itself
@@ -2014,7 +2027,9 @@ data class PlayerSessionState(
     val durationMs: Long = 0,
     val isPlaying: Boolean = false,
     val queueIndex: Int = 0,
-    val queue: List<String> = emptyList()
+    val queue: List<String> = emptyList(),
+    val shuffle: Boolean = false,
+    val repeat: String = "off"
 )
 
 data class ActiveSession(

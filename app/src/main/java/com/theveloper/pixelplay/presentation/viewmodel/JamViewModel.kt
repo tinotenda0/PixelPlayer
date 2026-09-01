@@ -53,6 +53,14 @@ class JamViewModel @Inject constructor(
     private val _personalPanelOpen = MutableStateFlow(false)
     val personalPanelOpen: StateFlow<Boolean> = _personalPanelOpen.asStateFlow()
 
+    init {
+        // The device list otherwise only updates via a live "device" push (while already
+        // connected) or a slow background hygiene tick — force a fresh pull the moment this
+        // screen is actually opened, so a device that registered while it was closed shows up
+        // immediately instead of after up to a minute.
+        viewModelScope.launch { jamManager.refreshDevices() }
+    }
+
     fun setAllowControl(enabled: Boolean) {
         viewModelScope.launch { userPreferencesRepository.setAllowHouseholdControl(enabled) }
     }

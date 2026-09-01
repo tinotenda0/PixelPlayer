@@ -220,6 +220,7 @@ class PlayerViewModel @Inject constructor(
     val multiSelectionStateHolder: MultiSelectionStateHolder,
     val playlistSelectionStateHolder: PlaylistSelectionStateHolder,
     private val playbackDispatchStateHolder: PlaybackDispatchStateHolder,
+    private val jamManager: com.theveloper.pixelplay.data.jam.JamManager,
     private val mediaControllerSyncStateHolder: MediaControllerSyncStateHolder,
     private val sessionToken: SessionToken,
     private val mediaControllerFactory: com.theveloper.pixelplay.data.media.MediaControllerFactory
@@ -2182,6 +2183,16 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun toggleShuffle(currentSongOverride: Song? = null) {
+        // A DIFFERENT one of this account's own devices already holds the active session —
+        // this control affects THAT device instead of anything local. Its own published
+        // shuffle flag (not ours) is what tells us which direction "toggle" means.
+        val remoteSession = jamManager.mySession.value
+        if (remoteSession != null && remoteSession.activeDeviceId != jamManager.sessionId) {
+            viewModelScope.launch {
+                jamManager.controlSelf("shuffle", shuffle = !remoteSession.state.shuffle)
+            }
+            return
+        }
         playbackDispatchStateHolder.cancelPendingFullQueuePlayback()
         val currentQueue = _playerUiState.value.currentPlaybackQueue.toList()
         val currentSong = currentSongOverride
@@ -2200,6 +2211,16 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun cycleRepeatMode() {
+        val remoteSession = jamManager.mySession.value
+        if (remoteSession != null && remoteSession.activeDeviceId != jamManager.sessionId) {
+            val next = when (remoteSession.state.repeat) {
+                "off" -> "all"
+                "all" -> "one"
+                else -> "off"
+            }
+            viewModelScope.launch { jamManager.controlSelf("repeat", repeat = next) }
+            return
+        }
         playbackStateHolder.cycleRepeatMode()
     }
 
