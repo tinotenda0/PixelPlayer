@@ -3,8 +3,10 @@ package com.theveloper.pixelplay.data.jam
 import android.content.ComponentName
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
@@ -20,6 +22,7 @@ import com.theveloper.pixelplay.utils.MediaItemBuilder
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +34,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.sse.EventSource
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -90,7 +94,36 @@ class JamManager @Inject constructor(
     private var eventSource: EventSource? = null
     @Volatile
     private var suppressNextPublish = false
+    @Volatile
     private var reconnectAttempt = 0
+
+    /** Bumped by every [connect]. Terminal callbacks carry the generation they were opened
+     *  with, so a close/failure from a subscription we have already replaced is ignored. That
+     *  matters because `cancel()` on a live EventSource surfaces as `onFailure` — without this
+     *  guard each reconnect would schedule a second one, and the reconnects would double on
+     *  every round until the process was doing nothing but opening TLS connections. */
+    private val connectionGeneration = AtomicInteger(0)
+    private var reconnectJob: Job? = null
+    /** `elapsedRealtime` when the live subscription opened, 0 while it is down. Used to tell a
+     *  connection that survived from one that died instantly, so the backoff only restarts
+     *  after a genuinely healthy stream drops. */
+    @Volatile
+    private var connectedAtMs = 0L
+
+    /** Queue ids as last read off the controller. The queue only changes when the timeline
+     *  does, so the periodic sync must not walk every media item (and unparcel every metadata
+     *  Bundle) on the main thread just to republish the same list. */
+    @Volatile
+    private var cachedQueueIds: List<String>? = null
+
+    private var positionSyncJob: Job? = null
+    private var hygieneRefreshJob: Job? = null
+    private var publishListenerAttached = false
+
+    /** `elapsedRealtime` when [_mySession]'s current value arrived, so its position can be aged
+     *  rather than re-fetched — see [JamPosition]. 0 while no sample is held. */
+    @Volatile
+    private var mySessionReceivedAtMs = 0L
 
     /** Set by whoever owns real playback (PlaybackDispatchStateHolder) — JamManager only knows
      *  the raw MediaController, not this app's own shuffle-reordering/repeat-mode logic, so it
@@ -110,48 +143,121 @@ class JamManager @Inject constructor(
             // Once that has happened, this device stays a valid handoff target - paused included -
             // until the process dies, which matches how Spotify Connect behaves.
             PlaybackActivityTracker.isPlaybackActiveFlow.first { it }
-            navidromeRepository.registerDevice(deviceName, "android", sessionId, householdVisible())
-            val c = ensureController() ?: return@launch
-            attachPublishListener(c)
-            connect()
-            _mySession.value = navidromeRepository.getMySession()
-            _householdSessions.value = navidromeRepository.getHouseholdSessions()
-            _devices.value = navidromeRepository.getDevices(sessionId)
-            publishNow()
-            startPositionSync()
-            startHygieneRefresh()
+            // Every call below is gateway-backed: signed out there is nothing to register with,
+            // nothing to publish to and no stream to subscribe to, so the whole session role
+            // stays parked instead of burning a 5 s timer and a reconnect loop on no-ops.
+            navidromeRepository.isLoggedInFlow.collect { loggedIn ->
+                if (loggedIn) startSessionRole() else stopSessionRole()
+            }
         }
     }
+
+    private suspend fun startSessionRole() {
+        if (positionSyncJob?.isActive == true) return
+        navidromeRepository.registerDevice(deviceName, "android", sessionId, householdVisible())
+        val c = ensureController() ?: return
+        attachPublishListener(c)
+        connect()
+        setMySession(navidromeRepository.getMySession())
+        _householdSessions.value = navidromeRepository.getHouseholdSessions()
+        _devices.value = navidromeRepository.getDevices(sessionId)
+        publishNow()
+        startPositionSync()
+        startHygieneRefresh()
+    }
+
+    @Synchronized
+    private fun stopSessionRole() {
+        reconnectJob?.cancel()
+        reconnectJob = null
+        positionSyncJob?.cancel()
+        positionSyncJob = null
+        hygieneRefreshJob?.cancel()
+        hygieneRefreshJob = null
+        connectionGeneration.incrementAndGet()
+        eventSource?.cancel()
+        eventSource = null
+        connectedAtMs = 0L
+        reconnectAttempt = 0
+        setMySession(null)
+        _householdSessions.value = emptyList()
+        _devices.value = emptyList()
+    }
+
+    /** Every path that stores a session also stamps when it arrived, so [remotePositionMs]
+     *  can age it. */
+    private fun setMySession(session: ActiveSession?) {
+        mySessionReceivedAtMs = if (session == null) 0L else SystemClock.elapsedRealtime()
+        _mySession.value = session
+    }
+
+    /** [session]'s playhead as of now, aged from when this device received it. Use this
+     *  anywhere a remote position is acted on — resuming a pull, drawing a progress bar —
+     *  instead of the raw [PlayerSessionState.positionMs], which is only true as of its
+     *  sample instant. */
+    fun remotePositionMs(session: ActiveSession): Long = JamPosition.extrapolate(
+        sampledPositionMs = session.state.positionMs,
+        isPlaying = session.state.isPlaying,
+        receivedAtElapsedMs = if (session === _mySession.value) mySessionReceivedAtMs else 0L,
+        nowElapsedMs = SystemClock.elapsedRealtime(),
+        durationMs = session.state.durationMs,
+    )
 
     private suspend fun householdVisible(): Boolean =
         userPreferencesRepository.allowHouseholdControlFlow.first()
 
     // ── Live push connection ────────────────────────────────────────────────
+    @Synchronized
     private fun connect() {
+        if (!navidromeRepository.isLoggedIn) return
+        // Take the new generation *before* cancelling: the cancellation is delivered as a
+        // failure on the old source, which must then be recognised as stale and dropped.
+        val generation = connectionGeneration.incrementAndGet()
+        connectedAtMs = 0L
         eventSource?.cancel()
         eventSource = navidromeRepository.subscribeSession(
             sessionId = sessionId,
+            onOpen = {
+                if (generation == connectionGeneration.get()) {
+                    connectedAtMs = SystemClock.elapsedRealtime()
+                }
+            },
             onSession = { session ->
-                reconnectAttempt = 0
                 if (session.user == navidromeRepository.username) {
-                    _mySession.value = session
+                    setMySession(session)
                 } else {
                     _householdSessions.value =
                         _householdSessions.value.filter { it.user != session.user } + session
                 }
             },
             onCommand = { cmd ->
-                reconnectAttempt = 0
                 scope.launch { applyCommand(cmd) }
             },
-            onClosed = { scope.launch { reconnectWithBackoff() } },
+            onClosed = { scheduleReconnect(generation) },
             onDevice = { device ->
-                reconnectAttempt = 0
                 // Instant pick-up for an already-open Devices screen, instead of waiting for
                 // the next hygiene tick — same merge-by-id the hygiene refresh does.
                 _devices.value = _devices.value.filter { it.id != device.id } + device
             },
         )
+    }
+
+    /** One drop schedules exactly one reconnect: callbacks from a superseded subscription are
+     *  ignored, and a pending reconnect is replaced rather than stacked. */
+    @Synchronized
+    private fun scheduleReconnect(generation: Int) {
+        if (generation != connectionGeneration.get()) return
+        val openedAtMs = connectedAtMs
+        connectedAtMs = 0L
+        // A stream that stayed up is a healthy one that merely dropped — reconnect promptly.
+        // One that died on arrival keeps climbing the backoff instead of hammering the server.
+        if (openedAtMs != 0L &&
+            SystemClock.elapsedRealtime() - openedAtMs >= STABLE_CONNECTION_MS
+        ) {
+            reconnectAttempt = 0
+        }
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch { reconnectWithBackoff() }
     }
 
     private suspend fun reconnectWithBackoff() {
@@ -175,7 +281,8 @@ class JamManager @Inject constructor(
      *  catches a device that vanished without a clean disconnect (crash, force-quit, dead
      *  network) rather than lingering forever in someone else's list. */
     private fun startHygieneRefresh() {
-        scope.launch {
+        hygieneRefreshJob?.cancel()
+        hygieneRefreshJob = scope.launch {
             while (true) {
                 delay(HYGIENE_REFRESH_MS)
                 refreshDevices()
@@ -184,7 +291,8 @@ class JamManager @Inject constructor(
     }
 
     private fun startPositionSync() {
-        scope.launch {
+        positionSyncJob?.cancel()
+        positionSyncJob = scope.launch {
             while (true) {
                 delay(POSITION_SYNC_MS)
                 val playing = withContext(Dispatchers.Main) { controller?.isPlaying == true }
@@ -237,13 +345,16 @@ class JamManager @Inject constructor(
         val ids = session.state.queue
         if (ids.isEmpty()) return false
         val startIndex = session.state.queueIndex.coerceIn(0, ids.size - 1)
+        // Age the sample: with a slow publish cadence the raw positionMs can be tens of
+        // seconds behind, and resuming there would replay audio the user already heard.
+        val resumePositionMs = remotePositionMs(session)
         val songs = navidromeRepository.getSongsByIds(ids.drop(startIndex))
         if (songs.isEmpty()) return false
         withContext(Dispatchers.Main) {
             val c = ensureController() ?: return@withContext
             c.setMediaItems(
                 songs.map { MediaItemBuilder.build(it) }, 0,
-                session.state.positionMs.coerceAtLeast(0)
+                resumePositionMs
             )
             c.prepare()
             if (session.state.isPlaying) c.play()
@@ -273,9 +384,28 @@ class JamManager @Inject constructor(
      *  case) - otherwise that pause would immediately re-publish and steal the active slot right
      *  back from whichever device just took it. */
     private fun attachPublishListener(c: MediaController) {
+        if (publishListenerAttached) return
+        publishListenerAttached = true
         c.addListener(object : Player.Listener {
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                cachedQueueIds = null
+            }
+
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 scope.launch { publishNow() }
+            }
+
+            // A seek jumps the playhead, which is exactly what a receiver ageing our last
+            // sample cannot predict. Publish at once rather than leaving peers extrapolating
+            // from a position that stopped being true until the next tick comes round.
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                    scope.launch { publishNow() }
+                }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -312,7 +442,10 @@ class JamManager @Inject constructor(
             shuffle = shuffleNow,
             repeat = repeatNow
         )
-        val queueIds = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).wireId() }
+        // Rebuilt only when the timeline actually changed — see [cachedQueueIds].
+        val queueIds = cachedQueueIds
+            ?: (0 until c.mediaItemCount).map { c.getMediaItemAt(it).wireId() }
+                .also { cachedQueueIds = it }
         LocalSnapshot(state, queueIds, c.currentMediaItemIndex.coerceAtLeast(0))
     }
 
@@ -373,7 +506,14 @@ class JamManager @Inject constructor(
     private fun UUID.hex(): String = toString().replace("-", "")
 
     companion object {
-        private const val POSITION_SYNC_MS = 5000L
+        // Position no longer rides on this timer: peers age the last sample themselves
+        // ([JamPosition]), and every playhead jump - track change, play/pause, seek -
+        // publishes immediately. What is left is drift correction and session liveness,
+        // which do not need five-second resolution. Each tick is a fresh authenticated HTTP
+        // POST carrying the whole queue, so this interval is a direct battery/radio cost.
+        private const val POSITION_SYNC_MS = 30_000L
         private const val HYGIENE_REFRESH_MS = 60_000L
+        /** How long a subscription must stay open to count as healthy for backoff. */
+        private const val STABLE_CONNECTION_MS = 30_000L
     }
 }

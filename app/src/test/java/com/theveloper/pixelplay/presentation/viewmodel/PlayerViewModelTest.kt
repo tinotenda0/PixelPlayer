@@ -92,6 +92,7 @@ class PlayerViewModelTest {
     private val mockExternalMediaStateHolder: ExternalMediaStateHolder = mockk(relaxed = true)
     private val mockThemeStateHolder: ThemeStateHolder = mockk(relaxed = true)
     private val mockActiveQueueNameHolder: com.theveloper.pixelplay.data.service.ActiveQueueNameHolder = mockk(relaxed = true)
+    private val mockJamManager: com.theveloper.pixelplay.data.jam.JamManager = mockk(relaxed = true)
     private val mockMultiSelectionStateHolder: MultiSelectionStateHolder = mockk(relaxed = true)
     private val mockPlaylistSelectionStateHolder: PlaylistSelectionStateHolder = mockk(relaxed = true)
     private val mockMediaMapper: com.theveloper.pixelplay.data.media.MediaMapper = mockk(relaxed = true)
@@ -117,6 +118,9 @@ class PlayerViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         MockKAnnotations.init(this)
+
+        // No remote session: playback stays local, as every test below assumes.
+        every { mockJamManager.mySession } returns MutableStateFlow(null)
 
         mockkStatic(ContextCompat::class)
         mockkStatic(android.net.Uri::class)
@@ -251,6 +255,7 @@ class PlayerViewModelTest {
             mockCastTransferStateHolder,
             mockThemeStateHolder,
             mockActiveQueueNameHolder,
+            mockJamManager,
             mockContext
         )
         // Real controller-sync holder wired to the same mocks, so existing tests
@@ -300,6 +305,7 @@ class PlayerViewModelTest {
             mockMultiSelectionStateHolder,
             mockPlaylistSelectionStateHolder,
             playbackDispatchStateHolder,
+            mockJamManager,
             mediaControllerSyncStateHolder,
             sessionToken,
             mockMediaControllerFactory

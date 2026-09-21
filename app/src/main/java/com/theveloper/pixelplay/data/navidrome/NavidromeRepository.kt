@@ -1398,8 +1398,11 @@ class NavidromeRepository @Inject constructor(
         onCommand: (JamCommand) -> Unit,
         onClosed: () -> Unit,
         onDevice: (DeviceSession) -> Unit = {},
+        onOpen: () -> Unit = {},
     ): EventSource {
         return api.subscribeSession(sessionId, object : EventSourceListener() {
+            override fun onOpen(eventSource: EventSource, response: okhttp3.Response) = onOpen()
+
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
                 try {
                     val json = org.json.JSONObject(data)
