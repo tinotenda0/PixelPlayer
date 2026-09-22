@@ -176,6 +176,7 @@ import com.theveloper.pixelplay.presentation.viewmodel.LyricsRefreshProgress
 import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.SettingsViewModel
 import com.theveloper.pixelplay.ui.theme.GoogleSansRounded
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -186,7 +187,12 @@ fun SettingsCategoryScreen(
     playerViewModel: PlayerViewModel,
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     statsViewModel: com.theveloper.pixelplay.presentation.viewmodel.StatsViewModel = hiltViewModel(),
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    /**
+     * False when this screen is the detail pane of the wide settings layout: the category list is
+     * already on screen beside it, so its own back arrow would be a second one pointing nowhere.
+     */
+    showBackButton: Boolean = true
 ) {
     val category = SettingsCategory.fromId(categoryId) ?: return
     val context = LocalContext.current
@@ -312,7 +318,11 @@ fun SettingsCategoryScreen(
     
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val minTopBarHeight = 64.dp + statusBarHeight
-    val maxTopBarHeight = if (isLongTitle) 200.dp else 180.dp //for 2 lines use 220 and make text use \n
+    // Capped against the window so a landscape pane is not mostly header.
+    val maxTopBarHeight = LocalAdaptiveInfo.current.collapsingHeaderHeight(
+        preferred = if (isLongTitle) 200.dp else 180.dp,
+        minHeight = minTopBarHeight
+    ) //for 2 lines use 220 and make text use \n
 
     val minTopBarHeightPx = with(density) { minTopBarHeight.toPx() }
     val maxTopBarHeightPx = with(density) { maxTopBarHeight.toPx() }
@@ -1398,7 +1408,8 @@ fun SettingsCategoryScreen(
             headerHeight = currentTopBarHeightDp,
             onBackClick = onBackClick,
             title = categoryTitle,
-            maxLines = titleMaxLines
+            maxLines = titleMaxLines,
+            showBackButton = showBackButton
         )
 
         // Block interaction during transition

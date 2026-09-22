@@ -119,6 +119,7 @@ import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.preferences.AlbumArtQuality
 import com.theveloper.pixelplay.data.preferences.CarouselStyle
 import com.theveloper.pixelplay.data.preferences.FullPlayerLoadingTweaks
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 import com.theveloper.pixelplay.presentation.components.AlbumCarouselSection
 import com.theveloper.pixelplay.presentation.components.AutoScrollingTextOnDemand
 import com.theveloper.pixelplay.presentation.components.LocalMaterialTheme
@@ -1409,6 +1410,9 @@ private fun FullPlayerPortraitContent(
     }
 }
 
+/** Keeps a tablet's landscape artwork from crowding out the transport controls beside it. */
+private val FullPlayerLandscapeArtMaxWidth = 380.dp
+
 @Composable
 private fun FullPlayerLandscapeContent(
     paddingValues: PaddingValues,
@@ -1417,30 +1421,39 @@ private fun FullPlayerLandscapeContent(
     playerProgressSection: @Composable () -> Unit,
     controlsSection: @Composable () -> Unit
 ) {
+    // On a tablet an artwork sized to half the window is enormous, and every dp it takes comes
+    // straight out of the controls column - past a point the transport buttons no longer fit and
+    // overflow the screen. Bounding the artwork is what keeps the controls whole; the row padding
+    // is deliberately left at the phone value for the same reason.
+    val adaptiveInfo = LocalAdaptiveInfo.current
+    val isExpanded = adaptiveInfo.isExpandedLayout
+
     Row(
         modifier = Modifier
             .fillMaxSize()
             .padding(paddingValues)
-            .padding(
-                horizontal = 24.dp,
-                vertical = 0.dp
-            ),
+            .padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        albumCoverSection(
-            Modifier
+        Box(
+            modifier = Modifier
                 .fillMaxHeight()
-                .weight(1f)
-        )
+                .weight(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            albumCoverSection(
+                if (isExpanded) {
+                    Modifier.widthIn(max = FullPlayerLandscapeArtMaxWidth)
+                } else {
+                    Modifier
+                }
+            )
+        }
         Spacer(Modifier.width(9.dp))
         Column(
             modifier = Modifier
                 .fillMaxHeight()
-                .weight(1f)
-                .padding(
-                    horizontal = 0.dp,
-                    vertical = 0.dp
-                ),
+                .weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceEvenly
         ) {

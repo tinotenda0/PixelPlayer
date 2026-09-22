@@ -75,6 +75,7 @@ import com.theveloper.pixelplay.presentation.viewmodel.AccountsViewModel
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 
 /**
  * PixelPlayer is a dedicated client for one XPS gateway account, so this screen shows a single
@@ -95,7 +96,12 @@ fun AccountsScreen(
 
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val minTopBarHeight = 64.dp + statusBarHeight
-    val maxTopBarHeight = 180.dp
+    // Capped against the window: these headers are sized for a tall portrait window and
+    // would eat most of a landscape one.
+    val maxTopBarHeight = LocalAdaptiveInfo.current.collapsingHeaderHeight(
+        preferred = 180.dp,
+        minHeight = minTopBarHeight
+    )
     val minTopBarHeightPx = with(density) { minTopBarHeight.toPx() }
     val maxTopBarHeightPx = with(density) { maxTopBarHeight.toPx() }
     val topBarHeight = remember { Animatable(maxTopBarHeightPx) }

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -76,6 +77,10 @@ import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.presentation.components.CollapsibleCommonTopBar
 import com.theveloper.pixelplay.presentation.components.ExpressiveTopBarContent
 import com.theveloper.pixelplay.presentation.components.MiniPlayerHeight
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.runtime.key
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 import com.theveloper.pixelplay.presentation.model.SettingsCategory
 import com.theveloper.pixelplay.presentation.navigation.Screen
 import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
@@ -123,7 +128,12 @@ fun SettingsScreen(
 
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val minTopBarHeight = 64.dp + statusBarHeight
-    val maxTopBarHeight = 180.dp 
+    // Capped against the window: these headers are sized for a tall portrait window and
+    // would eat most of a landscape one.
+    val maxTopBarHeight = LocalAdaptiveInfo.current.collapsingHeaderHeight(
+        preferred = 180.dp,
+        minHeight = minTopBarHeight
+    )
 
     val minTopBarHeightPx = with(density) { minTopBarHeight.toPx() }
     val maxTopBarHeightPx = with(density) { maxTopBarHeight.toPx() }
@@ -131,6 +141,19 @@ fun SettingsScreen(
     val uiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val launchTab = uiState.launchTab
     val useSmoothCorners by settingsViewModel.useSmoothCorners.collectAsStateWithLifecycle()
+
+    // Wide windows show settings as list-detail: the categories stay on the left and the chosen
+    // category opens beside them rather than pushing a whole new screen.
+    val adaptiveInfo = LocalAdaptiveInfo.current
+    val isWideLayout = adaptiveInfo.useTwoPaneDetail
+    val firstCategoryId = remember {
+        SettingsCategory.entries.first {
+            it != SettingsCategory.ABOUT && it != SettingsCategory.DEVICE_CAPABILITIES
+        }.id
+    }
+    var selectedCategoryId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Landing on an empty detail pane looks broken, so preselect the first category.
+    val shownCategoryId = selectedCategoryId ?: firstCategoryId
 
     var showCornerRadiusOverlay by remember { mutableStateOf(false) }
 
@@ -191,6 +214,7 @@ fun SettingsScreen(
         }
     }
 
+    val categoryListPane: @Composable () -> Unit = {
     Box(
             modifier =
                     Modifier.nestedScroll(nestedScrollConnection).fillMaxSize().graphicsLayer {
@@ -235,11 +259,16 @@ fun SettingsScreen(
                         ExpressiveCategoryItem(
                             category = category,
                             customColors = colors,
+                            selected = isWideLayout && category.id == shownCategoryId,
                             onClick = {
-                                if (category == SettingsCategory.EQUALIZER) {
-                                    navController.navigateSafely(Screen.Equalizer.route)
-                                } else {
-                                    navController.navigateSafely(Screen.SettingsCategory.createRoute(category.id))
+                                when {
+                                    // The equalizer is its own screen, not a settings category.
+                                    category == SettingsCategory.EQUALIZER ->
+                                        navController.navigateSafely(Screen.Equalizer.route)
+                                    isWideLayout -> selectedCategoryId = category.id
+                                    else -> navController.navigateSafely(
+                                        Screen.SettingsCategory.createRoute(category.id)
+                                    )
                                 }
                             },
                             shape = shapeFor(itemIndex)
@@ -313,6 +342,43 @@ fun SettingsScreen(
             )
         }
     }
+    }
+
+    if (isWideLayout) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .width(adaptiveInfo.detailHeroPaneWidth)
+                    .fillMaxHeight()
+            ) {
+                categoryListPane()
+            }
+            VerticalDivider(
+                modifier = Modifier.fillMaxHeight(),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            ) {
+                // Keyed so switching category rebuilds the pane instead of leaking the previous
+                // category's scroll position and dialog state into the new one.
+                key(shownCategoryId) {
+                    SettingsCategoryScreen(
+                        categoryId = shownCategoryId,
+                        navController = navController,
+                        playerViewModel = playerViewModel,
+                        onBackClick = onNavigationIconClick,
+                        // The list pane beside it already carries the one back arrow.
+                        showBackButton = false
+                    )
+                }
+            }
+        }
+    } else {
+        categoryListPane()
+    }
 }
 
 @Composable
@@ -377,13 +443,19 @@ fun ExpressiveCategoryItem(
     category: SettingsCategory,
     onClick: () -> Unit,
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(24.dp),
-    customColors: Pair<Color, Color>? = null
+    customColors: Pair<Color, Color>? = null,
+    /** Marks the open category in the wide list-detail layout. Always false when navigating. */
+    selected: Boolean = false
 ) {
     Surface(
         onClick = onClick,
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth().height(88.dp) 
+        color = if (selected) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        modifier = Modifier.fillMaxWidth().height(88.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

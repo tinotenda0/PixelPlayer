@@ -1216,6 +1216,9 @@ private fun LyricsPlaybackSeekBar(
 }
 
 @OptIn(ExperimentalSnapperApi::class)
+/** Widest a column of lyrics gets before it is centred, so lines stay a readable measure. */
+private val LyricsMaxWidth = 620.dp
+
 @Composable
 fun SyncedLyricsList(
     lines: List<SyncedLine>,
@@ -1337,9 +1340,18 @@ fun SyncedLyricsList(
             lastAutoScrolledLineIndex = currentLineIndex
         }
 
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            // Lyric lines fill their width, so across a tablet a line would run the whole window
+            // and the block would hug whichever edge the alignment preference picks. Centring the
+            // column keeps lyrics a readable measure at any width, and still honours that
+            // preference inside the column.
+            contentAlignment = Alignment.TopCenter
+        ) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .widthIn(max = LyricsMaxWidth)
+                    .fillMaxSize(),
                 state = listState,
                 flingBehavior = flingBehavior,
                 contentPadding = contentPadding

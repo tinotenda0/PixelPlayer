@@ -80,6 +80,7 @@ import kotlin.math.roundToInt
 import androidx.compose.ui.res.stringResource
 import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.data.preferences.AlbumArtQuality
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -111,7 +112,12 @@ fun ExperimentalSettingsScreen(
 
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val minTopBarHeight = 64.dp + statusBarHeight
-    val maxTopBarHeight = 180.dp
+    // Capped against the window: these headers are sized for a tall portrait window and
+    // would eat most of a landscape one.
+    val maxTopBarHeight = LocalAdaptiveInfo.current.collapsingHeaderHeight(
+        preferred = 180.dp,
+        minHeight = minTopBarHeight
+    )
 
     val minTopBarHeightPx = with(density) { minTopBarHeight.toPx() }
     val maxTopBarHeightPx = with(density) { maxTopBarHeight.toPx() }

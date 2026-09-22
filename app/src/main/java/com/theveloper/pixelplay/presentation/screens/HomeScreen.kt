@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -88,6 +89,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.preferences.CollagePattern
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 import com.theveloper.pixelplay.presentation.components.AlbumArtCollage
 import com.theveloper.pixelplay.presentation.components.BetaInfoBottomSheet
 import com.theveloper.pixelplay.presentation.components.Beta05CleanInstallDisclaimerDialog
@@ -113,6 +115,7 @@ import com.theveloper.pixelplay.presentation.viewmodel.PlayerViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.SettingsViewModel
 import com.theveloper.pixelplay.presentation.viewmodel.StatsViewModel
 import com.theveloper.pixelplay.ui.theme.ExpTitleTypography
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
@@ -123,6 +126,9 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import androidx.compose.ui.res.stringResource
 
 private const val HomeLoadingPlaceholderMinDurationMillis = 1200L
+
+/** Widest the Home feed is allowed to get before it is centred with gutters on a tablet. */
+private val HomeFeedMaxWidth = 840.dp
 
 // Modern HomeScreen with collapsible top bar and staggered grid layout
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -316,6 +322,48 @@ fun HomeScreen(
         needsScrollRestore = false
     }
 
+    val adaptiveInfo = LocalAdaptiveInfo.current
+    // A fixed 400dp collage swallows a whole phone-landscape window, which is only ~411dp tall, so
+    // in landscape it is sized against the window instead. Portrait keeps the shipped 400dp.
+    val collageHeight = if (adaptiveInfo.isLandscape) {
+        (adaptiveInfo.heightDp * 0.62f).coerceIn(200.dp, 400.dp)
+    } else {
+        400.dp
+    }
+    // On a tablet the feed is centred rather than stretched edge to edge. Applied as symmetric
+    // content padding rather than a width cap: the Scaffold content slot does not centre its
+    // child, so capping the width alone would just pin the feed to the start edge.
+    val feedHorizontalInset = if (adaptiveInfo.isWideLayout) {
+        ((adaptiveInfo.widthDp - adaptiveInfo.sideNavigationWidth - HomeFeedMaxWidth) / 2)
+            .coerceAtLeast(0.dp)
+    } else {
+        0.dp
+    }
+    // The collage positions its art with Start/Center/End alignment inside one box, so a very wide
+    // box flings the pieces to the far edges and it stops reading as a collage. Keep it near its
+    // natural squarish aspect and let the feed centre it.
+    val collageMaxWidth = if (adaptiveInfo.isLandscape) collageHeight * 1.25f else Dp.Unspecified
+
+    // Shared by the stacked (portrait) and side-by-side (landscape) forms of the Your Mix hero.
+    val onPlayYourMixShuffled: () -> Unit = {
+        if (usesFallbackHomeMix) {
+            playerViewModel.shuffleAllSongs(queueName = "Your Mix")
+        } else {
+            playerViewModel.playSongsShuffled(
+                songsToPlay = yourMixSongs,
+                queueName = "Your Mix",
+                startAtZero = true,
+            )
+        }
+    }
+    val onYourMixSongClick: (Song) -> Unit = { song ->
+        if (usesFallbackHomeMix) {
+            playerViewModel.showAndPlaySongFromLibrary(song, queueName = "Your Mix")
+        } else {
+            playerViewModel.showAndPlaySong(song, yourMixSongs, "Your Mix")
+        }
+    }
+
     // Drawer state for sidebar
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val shouldShowCleanInstallDisclaimer =
@@ -359,6 +407,8 @@ fun HomeScreen(
                     .background(MaterialTheme.colorScheme.background),
                 contentPadding = PaddingValues(
                     top = innerPadding.calculateTopPadding(),
+                    start = feedHorizontalInset,
+                    end = feedHorizontalInset,
                     bottom = paddingValuesParent.calculateBottomPadding()
                             + 38.dp + bottomPadding
                 ),
@@ -380,6 +430,27 @@ fun HomeScreen(
                                 }
                             )
                         }
+                    }
+                } else if (adaptiveInfo.isWideLayout) {
+                    // Landscape has width to spare and very little height, so the title, the
+                    // shuffle action and the collage sit side by side as one hero instead of
+                    // stacking into three bands with dead space between them.
+                    item(
+                        key = "your_mix_hero",
+                        contentType = "your_mix_hero"
+                    ) {
+                        YourMixWideHero(
+                            songs = yourMixSongs,
+                            subtitle = yourMixSong,
+                            isShuffleEnabled = isShuffleEnabled,
+                            pattern = rememberActiveCollagePattern(
+                                basePattern = settingsUiState.collagePattern,
+                                autoRotate = settingsUiState.collageAutoRotate
+                            ),
+                            collageHeight = collageHeight,
+                            onPlayShuffled = onPlayYourMixShuffled,
+                            onSongClick = onYourMixSongClick
+                        )
                     }
                 } else {
                     item(
@@ -404,40 +475,40 @@ fun HomeScreen(
                     }
                 }
 
-                // Collage
-                if (yourMixSongs.isNotEmpty()) {
+                // Collage. In a wide window it is part of the hero above instead.
+                if (yourMixSongs.isNotEmpty() && !adaptiveInfo.isWideLayout) {
                     item(
                         key = "album_art_collage",
                         contentType = "album_art_collage"
                     ) {
-                        val basePattern = settingsUiState.collagePattern
-                        val isAutoRotate = settingsUiState.collageAutoRotate
-                        val patterns = remember { CollagePattern.entries }
-
-                        val activePattern = if (isAutoRotate) {
-                            var rotationIndex by rememberSaveable { mutableIntStateOf(-1) }
-                            LaunchedEffect(Unit) { rotationIndex++ }
-                            remember(rotationIndex) {
-                                patterns[rotationIndex.coerceAtLeast(0) % patterns.size]
-                            }
-                        } else {
-                            basePattern
-                        }
-
-                        AlbumArtCollage(
-                            modifier = Modifier.fillMaxWidth(),
-                            songs = yourMixSongs,
-                            padding = 14.dp,
-                            height = 400.dp,
-                            pattern = activePattern,
-                            onSongClick = { song ->
-                                if (usesFallbackHomeMix) {
-                                    playerViewModel.showAndPlaySongFromLibrary(song, queueName = "Your Mix")
-                                } else {
-                                    playerViewModel.showAndPlaySong(song, yourMixSongs, "Your Mix")
-                                }
-                            }
+                        val activePattern = rememberActiveCollagePattern(
+                            basePattern = settingsUiState.collagePattern,
+                            autoRotate = settingsUiState.collageAutoRotate
                         )
+
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AlbumArtCollage(
+                                modifier = if (collageMaxWidth != Dp.Unspecified) {
+                                    Modifier.widthIn(max = collageMaxWidth)
+                                } else {
+                                    Modifier.fillMaxWidth()
+                                },
+                                songs = yourMixSongs,
+                                padding = 14.dp,
+                                height = collageHeight,
+                                pattern = activePattern,
+                                onSongClick = { song ->
+                                    if (usesFallbackHomeMix) {
+                                        playerViewModel.showAndPlaySongFromLibrary(song, queueName = "Your Mix")
+                                    } else {
+                                        playerViewModel.showAndPlaySong(song, yourMixSongs, "Your Mix")
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -718,6 +789,104 @@ private fun YourMixEmptyPlaceholder(
                 Text(text = stringResource(R.string.home_empty_placeholder_refresh))
             }
         }
+    }
+}
+
+/**
+ * Resolves which collage pattern to draw, honouring the auto-rotate preference. Hoisted out of the
+ * collage list item so the portrait and landscape heroes share one implementation.
+ */
+@Composable
+private fun rememberActiveCollagePattern(
+    basePattern: CollagePattern,
+    autoRotate: Boolean
+): CollagePattern {
+    if (!autoRotate) return basePattern
+    val patterns = remember { CollagePattern.entries }
+    var rotationIndex by rememberSaveable { mutableIntStateOf(-1) }
+    LaunchedEffect(Unit) { rotationIndex++ }
+    return remember(rotationIndex) {
+        patterns[rotationIndex.coerceAtLeast(0) % patterns.size]
+    }
+}
+
+/**
+ * The Your Mix hero for wide windows: title, subtitle and the shuffle action in a start column with
+ * the collage beside them.
+ *
+ * The portrait hero stacks a 256dp title band above a 400dp collage. That is 650dp of vertical
+ * space, which a landscape window does not have - on a tablet it pushed the rest of the feed off
+ * screen and left a large gap between the title and the art.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun YourMixWideHero(
+    songs: ImmutableList<Song>,
+    subtitle: String,
+    isShuffleEnabled: Boolean,
+    pattern: CollagePattern,
+    collageHeight: Dp,
+    onPlayShuffled: () -> Unit,
+    onSongClick: (Song) -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val titleStyle = rememberYourMixTitleStyle()
+    val buttonCorners = 68.dp
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 16.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.home_your_mix_title),
+                style = titleStyle,
+                color = colors.onSurface
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurface.copy(alpha = 0.7f),
+                modifier = Modifier.padding(start = 8.dp)
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            LargeExtendedFloatingActionButton(
+                onClick = onPlayShuffled,
+                containerColor = if (isShuffleEnabled) colors.primary else colors.tertiaryContainer,
+                contentColor = if (isShuffleEnabled) colors.onPrimary else colors.onTertiaryContainer,
+                shape = AbsoluteSmoothCornerShape(
+                    cornerRadiusTL = buttonCorners,
+                    smoothnessAsPercentTR = 60,
+                    cornerRadiusBR = buttonCorners,
+                    smoothnessAsPercentTL = 60,
+                    cornerRadiusBL = buttonCorners,
+                    smoothnessAsPercentBR = 60,
+                    cornerRadiusTR = buttonCorners,
+                    smoothnessAsPercentBL = 60,
+                )
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.rounded_shuffle_24),
+                    contentDescription = stringResource(R.string.common_shuffle_play),
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+        }
+
+        AlbumArtCollage(
+            modifier = Modifier.width(collageHeight * 1.15f),
+            songs = songs,
+            padding = 8.dp,
+            height = collageHeight,
+            pattern = pattern,
+            onSongClick = onSongClick
+        )
     }
 }
 

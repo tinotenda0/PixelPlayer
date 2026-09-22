@@ -59,6 +59,7 @@ import com.theveloper.pixelplay.data.model.LibraryTabId
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.model.SortOption
 import com.theveloper.pixelplay.data.model.StorageFilter
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 import com.theveloper.pixelplay.presentation.components.ExpressiveScrollBar
 import com.theveloper.pixelplay.ui.theme.LocalShowScrollbar
 import com.theveloper.pixelplay.presentation.components.MiniPlayerHeight
@@ -106,6 +107,9 @@ fun LibraryAlbumsTab(
     val dummyGridState = rememberLazyGridState()
     val context = LocalContext.current
     val imageLoader = context.imageLoader
+    // Two columns is right for a phone held upright and nothing else; on anything wider the cards
+    // balloon. Driven by raw width so a tablet benefits in portrait too.
+    val albumGridColumns = LocalAdaptiveInfo.current.gridColumns(minCellWidth = 190.dp)
 
     val albumFastScrollLabelProvider = remember(albums, currentAlbumSortOption) {
         { index: Int ->
@@ -281,7 +285,7 @@ fun LibraryAlbumsTab(
                             )
                         )
                         .fillMaxSize(),
-                    columns = GridCells.Fixed(2),
+                    columns = GridCells.Fixed(albumGridColumns),
                     contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap + 4.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -405,7 +409,7 @@ fun LibraryAlbumsTab(
                                         )
                                     ),
                                 state = activeGridState,
-                                columns = GridCells.Fixed(2),
+                                columns = GridCells.Fixed(albumGridColumns),
                                 contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap + 4.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -483,6 +487,8 @@ fun LibraryArtistsTab(
     onRefresh: () -> Unit,
     storageFilter: StorageFilter = StorageFilter.ALL
 ) {
+    // Artist rows are a list like the songs list, and stretch the same way on a tablet.
+    val rowInset = LocalAdaptiveInfo.current.listCenteringInset()
     val hasCurrentSong by remember(playerViewModel) {
         playerViewModel.stablePlayerState
             .map { it.currentSong != null && it.currentSong != Song.emptySong() }
@@ -567,7 +573,11 @@ fun LibraryArtistsTab(
                     )
                     .fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap)
+                contentPadding = PaddingValues(
+                    start = rowInset,
+                    end = rowInset,
+                    bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap
+                )
             ) {
                 item(key = "skeleton_top_spacer") { Spacer(Modifier.height(4.dp)) }
                 items(10, key = { "skeleton_artist_$it" }) {
@@ -621,7 +631,11 @@ fun LibraryArtistsTab(
                                 ),
                             state = activeListState,
                             verticalArrangement = Arrangement.spacedBy(8.dp),
-                            contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap)
+                            contentPadding = PaddingValues(
+                    start = rowInset,
+                    end = rowInset,
+                    bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap
+                )
                         ) {
                             items(
                                 count = artists.itemCount,

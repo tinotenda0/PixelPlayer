@@ -91,6 +91,7 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import kotlin.math.roundToInt
 import androidx.compose.ui.res.stringResource
 import com.theveloper.pixelplay.presentation.components.subcomps.TightWrapText
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 
 // --- Data Models & Helpers ---
 
@@ -147,7 +148,12 @@ fun GenreDetailScreen(
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val minTopBarHeight = 58.dp + statusBarHeight // Reduced by 6dp from 64.dp
-    val maxTopBarHeight = 200.dp
+    // Capped against the window: these headers are sized for a tall portrait window and
+    // would eat most of a landscape one.
+    val maxTopBarHeight = LocalAdaptiveInfo.current.collapsingHeaderHeight(
+        preferred = 200.dp,
+        minHeight = minTopBarHeight
+    )
     val minTopBarHeightPx = with(density) { minTopBarHeight.toPx() }
     val maxTopBarHeightPx = with(density) { maxTopBarHeight.toPx() }
 

@@ -86,6 +86,7 @@ import com.theveloper.pixelplay.ui.theme.LocalShowScrollbar
 import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -245,6 +246,9 @@ fun PlaylistItems(
     onPlaylistLongPress: (Playlist) -> Unit = {},
     onPlaylistSelectionToggle: (Playlist) -> Unit = {}
 ) {
+    // Same treatment as the song lists: a playlist row stretched across a tablet puts its name
+    // at one end of the window and its artwork at the other.
+    val rowInset = LocalAdaptiveInfo.current.listCenteringInset()
     val hasCurrentSong by remember(playerViewModel) {
         playerViewModel.stablePlayerState
             .map { it.currentSong != null && it.currentSong != Song.emptySong() }
@@ -291,7 +295,11 @@ fun PlaylistItems(
                 ),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + 30.dp)
+            contentPadding = PaddingValues(
+                start = rowInset,
+                end = rowInset,
+                bottom = bottomBarHeight + MiniPlayerHeight + 30.dp
+            )
         ) {
             items(filteredPlaylists, key = { it.id }) { playlist ->
                 val rememberedOnClick = remember(playlist.id) {
