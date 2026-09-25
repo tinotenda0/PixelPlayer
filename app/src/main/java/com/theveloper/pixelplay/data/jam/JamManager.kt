@@ -428,9 +428,17 @@ class JamManager @Inject constructor(
         })
     }
 
+    /** Orders this device's publishes against each other. They are independent HTTP requests,
+     *  so a delayed one can land after a newer one and overwrite state that stopped being
+     *  true; the server drops anything carrying a lower count than it has already seen. */
+    private val publishSeq = AtomicInteger(0)
+
     private suspend fun publishNow() {
         val snapshot = readState() ?: return
-        navidromeRepository.publishState(sessionId, snapshot.state, snapshot.queueIds, snapshot.queueIndex)
+        navidromeRepository.publishState(
+            sessionId, snapshot.state, snapshot.queueIds, snapshot.queueIndex,
+            seq = publishSeq.incrementAndGet()
+        )
     }
 
     private data class LocalSnapshot(val state: JamState, val queueIds: List<String>, val queueIndex: Int)

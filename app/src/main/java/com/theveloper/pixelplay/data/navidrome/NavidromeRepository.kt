@@ -1322,7 +1322,8 @@ class NavidromeRepository @Inject constructor(
      *  device that was previously active gets pushed a `superseded` command over its own
      *  subscribeSession stream - a real takeover, not just a state overwrite. */
     suspend fun publishState(
-        sessionId: String, state: JamState, queueIds: List<String>, queueIndex: Int
+        sessionId: String, state: JamState, queueIds: List<String>, queueIndex: Int,
+        seq: Int? = null
     ): Boolean {
         if (!isLoggedIn) return false
         return withContext(Dispatchers.IO) {
@@ -1342,7 +1343,7 @@ class NavidromeRepository @Inject constructor(
                 // Comma-separated, same shape as `queue` - these are query params, so a
                 // nested object would have to be encoded anyway.
                 "disallows" to state.disallows.joinToString(",")
-            )
+            ) + (seq?.let { mapOf("seq" to it.toString()) } ?: emptyMap())
             api.publishState(params).isSuccess
         }
     }
