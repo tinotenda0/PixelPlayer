@@ -13,6 +13,9 @@ enum class PlaybackErrorRecovery {
     /** Re-prepare the same item and resume from where it died — a dropped connection, usually. */
     RETRY,
 
+    /** Hold this track where it is and pick it up again once there is a connection to stream over. */
+    WAIT_FOR_NETWORK,
+
     /** This item has already had its retry, or was never going to play: move on. */
     SKIP_TO_NEXT,
 
@@ -49,13 +52,21 @@ private const val MAX_ABANDONED_TRACKS_BEFORE_STOP = 3
  * playback last succeeded; both are cleared once it does. So every item gets at most one retry,
  * a queue of dead streams does not loop on its first entry, and a systemic failure stops instead
  * of racing to the end of the queue.
+ *
+ * [isOnline] is checked first and deliberately overrides all of that. Driving through a tunnel or
+ * a rural stretch produces a run of network errors that have nothing to do with the tracks: every
+ * one would burn a retry and a skip, so the queue would race ahead through music nobody heard and
+ * then stop on the abandon cap, leaving silence and a lost position. Waiting instead keeps the
+ * track that was playing and picks it up when there is a connection again.
  */
 internal fun resolvePlaybackErrorRecovery(
     error: PlaybackException,
     alreadyRetried: Boolean,
     hasNextMediaItem: Boolean,
-    abandonedTracks: Int
+    abandonedTracks: Int,
+    isOnline: Boolean
 ): PlaybackErrorRecovery = when {
+    !isOnline && isTransientPlaybackError(error) -> PlaybackErrorRecovery.WAIT_FOR_NETWORK
     abandonedTracks >= MAX_ABANDONED_TRACKS_BEFORE_STOP -> PlaybackErrorRecovery.STOP
     !alreadyRetried && isTransientPlaybackError(error) -> PlaybackErrorRecovery.RETRY
     hasNextMediaItem -> PlaybackErrorRecovery.SKIP_TO_NEXT

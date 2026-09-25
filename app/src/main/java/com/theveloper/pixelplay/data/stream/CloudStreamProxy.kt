@@ -25,9 +25,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import timber.log.Timber
+import java.io.IOException
 import java.net.ServerSocket
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 /**
  * Abstract base class for local HTTP proxy servers that stream cloud music audio.
@@ -39,8 +42,16 @@ import java.util.concurrent.ConcurrentHashMap
  * @param K The song identifier type (e.g. [String] for Navidrome songId)
  */
 abstract class CloudStreamProxy<K : Any>(
-    private val okHttpClient: OkHttpClient
+    okHttpClient: OkHttpClient
 ) {
+    /**
+     * The injected client is tuned for API calls, and its 8s read timeout is far too tight for a
+     * multi-minute audio body: a momentary stall on a mobile network would abort the track. Share
+     * its connection pool and dispatcher via newBuilder(), but give reads room to breathe.
+     */
+    private val okHttpClient: OkHttpClient = okHttpClient.newBuilder()
+        .readTimeout(STREAM_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .build()
     // ─── Subclass Configuration ────────────────────────────────────────
 
     protected abstract val allowedHostSuffixes: Set<String>
@@ -73,6 +84,10 @@ abstract class CloudStreamProxy<K : Any>(
     private var startJob: Job? = null
 
     private val urlCache = ConcurrentHashMap<K, CachedUrl>()
+
+    private companion object {
+        const val STREAM_READ_TIMEOUT_SECONDS = 30L
+    }
 
     private data class CachedUrl(val url: String, val timestamp: Long, val expirationMs: Long) {
         fun isExpired(): Boolean = System.currentTimeMillis() - timestamp > expirationMs
@@ -166,6 +181,55 @@ abstract class CloudStreamProxy<K : Any>(
         return resolveStreamUrl(id)?.also { url ->
             urlCache[id] = CachedUrl(url, System.currentTimeMillis(), cacheExpirationMs)
         }
+    }
+
+    /**
+     * Copies [body] into [writeChunk] until it ends. Returns null on a clean finish, or the
+     * upstream failure that interrupted it — write failures propagate instead, since those mean
+     * the player closed the connection and there is nothing left to resume into.
+     */
+    private suspend fun pumpUpstream(
+        body: okhttp3.ResponseBody,
+        buffer: ByteArray,
+        writeChunk: suspend (ByteArray, Int) -> Unit
+    ): IOException? {
+        val input = body.byteStream()
+        while (true) {
+            val read = try {
+                withContext(Dispatchers.IO) { input.read(buffer) }
+            } catch (e: IOException) {
+                runCatching { body.close() }
+                return e
+            }
+            if (read == -1) {
+                runCatching { body.close() }
+                return null
+            }
+            writeChunk(buffer, read)
+        }
+    }
+
+    /**
+     * Re-requests the tail of the stream. Only a 206 is usable: a 200 means the server ignored
+     * the Range and would replay the whole file, duplicating everything already delivered.
+     */
+    private suspend fun reopenUpstream(streamUrl: String, rangeHeader: String): okhttp3.ResponseBody? {
+        val response: Response = try {
+            withContext(Dispatchers.IO) {
+                okHttpClient.newCall(
+                    Request.Builder().url(streamUrl).header("Range", rangeHeader).build()
+                ).execute()
+            }
+        } catch (e: IOException) {
+            Timber.tag(proxyTag).w(e, "Resume request failed")
+            return null
+        }
+        if (response.code != 206) {
+            Timber.tag(proxyTag).w("Resume refused: upstream answered %d, not 206", response.code)
+            runCatching { response.close() }
+            return null
+        }
+        return response.body
     }
 
     private fun createServer(port: Int): EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration> {
@@ -263,17 +327,48 @@ abstract class CloudStreamProxy<K : Any>(
                             contentLength?.let { call.response.header("Content-Length", it) }
                             contentRange?.let { call.response.header("Content-Range", it) }
 
+                            val clientStart = rangeValidation.startInclusive ?: 0L
+                            val clientEnd = rangeValidation.endInclusive
+
                             call.respondBytesWriter(contentType = responseContentType) {
-                                withContext(Dispatchers.IO) {
-                                    body.byteStream().use { input ->
-                                        val buffer = ByteArray(64 * 1024)
-                                        var bytesRead: Int
-                                        while (input.read(buffer)
-                                                .also { bytesRead = it } != -1
-                                        ) {
-                                            writeFully(buffer, 0, bytesRead)
-                                        }
+                                val buffer = ByteArray(64 * 1024)
+                                var delivered = 0L
+                                var attempt = 0
+                                var current = body
+
+                                while (true) {
+                                    // Upstream read failures are recoverable and handled below;
+                                    // a write failure means the player hung up, which is not.
+                                    val upstreamFailure = pumpUpstream(current, buffer) { chunk, length ->
+                                        writeFully(chunk, 0, length)
+                                        delivered += length
+                                    } ?: break
+
+                                    if (!CloudStreamResume.canResume(
+                                            isSuffixRange = rangeValidation.isSuffixRange,
+                                            deliveredBytes = delivered,
+                                            attempt = attempt
+                                        )
+                                    ) {
+                                        throw upstreamFailure
                                     }
+
+                                    attempt++
+                                    Timber.tag(proxyTag).w(
+                                        "Upstream died %d bytes in (%s) — resuming, attempt %d",
+                                        delivered,
+                                        upstreamFailure.toString(),
+                                        attempt
+                                    )
+                                    delay(CloudStreamResume.backoffMs(attempt))
+                                    current = reopenUpstream(
+                                        streamUrl = streamUrl,
+                                        rangeHeader = CloudStreamResume.resumeRangeHeader(
+                                            clientStart = clientStart,
+                                            clientEndInclusive = clientEnd,
+                                            deliveredBytes = delivered
+                                        )
+                                    ) ?: throw upstreamFailure
                                 }
                             }
                         }
