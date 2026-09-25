@@ -511,6 +511,11 @@ class JamManager @Inject constructor(
         // publishes immediately. What is left is drift correction and session liveness,
         // which do not need five-second resolution. Each tick is a fresh authenticated HTTP
         // POST carrying the whole queue, so this interval is a direct battery/radio cost.
+        //
+        // This doubles as the server's liveness signal, so it is half of a contract: the
+        // backend's `CONNECTION_STALE_SECONDS` (handoff.py) is three times this value and must
+        // move with it. Leave them out of step and a healthy device reads as stale, which
+        // double-delivers commands and replays them as duplicate skips after a reconnect.
         private const val POSITION_SYNC_MS = 30_000L
         private const val HYGIENE_REFRESH_MS = 60_000L
         /** How long a subscription must stay open to count as healthy for backoff. */
