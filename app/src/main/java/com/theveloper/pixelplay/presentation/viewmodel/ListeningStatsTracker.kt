@@ -5,6 +5,7 @@ import androidx.media3.common.C
 import com.theveloper.pixelplay.data.DailyMixManager
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.stats.PlaybackStatsRepository
+import com.theveloper.pixelplay.data.stats.TrackMetadata
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -71,7 +72,8 @@ class ListeningStatsTracker @Inject constructor(
             positionMs = positionMs,
             durationMs = durationMs,
             fallbackDurationMs = song?.duration ?: 0L,
-            isPlaying = isPlaying
+            isPlaying = isPlaying,
+            metadata = song?.let(TrackMetadata::from) ?: TrackMetadata.EMPTY
         )
     }
 
@@ -80,14 +82,16 @@ class ListeningStatsTracker @Inject constructor(
         songId: String?,
         positionMs: Long,
         durationMs: Long,
-        isPlaying: Boolean
+        isPlaying: Boolean,
+        metadata: TrackMetadata = TrackMetadata.EMPTY
     ) {
         onTrackChanged(
             songId = songId,
             positionMs = positionMs,
             durationMs = durationMs,
             fallbackDurationMs = 0L,
-            isPlaying = isPlaying
+            isPlaying = isPlaying,
+            metadata = metadata
         )
     }
 
@@ -97,7 +101,8 @@ class ListeningStatsTracker @Inject constructor(
         positionMs: Long,
         durationMs: Long,
         fallbackDurationMs: Long,
-        isPlaying: Boolean
+        isPlaying: Boolean,
+        metadata: TrackMetadata = TrackMetadata.EMPTY
     ) {
         finalizeCurrentSession()
         val safeSongId = songId?.takeIf { it.isNotBlank() }
@@ -118,7 +123,8 @@ class ListeningStatsTracker @Inject constructor(
             lastRealtimeMs = nowRealtime,
             lastUpdateEpochMs = nowEpoch,
             isPlaying = isPlaying,
-            isVoluntary = pendingVoluntarySongId == safeSongId
+            isVoluntary = pendingVoluntarySongId == safeSongId,
+            metadata = metadata
         )
         if (pendingVoluntarySongId == safeSongId) {
             pendingVoluntarySongId = null
@@ -158,7 +164,8 @@ class ListeningStatsTracker @Inject constructor(
             positionMs = positionMs,
             durationMs = durationMs,
             fallbackDurationMs = song?.duration ?: 0L,
-            isPlaying = isPlaying
+            isPlaying = isPlaying,
+            metadata = song?.let(TrackMetadata::from) ?: TrackMetadata.EMPTY
         )
     }
 
@@ -167,14 +174,16 @@ class ListeningStatsTracker @Inject constructor(
         songId: String?,
         positionMs: Long,
         durationMs: Long,
-        isPlaying: Boolean
+        isPlaying: Boolean,
+        metadata: TrackMetadata = TrackMetadata.EMPTY
     ) {
         ensureSession(
             songId = songId,
             positionMs = positionMs,
             durationMs = durationMs,
             fallbackDurationMs = 0L,
-            isPlaying = isPlaying
+            isPlaying = isPlaying,
+            metadata = metadata
         )
     }
 
@@ -184,7 +193,8 @@ class ListeningStatsTracker @Inject constructor(
         positionMs: Long,
         durationMs: Long,
         fallbackDurationMs: Long,
-        isPlaying: Boolean
+        isPlaying: Boolean,
+        metadata: TrackMetadata = TrackMetadata.EMPTY
     ) {
         val safeSongId = songId?.takeIf { it.isNotBlank() }
         if (safeSongId == null) {
@@ -193,6 +203,11 @@ class ListeningStatsTracker @Inject constructor(
         }
         val existing = currentSession
         if (existing?.songId == safeSongId) {
+            // A session can be opened by a caller with no metadata to hand (a bare player sync),
+            // so fill it in as soon as some arrives rather than reporting the play blank.
+            if (existing.metadata.isEmpty && !metadata.isEmpty) {
+                existing.metadata = metadata
+            }
             updateDuration(normalizeDuration(durationMs, fallbackDurationMs))
             val nowRealtime = SystemClock.elapsedRealtime()
             accumulateRealtimeListening(existing, nowRealtime)
@@ -207,7 +222,8 @@ class ListeningStatsTracker @Inject constructor(
             positionMs = positionMs,
             durationMs = durationMs,
             fallbackDurationMs = fallbackDurationMs,
-            isPlaying = isPlaying
+            isPlaying = isPlaying,
+            metadata = metadata
         )
     }
 
@@ -247,6 +263,7 @@ class ListeningStatsTracker @Inject constructor(
                 songId = songId,
                 listened = listened,
                 timestamp = timestamp,
+                metadata = session.metadata,
                 forceSynchronous = forceSynchronousPersistence
             )
         }
@@ -272,18 +289,29 @@ class ListeningStatsTracker @Inject constructor(
         songId: String,
         listened: Long,
         timestamp: Long,
+        metadata: TrackMetadata,
         forceSynchronous: Boolean
     ) {
         persistenceScope.launch {
             runCatching {
-                persistPlaybackInternal(songId = songId, listened = listened, timestamp = timestamp)
+                persistPlaybackInternal(
+                    songId = songId,
+                    listened = listened,
+                    timestamp = timestamp,
+                    metadata = metadata
+                )
             }.onFailure { throwable ->
                 Timber.e(throwable, "Failed to persist listening session for song=%s", songId)
             }
         }
     }
 
-    private suspend fun persistPlaybackInternal(songId: String, listened: Long, timestamp: Long) {
+    private suspend fun persistPlaybackInternal(
+        songId: String,
+        listened: Long,
+        timestamp: Long,
+        metadata: TrackMetadata
+    ) {
         dailyMixManager.recordPlay(
             songId = songId,
             songDurationMs = listened,
@@ -292,7 +320,8 @@ class ListeningStatsTracker @Inject constructor(
         playbackStatsRepository.recordPlayback(
             songId = songId,
             durationMs = listened,
-            timestamp = timestamp
+            timestamp = timestamp,
+            metadata = metadata
         )
     }
 
@@ -330,5 +359,6 @@ data class ActiveSession(
     var lastRealtimeMs: Long,
     var lastUpdateEpochMs: Long,
     var isPlaying: Boolean,
-    val isVoluntary: Boolean
+    val isVoluntary: Boolean,
+    var metadata: TrackMetadata = TrackMetadata.EMPTY
 )

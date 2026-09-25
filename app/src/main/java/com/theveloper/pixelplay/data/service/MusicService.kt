@@ -54,6 +54,7 @@ import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.service.player.DualPlayerEngine
 import com.theveloper.pixelplay.data.service.player.TransitionController
+import com.theveloper.pixelplay.data.stats.TrackMetadata
 import com.theveloper.pixelplay.ui.glancewidget.PlayerActions
 import com.theveloper.pixelplay.utils.AlbumArtUtils
 import dagger.hilt.android.AndroidEntryPoint
@@ -389,6 +390,7 @@ class MusicService : MediaLibraryService() {
         val fallbackDurationMs = mediaItem.mediaMetadata.extras
             ?.getLong(MediaItemBuilder.EXTERNAL_EXTRA_DURATION, 0L)
             ?: 0L
+        val metadata = trackMetadataOf(mediaItem)
 
         if (forceNewSession) {
             listeningStatsTracker.onTrackChanged(
@@ -396,7 +398,8 @@ class MusicService : MediaLibraryService() {
                 positionMs = positionMs,
                 durationMs = durationMs,
                 fallbackDurationMs = fallbackDurationMs,
-                isPlaying = player.isPlaying
+                isPlaying = player.isPlaying,
+                metadata = metadata
             )
         } else {
             listeningStatsTracker.ensureSession(
@@ -404,9 +407,27 @@ class MusicService : MediaLibraryService() {
                 positionMs = positionMs,
                 durationMs = durationMs,
                 fallbackDurationMs = fallbackDurationMs,
-                isPlaying = player.isPlaying
+                isPlaying = player.isPlaying,
+                metadata = metadata
             )
         }
+    }
+
+    /**
+     * The queue item already carries everything the gateway wants recorded against the listen.
+     * Capturing it here means a live-browsed song — one the synced library has no row for, so
+     * PlaybackStatsRepository cannot look it up by id — still reports with real metadata.
+     */
+    private fun trackMetadataOf(mediaItem: MediaItem): TrackMetadata {
+        val extras = mediaItem.mediaMetadata.extras
+        return TrackMetadata(
+            title = mediaItem.mediaMetadata.title?.toString(),
+            artist = mediaItem.mediaMetadata.artist?.toString(),
+            album = mediaItem.mediaMetadata.albumTitle?.toString()
+                ?: extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_ALBUM),
+            cover = extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_ALBUM_ART)
+                ?: mediaItem.mediaMetadata.artworkUri?.toString()
+        )
     }
 
     override fun onCreate() {
