@@ -53,7 +53,9 @@ import com.theveloper.pixelplay.data.preferences.ThemePreferencesRepository
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.service.player.DualPlayerEngine
+import com.theveloper.pixelplay.data.service.player.PlaybackErrorRecovery
 import com.theveloper.pixelplay.data.service.player.TransitionController
+import com.theveloper.pixelplay.data.service.player.resolvePlaybackErrorRecovery
 import com.theveloper.pixelplay.data.stats.TrackMetadata
 import com.theveloper.pixelplay.ui.glancewidget.PlayerActions
 import com.theveloper.pixelplay.utils.AlbumArtUtils
@@ -197,6 +199,11 @@ class MusicService : MediaLibraryService() {
     private var endlessPlaybackEnabled = false
     private var isExtendingEndlessQueue = false
     private var lastEndlessSeedId: String? = null
+    // Media item that has already burned its one post-error retry, and how many tracks have
+    // been given up on since playback last worked. Both cleared as soon as playback reaches
+    // STATE_READY again, so the allowances are per failure, not per session.
+    private var retriedPlaybackErrorMediaId: String? = null
+    private var abandonedPlaybackErrorTracks = 0
     // Holds the previous main-thread UncaughtExceptionHandler so we can restore it in onDestroy.
     private var previousMainThreadExceptionHandler: Thread.UncaughtExceptionHandler? = null
     // --- Counted Play State ---
@@ -1517,6 +1524,11 @@ class MusicService : MediaLibraryService() {
                 reportNavidromePlayback("stopped")
                 stopNavidromePlaybackReporting()
             } else {
+                if (playbackState == Player.STATE_READY) {
+                    // Playback recovered — the next failure gets its own retry allowance.
+                    retriedPlaybackErrorMediaId = null
+                    abandonedPlaybackErrorTracks = 0
+                }
                 syncLocalListeningStatsFromPlayer(mediaSession?.player ?: engine.masterPlayer)
             }
             mediaSession?.let { refreshMediaSessionUi(it) }
@@ -1648,14 +1660,79 @@ class MusicService : MediaLibraryService() {
 
         override fun onPlayerError(error: PlaybackException) {
             Timber.tag(TAG).e(error, "Error en el reproductor: ")
+            val player = mediaSession?.player ?: engine.masterPlayer
+            val failedItem = player.currentMediaItem
+
+            // A mid-stream failure drops the player into STATE_IDLE with no auto-transition, so
+            // neither the STATE_ENDED nor the AUTO_TRANSITION reporting branch runs. Close the
+            // listening session out here or however much the user actually heard vanishes from
+            // stats entirely. Deliberately no submission scrobble: the track didn't complete.
+            listeningStatsTracker.finalizeCurrentSession()
+            reportNavidromePlayback("stopped", failedItem)
+            stopNavidromePlaybackReporting()
+
             serviceScope.launch {
-                val currentMediaItem = mediaSession?.player?.currentMediaItem
-                val trackTitle = currentMediaItem?.mediaMetadata?.title?.toString()
-                    ?: currentMediaItem?.mediaId
+                val trackTitle = failedItem?.mediaMetadata?.title?.toString()
+                    ?: failedItem?.mediaId
                     ?: getString(R.string.common_unknown_track)
                 val errorMessage = error.localizedMessage ?: error.message ?: "Unknown error"
                 val toastMessage = getString(R.string.player_playback_error, "$trackTitle ($errorMessage)")
                 android.widget.Toast.makeText(this@MusicService, toastMessage, android.widget.Toast.LENGTH_LONG).show()
+            }
+
+            recoverFromPlaybackError(error, player, failedItem)
+        }
+    }
+
+    /**
+     * Keeps the queue moving after [Player.Listener.onPlayerError]: one re-prepare for a stream
+     * that looks like it hit a network hiccup, otherwise straight on to the next track. Without
+     * this a single bad stream stops playback dead until the user taps something.
+     */
+    private fun recoverFromPlaybackError(
+        error: PlaybackException,
+        player: Player,
+        failedItem: MediaItem?
+    ) {
+        val failedMediaId = failedItem?.mediaId
+        // The error stops playback but leaves playWhenReady alone, so this still reflects what
+        // the user last asked for. Recovering must not restart audio they had paused.
+        val resumeIntended = player.playWhenReady
+        val recovery = resolvePlaybackErrorRecovery(
+            error = error,
+            // No item to re-prepare (and nothing to remember a retry against) — never retry, or
+            // the marker below stays null and the same failure loops.
+            alreadyRetried = failedMediaId == null || failedMediaId == retriedPlaybackErrorMediaId,
+            hasNextMediaItem = player.hasNextMediaItem(),
+            abandonedTracks = abandonedPlaybackErrorTracks
+        )
+
+        when (recovery) {
+            PlaybackErrorRecovery.RETRY -> {
+                retriedPlaybackErrorMediaId = failedMediaId
+                val resumePositionMs = player.currentPosition.coerceAtLeast(0L)
+                Timber.tag(TAG).w("Playback error on %s — retrying from %dms", failedMediaId, resumePositionMs)
+                player.prepare()
+                player.seekTo(resumePositionMs)
+                if (resumeIntended) player.play()
+            }
+
+            PlaybackErrorRecovery.SKIP_TO_NEXT -> {
+                retriedPlaybackErrorMediaId = null
+                abandonedPlaybackErrorTracks++
+                Timber.tag(TAG).w("Playback error on %s — skipping to next track", failedMediaId)
+                player.seekToNextMediaItem()
+                player.prepare()
+                if (resumeIntended) player.play()
+            }
+
+            PlaybackErrorRecovery.STOP -> {
+                retriedPlaybackErrorMediaId = null
+                Timber.tag(TAG).w(
+                    "Playback error on %s — giving up after %d abandoned track(s)",
+                    failedMediaId,
+                    abandonedPlaybackErrorTracks
+                )
             }
         }
     }
