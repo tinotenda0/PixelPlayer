@@ -1336,7 +1336,9 @@ class NavidromeRepository @Inject constructor(
                 "queueIndex" to queueIndex.toString(),
                 "queue" to queueIds.joinToString(","),
                 "shuffle" to state.shuffle.toString(),
-                "repeat" to state.repeat
+                "repeat" to state.repeat,
+                "volume" to state.volume.toString(),
+                "supportsVolume" to state.supportsVolume.toString()
             )
             api.publishState(params).isSuccess
         }
@@ -1456,7 +1458,11 @@ class NavidromeRepository @Inject constructor(
         id = o.optString("id"),
         deviceName = o.optString("deviceName", "Device"),
         platform = o.optString("platform", ""),
-        lastSeen = o.optLong("lastSeen")
+        lastSeen = o.optLong("lastSeen"),
+        // Null (not 0f) when the device has never reported a level, so a remote can show no
+        // slider position rather than a misleading "muted".
+        volume = if (o.isNull("volume")) null else o.optDouble("volume").toFloat(),
+        supportsVolume = o.optBoolean("supportsVolume", false)
     )
 
     private fun parseActiveSession(o: org.json.JSONObject): ActiveSession {
@@ -2018,7 +2024,12 @@ data class JamState(
     val durationMs: Long = 0,
     val isPlaying: Boolean = false,
     val shuffle: Boolean = false,
-    val repeat: String = "off"
+    val repeat: String = "off",
+    /** Output level 0f..1f, the same scale the `volume` command uses. */
+    val volume: Float = 1f,
+    /** Whether this device can change its own output level at all. A remote showing a slider
+     *  for a device that cannot is a control that silently does nothing. */
+    val supportsVolume: Boolean = true
 )
 
 /** A command pushed to this device over its live subscribeSession connection - remote control,
@@ -2067,7 +2078,11 @@ data class DeviceSession(
     val id: String,
     val deviceName: String,
     val platform: String,
-    val lastSeen: Long
+    val lastSeen: Long,
+    /** Last known output level 0f..1f, or null if this device has never reported one. */
+    val volume: Float? = null,
+    /** Whether this device can change its own output level - false means show no slider. */
+    val supportsVolume: Boolean = false
 )
 
 /** Spotify link + import status for the current user. */

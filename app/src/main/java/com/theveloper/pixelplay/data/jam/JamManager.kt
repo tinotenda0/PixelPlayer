@@ -418,6 +418,13 @@ class JamManager @Inject constructor(
                 }
                 scope.launch { publishNow() }
             }
+
+            // Publish the new level straight away so a remote's slider settles where the user
+            // left it. Waiting for the next position sync would leave it showing the old
+            // value for up to POSITION_SYNC_MS, which reads as the control having failed.
+            override fun onVolumeChanged(volume: Float) {
+                scope.launch { publishNow() }
+            }
         })
     }
 
@@ -443,7 +450,12 @@ class JamManager @Inject constructor(
             durationMs = c.duration.coerceAtLeast(0),
             isPlaying = c.isPlaying,
             shuffle = shuffleNow,
-            repeat = repeatNow
+            repeat = repeatNow,
+            volume = c.volume,
+            // Local playback through the MediaController can always be attenuated, so this is
+            // constant here. It exists for outputs where that is not true - a fixed-level
+            // endpoint should advertise false rather than accept volume commands silently.
+            supportsVolume = true
         )
         // Rebuilt only when the timeline actually changed — see [cachedQueueIds].
         val queueIds = cachedQueueIds
