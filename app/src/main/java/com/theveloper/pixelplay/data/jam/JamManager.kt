@@ -455,7 +455,16 @@ class JamManager @Inject constructor(
             // Local playback through the MediaController can always be attenuated, so this is
             // constant here. It exists for outputs where that is not true - a fixed-level
             // endpoint should advertise false rather than accept volume commands silently.
-            supportsVolume = true
+            supportsVolume = true,
+            // Media3 already tracks what is possible for the current item and queue, so this
+            // is a read rather than bookkeeping of our own.
+            disallows = JamDisallows.derive(
+                canSkipPrev = c.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM),
+                canSkipNext = c.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM),
+                canSeek = c.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM),
+                canToggleShuffle = c.isCommandAvailable(Player.COMMAND_SET_SHUFFLE_MODE),
+                canToggleRepeat = c.isCommandAvailable(Player.COMMAND_SET_REPEAT_MODE),
+            )
         )
         // Rebuilt only when the timeline actually changed — see [cachedQueueIds].
         val queueIds = cachedQueueIds

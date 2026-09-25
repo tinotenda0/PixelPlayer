@@ -1338,7 +1338,10 @@ class NavidromeRepository @Inject constructor(
                 "shuffle" to state.shuffle.toString(),
                 "repeat" to state.repeat,
                 "volume" to state.volume.toString(),
-                "supportsVolume" to state.supportsVolume.toString()
+                "supportsVolume" to state.supportsVolume.toString(),
+                // Comma-separated, same shape as `queue` - these are query params, so a
+                // nested object would have to be encoded anyway.
+                "disallows" to state.disallows.joinToString(",")
             )
             api.publishState(params).isSuccess
         }
@@ -1468,6 +1471,7 @@ class NavidromeRepository @Inject constructor(
     private fun parseActiveSession(o: org.json.JSONObject): ActiveSession {
         val s = o.optJSONObject("state") ?: org.json.JSONObject()
         val queueArr = s.optJSONArray("queue")
+        val disallowsArr = s.optJSONArray("disallows")
         return ActiveSession(
             user = o.optString("user"),
             activeDeviceId = o.optString("activeDeviceId"),
@@ -1480,7 +1484,11 @@ class NavidromeRepository @Inject constructor(
                 positionMs = s.optLong("positionMs"), durationMs = s.optLong("durationMs"),
                 isPlaying = s.optBoolean("isPlaying"), queueIndex = s.optInt("queueIndex"),
                 queue = (0 until (queueArr?.length() ?: 0)).mapNotNull { i -> queueArr?.optString(i) },
-                shuffle = s.optBoolean("shuffle"), repeat = s.optString("repeat", "off")
+                shuffle = s.optBoolean("shuffle"), repeat = s.optString("repeat", "off"),
+                volume = if (s.isNull("volume")) null else s.optDouble("volume").toFloat(),
+                disallows = (0 until (disallowsArr?.length() ?: 0))
+                    .mapNotNull { i -> disallowsArr?.optString(i)?.takeIf(String::isNotEmpty) }
+                    .toSet()
             ),
             updatedAt = o.optLong("updatedAt")
         )
@@ -2029,7 +2037,10 @@ data class JamState(
     val volume: Float = 1f,
     /** Whether this device can change its own output level at all. A remote showing a slider
      *  for a device that cannot is a control that silently does nothing. */
-    val supportsVolume: Boolean = true
+    val supportsVolume: Boolean = true,
+    /** Transport controls that will not work right now (see
+     *  [com.theveloper.pixelplay.data.jam.JamDisallows]). Empty means everything works. */
+    val disallows: Set<String> = emptySet()
 )
 
 /** A command pushed to this device over its live subscribeSession connection - remote control,
@@ -2060,7 +2071,13 @@ data class PlayerSessionState(
     val queueIndex: Int = 0,
     val queue: List<String> = emptyList(),
     val shuffle: Boolean = false,
-    val repeat: String = "off"
+    val repeat: String = "off",
+    /** Output level 0f..1f of the device holding this session, or null if it never said. */
+    val volume: Float? = null,
+    /** Transport controls the active device cannot honour right now (see
+     *  [com.theveloper.pixelplay.data.jam.JamDisallows]). Empty means everything works, which
+     *  is also what a client that reports nothing is taken to mean. */
+    val disallows: Set<String> = emptySet()
 )
 
 data class ActiveSession(
