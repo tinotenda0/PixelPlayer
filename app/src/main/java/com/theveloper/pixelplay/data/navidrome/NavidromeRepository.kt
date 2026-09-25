@@ -76,6 +76,13 @@ class NavidromeRepository @Inject constructor(
         // multi-server support, so the URL is baked in rather than asked of the user.
         const val GATEWAY_URL = "https://api.tinotenda.co"
         const val SYNC_THRESHOLD_MS = 24 * 60 * 60 * 1000L // 24 hours
+
+        /** Handoff wire version this build speaks, declared at [registerDevice] so the gateway
+         *  knows which newer fields it may send us. v2 added `index` on a queue-carrying
+         *  command; the gateway downgrades to v1 (truncated queue, no index) for anything that
+         *  does not declare a version. Bump when adding a field an older PixelPlayer would
+         *  misread rather than merely ignore. */
+        const val HANDOFF_PROTOCOL_VERSION = 2
         private const val TAG = "NavidromeRepo"
         private const val PREFS_NAME = "navidrome_prefs"
         private const val KEY_SERVER_URL = "server_url"
@@ -1305,7 +1312,9 @@ class NavidromeRepository @Inject constructor(
     ): Boolean {
         if (!isLoggedIn) return false
         return withContext(Dispatchers.IO) {
-            api.registerDevice(deviceName, platform, sessionId, householdVisible).isSuccess
+            api.registerDevice(
+                deviceName, platform, sessionId, householdVisible, HANDOFF_PROTOCOL_VERSION
+            ).isSuccess
         }
     }
 
@@ -1370,7 +1379,8 @@ class NavidromeRepository @Inject constructor(
     suspend fun sendCommand(
         action: String, positionMs: Long? = null, volume: Float? = null,
         songIds: List<String> = emptyList(), targetUser: String? = null,
-        targetSessionId: String? = null, shuffle: Boolean? = null, repeat: String? = null
+        targetSessionId: String? = null, shuffle: Boolean? = null, repeat: String? = null,
+        index: Int? = null
     ): Boolean {
         if (!isLoggedIn) return false
         return withContext(Dispatchers.IO) {
@@ -1383,6 +1393,9 @@ class NavidromeRepository @Inject constructor(
                 targetSessionId?.let { put("targetSessionId", it) }
                 shuffle?.let { put("shuffle", it.toString()) }
                 repeat?.let { put("repeat", it) }
+                // Which track of songIds to start on. The server strips this and truncates the
+                // queue for targets that predate it, so sending it is always safe.
+                index?.let { put("index", it.toString()) }
             }
             api.sendCommand(params).getOrNull()?.optBoolean("accepted", false) ?: false
         }
@@ -1434,7 +1447,8 @@ class NavidromeRepository @Inject constructor(
             volume = payload?.optDouble("volume")?.takeIf { payload.has("volume") }?.toFloat(),
             songIds = (0 until (ids?.length() ?: 0)).mapNotNull { j -> ids?.optString(j) },
             shuffle = payload?.takeIf { it.has("shuffle") }?.optBoolean("shuffle"),
-            repeat = payload?.takeIf { it.has("repeat") }?.optString("repeat")
+            repeat = payload?.takeIf { it.has("repeat") }?.optString("repeat"),
+            index = payload?.optInt("index") ?: 0
         )
     }
 
@@ -2015,7 +2029,10 @@ data class JamCommand(
     val volume: Float? = null,
     val songIds: List<String> = emptyList(),
     val shuffle: Boolean? = null,
-    val repeat: String? = null
+    val repeat: String? = null,
+    /** Which track of [songIds] to start on. A transfer sends the sender's WHOLE queue so the
+     *  target keeps its back-skip history, rather than just the part from here on. */
+    val index: Int = 0
 )
 
 /** One account's canonical active session — the "who/what/where" a device publishing itself

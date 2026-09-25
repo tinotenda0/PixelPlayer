@@ -10,6 +10,7 @@ import androidx.media3.common.Timeline
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.navidrome.ActiveSession
 import com.theveloper.pixelplay.data.navidrome.DeviceSession
 import com.theveloper.pixelplay.data.navidrome.JamCommand
@@ -316,10 +317,11 @@ class JamManager @Inject constructor(
      *  holds the active slot, so the selection controls that device instead of silently
      *  starting a competing local session here (Spotify-Connect style). No target id needed:
      *  targetUser always resolves server-side to "whichever device is active for this user". */
-    suspend fun sendQueueToActiveSession(songIds: List<String>): Boolean {
+    suspend fun sendQueueToActiveSession(songIds: List<String>, index: Int = 0): Boolean {
         if (songIds.isEmpty()) return false
         return navidromeRepository.sendCommand(
-            "play", songIds = songIds, targetUser = navidromeRepository.username
+            "play", songIds = songIds, index = index,
+            targetUser = navidromeRepository.username
         )
     }
 
@@ -328,11 +330,12 @@ class JamManager @Inject constructor(
      *  confirms the stop — pausing immediately just keeps the handoff feeling instant. */
     suspend fun transferTo(targetId: String): Boolean {
         val snapshot = readState() ?: return false
-        val remaining = snapshot.queueIds.drop(snapshot.queueIndex)
-        if (remaining.isEmpty()) return false
+        if (snapshot.queueIds.isEmpty()) return false
+        // The whole queue plus where we are in it, not just the part from here on: the target
+        // should be able to skip back into what already played, the way a Connect handoff does.
         val ok = navidromeRepository.sendCommand(
-            "play", positionMs = snapshot.state.positionMs, songIds = remaining,
-            targetSessionId = targetId
+            "play", positionMs = snapshot.state.positionMs, songIds = snapshot.queueIds,
+            index = snapshot.queueIndex, targetSessionId = targetId
         )
         if (ok) withContext(Dispatchers.Main) { controller?.pause() }
         return ok
@@ -344,16 +347,16 @@ class JamManager @Inject constructor(
         val session = _mySession.value ?: return false
         val ids = session.state.queue
         if (ids.isEmpty()) return false
-        val startIndex = session.state.queueIndex.coerceIn(0, ids.size - 1)
         // Age the sample: with a slow publish cadence the raw positionMs can be tens of
         // seconds behind, and resuming there would replay audio the user already heard.
         val resumePositionMs = remotePositionMs(session)
-        val songs = navidromeRepository.getSongsByIds(ids.drop(startIndex))
-        if (songs.isEmpty()) return false
+        // Take the whole queue, not just the rest of it, so pulling playback here keeps the
+        // history the other device had.
+        val resolved = resolveQueue(ids, session.state.queueIndex) ?: return false
         withContext(Dispatchers.Main) {
             val c = ensureController() ?: return@withContext
             c.setMediaItems(
-                songs.map { MediaItemBuilder.build(it) }, 0,
+                resolved.songs.map { MediaItemBuilder.build(it) }, resolved.startIndex,
                 resumePositionMs
             )
             c.prepare()
@@ -463,10 +466,12 @@ class JamManager @Inject constructor(
     private suspend fun applyCommand(cmd: JamCommand) = withContext(Dispatchers.Main) {
         val c = ensureController() ?: return@withContext
         if (cmd.songIds.isNotEmpty()) {
-            val songs = navidromeRepository.getSongsByIds(cmd.songIds)
-            if (songs.isNotEmpty()) {
+            // The queue arrives whole, with [index] marking where to start, so whatever played
+            // before that point stays behind the playhead and back-skip works.
+            val resolved = resolveQueue(cmd.songIds, cmd.index)
+            if (resolved != null) {
                 c.setMediaItems(
-                    songs.map { MediaItemBuilder.build(it) }, 0,
+                    resolved.songs.map { MediaItemBuilder.build(it) }, resolved.startIndex,
                     (cmd.positionMs ?: 0L).coerceAtLeast(0L)
                 )
                 c.prepare()
@@ -489,6 +494,25 @@ class JamManager @Inject constructor(
             "repeat" -> cmd.repeat?.let { onRemoteRepeat?.invoke(it) }
             else -> Unit
         }
+    }
+
+    private class ResolvedQueue(val songs: List<Song>, val startIndex: Int)
+
+    /**
+     * Turns a wire queue (ids + the index to start on) into songs plus the index of that same
+     * track in the resolved list.
+     *
+     * [NavidromeRepository.getSongsByIds] keeps caller order but silently drops ids the server
+     * cannot resolve, so the wire index does not survive the round trip: one dropped id before
+     * the start point and the queue would begin on the wrong song. Re-finding the intended
+     * track by id is the only alignment that holds. Null when nothing resolved at all.
+     */
+    private suspend fun resolveQueue(songIds: List<String>, index: Int): ResolvedQueue? {
+        if (songIds.isEmpty()) return null
+        val songs = navidromeRepository.getSongsByIds(songIds)
+        if (songs.isEmpty()) return null
+        val startIndex = JamQueue.alignStartIndex(songIds, index, songs.map { it.navidromeId })
+        return ResolvedQueue(songs, startIndex)
     }
 
     private suspend fun <T> ListenableFuture<T>.await(): T =

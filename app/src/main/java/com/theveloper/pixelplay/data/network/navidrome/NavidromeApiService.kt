@@ -526,10 +526,12 @@ class NavidromeApiService @Inject constructor(
     /** Registers (or re-registers) this device's identity. Playback state is published
      *  separately (see publishState), not folded into this call. */
     suspend fun registerDevice(
-        deviceName: String, platform: String, sessionId: String, householdVisible: Boolean
+        deviceName: String, platform: String, sessionId: String, householdVisible: Boolean,
+        protocolVersion: Int
     ) = xpsCall("registerDevice", "playerSession",
         mapOf("deviceName" to deviceName, "platform" to platform, "sessionId" to sessionId,
-            "householdVisible" to householdVisible.toString()))
+            "householdVisible" to householdVisible.toString(),
+            "protocolVersion" to protocolVersion.toString()))
 
     /** Publishes this device's playback state, making it the account's one active device. Any
      *  device that was previously active gets pushed a `superseded` command over its own

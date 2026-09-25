@@ -840,10 +840,14 @@ class PlaybackDispatchStateHolder @Inject constructor(
         val remoteSession = jamManager.mySession.value
         if (remoteSession != null && remoteSession.activeDeviceId != jamManager.sessionId) {
             val startIdx = songsToPlay.indexOfFirst { it.id == effectiveStartSong.id }.coerceAtLeast(0)
-            val remoteIds = songsToPlay.drop(startIdx).mapNotNull { it.navidromeId }
+            // Send the whole selection and say where to start, so the remote device keeps the
+            // tracks before the start point as history it can skip back into. The index is
+            // computed over the ids actually sent, since songs without a gateway id drop out.
+            val remoteIds = songsToPlay.mapNotNull { it.navidromeId }
+            val remoteStartIdx = songsToPlay.take(startIdx).count { it.navidromeId != null }
             if (remoteIds.isNotEmpty()) {
                 clearPreparingSongIfMatching()
-                jamManager.sendQueueToActiveSession(remoteIds)
+                jamManager.sendQueueToActiveSession(remoteIds, remoteStartIdx)
                 return
             }
             // No gateway ids to hand off (e.g. a purely local queue) — nothing to route
