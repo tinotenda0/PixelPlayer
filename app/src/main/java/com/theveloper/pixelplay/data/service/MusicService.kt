@@ -88,6 +88,7 @@ import com.theveloper.pixelplay.utils.ArtworkTransportSanitizer
 import com.theveloper.pixelplay.utils.MediaItemBuilder
 import com.theveloper.pixelplay.data.navidrome.NavidromeRepository
 import com.theveloper.pixelplay.di.AppScope
+import com.theveloper.pixelplay.presentation.viewmodel.ConnectivityStateHolder
 import com.theveloper.pixelplay.presentation.viewmodel.ListeningStatsTracker
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
@@ -173,6 +174,8 @@ class MusicService : MediaLibraryService() {
     @Inject
     lateinit var listeningStatsTracker: ListeningStatsTracker
     @Inject
+    lateinit var connectivityStateHolder: ConnectivityStateHolder
+    @Inject
     @AppScope
     lateinit var appScope: CoroutineScope
 
@@ -204,6 +207,8 @@ class MusicService : MediaLibraryService() {
     // STATE_READY again, so the allowances are per failure, not per session.
     private var retriedPlaybackErrorMediaId: String? = null
     private var abandonedPlaybackErrorTracks = 0
+    // Set while a track is parked waiting for the connection to come back.
+    private var networkWaitJob: Job? = null
     // Holds the previous main-thread UncaughtExceptionHandler so we can restore it in onDestroy.
     private var previousMainThreadExceptionHandler: Thread.UncaughtExceptionHandler? = null
     // --- Counted Play State ---
@@ -1525,9 +1530,12 @@ class MusicService : MediaLibraryService() {
                 stopNavidromePlaybackReporting()
             } else {
                 if (playbackState == Player.STATE_READY) {
-                    // Playback recovered — the next failure gets its own retry allowance.
+                    // Playback recovered — the next failure gets its own retry allowance, and
+                    // nothing is waiting on the network any more.
                     retriedPlaybackErrorMediaId = null
                     abandonedPlaybackErrorTracks = 0
+                    networkWaitJob?.cancel()
+                    networkWaitJob = null
                 }
                 syncLocalListeningStatsFromPlayer(mediaSession?.player ?: engine.masterPlayer)
             }
@@ -1704,10 +1712,25 @@ class MusicService : MediaLibraryService() {
             // the marker below stays null and the same failure loops.
             alreadyRetried = failedMediaId == null || failedMediaId == retriedPlaybackErrorMediaId,
             hasNextMediaItem = player.hasNextMediaItem(),
-            abandonedTracks = abandonedPlaybackErrorTracks
+            abandonedTracks = abandonedPlaybackErrorTracks,
+            isOnline = connectivityStateHolder.isOnline.value
         )
 
+        // Any new decision supersedes a pending wait.
+        networkWaitJob?.cancel()
+        networkWaitJob = null
+
         when (recovery) {
+            PlaybackErrorRecovery.WAIT_FOR_NETWORK -> {
+                val resumePositionMs = player.currentPosition.coerceAtLeast(0L)
+                Timber.tag(TAG).w(
+                    "Playback error on %s while offline — holding at %dms until the network is back",
+                    failedMediaId,
+                    resumePositionMs
+                )
+                waitForNetworkThenResume(player, resumePositionMs, resumeIntended)
+            }
+
             PlaybackErrorRecovery.RETRY -> {
                 retriedPlaybackErrorMediaId = failedMediaId
                 val resumePositionMs = player.currentPosition.coerceAtLeast(0L)
@@ -1734,6 +1757,27 @@ class MusicService : MediaLibraryService() {
                     abandonedPlaybackErrorTracks
                 )
             }
+        }
+    }
+
+    /**
+     * Parks the failed track and picks it up when there is a connection again. serviceScope is on
+     * the main thread, so the player calls here are already on the right one. Cancelled by the
+     * next recovery decision, by playback recovering some other way, and in onDestroy — so the
+     * collector never outlives the reason it was started.
+     */
+    private fun waitForNetworkThenResume(
+        player: Player,
+        resumePositionMs: Long,
+        resumeIntended: Boolean
+    ) {
+        networkWaitJob = serviceScope.launch {
+            connectivityStateHolder.isOnline.first { it }
+            Timber.tag(TAG).d("Network is back — resuming from %dms", resumePositionMs)
+            player.prepare()
+            player.seekTo(resumePositionMs)
+            if (resumeIntended) player.play()
+            networkWaitJob = null
         }
     }
 
@@ -1764,6 +1808,7 @@ class MusicService : MediaLibraryService() {
         listeningStatsTracker.finalizeCurrentSession(forceSynchronousPersistence = true)
         reportNavidromePlayback("stopped")
         stopNavidromePlaybackReporting()
+        networkWaitJob?.cancel()
         playbackSnapshotPersistJob?.cancel()
         mediaSessionButtonRefreshJob?.cancel()
         followUpMediaSessionUiRefreshJob?.cancel()

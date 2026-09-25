@@ -12,7 +12,8 @@ class PlaybackErrorRecoveryPolicyTest {
             error = error(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED),
             alreadyRetried = false,
             hasNextMediaItem = true,
-            abandonedTracks = 0
+            abandonedTracks = 0,
+            isOnline = true
         )
 
         assertThat(recovery).isEqualTo(PlaybackErrorRecovery.RETRY)
@@ -24,7 +25,8 @@ class PlaybackErrorRecoveryPolicyTest {
             error = error(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED),
             alreadyRetried = true,
             hasNextMediaItem = true,
-            abandonedTracks = 0
+            abandonedTracks = 0,
+            isOnline = true
         )
 
         assertThat(recovery).isEqualTo(PlaybackErrorRecovery.SKIP_TO_NEXT)
@@ -36,7 +38,8 @@ class PlaybackErrorRecoveryPolicyTest {
             error = error(PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED),
             alreadyRetried = false,
             hasNextMediaItem = true,
-            abandonedTracks = 0
+            abandonedTracks = 0,
+            isOnline = true
         )
 
         assertThat(recovery).isEqualTo(PlaybackErrorRecovery.SKIP_TO_NEXT)
@@ -48,7 +51,8 @@ class PlaybackErrorRecoveryPolicyTest {
             error = error(PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND),
             alreadyRetried = false,
             hasNextMediaItem = true,
-            abandonedTracks = 0
+            abandonedTracks = 0,
+            isOnline = true
         )
 
         assertThat(recovery).isEqualTo(PlaybackErrorRecovery.SKIP_TO_NEXT)
@@ -60,7 +64,8 @@ class PlaybackErrorRecoveryPolicyTest {
             error = error(PlaybackException.ERROR_CODE_DECODING_FAILED),
             alreadyRetried = false,
             hasNextMediaItem = false,
-            abandonedTracks = 0
+            abandonedTracks = 0,
+            isOnline = true
         )
 
         assertThat(recovery).isEqualTo(PlaybackErrorRecovery.STOP)
@@ -72,7 +77,8 @@ class PlaybackErrorRecoveryPolicyTest {
             error = error(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT),
             alreadyRetried = false,
             hasNextMediaItem = false,
-            abandonedTracks = 0
+            abandonedTracks = 0,
+            isOnline = true
         )
 
         assertThat(recovery).isEqualTo(PlaybackErrorRecovery.RETRY)
@@ -86,7 +92,8 @@ class PlaybackErrorRecoveryPolicyTest {
             error = error(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED),
             alreadyRetried = false,
             hasNextMediaItem = true,
-            abandonedTracks = 3
+            abandonedTracks = 3,
+            isOnline = true
         )
 
         assertThat(recovery).isEqualTo(PlaybackErrorRecovery.STOP)
@@ -98,7 +105,50 @@ class PlaybackErrorRecoveryPolicyTest {
             error = error(PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND),
             alreadyRetried = false,
             hasNextMediaItem = true,
-            abandonedTracks = 2
+            abandonedTracks = 2,
+            isOnline = true
+        )
+
+        assertThat(recovery).isEqualTo(PlaybackErrorRecovery.SKIP_TO_NEXT)
+    }
+
+    @Test
+    fun deadZone_holdsTheTrackInsteadOfSkipping() {
+        // Driving through a tunnel: the track is fine, the connection is not.
+        val recovery = resolvePlaybackErrorRecovery(
+            error = error(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED),
+            alreadyRetried = true,
+            hasNextMediaItem = true,
+            abandonedTracks = 0,
+            isOnline = false
+        )
+
+        assertThat(recovery).isEqualTo(PlaybackErrorRecovery.WAIT_FOR_NETWORK)
+    }
+
+    @Test
+    fun deadZone_holdsEvenOnceTheAbandonCapWouldHaveStopped() {
+        // Otherwise a long dead zone still ends in silence, just a few tracks later.
+        val recovery = resolvePlaybackErrorRecovery(
+            error = error(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED),
+            alreadyRetried = true,
+            hasNextMediaItem = true,
+            abandonedTracks = 5,
+            isOnline = false
+        )
+
+        assertThat(recovery).isEqualTo(PlaybackErrorRecovery.WAIT_FOR_NETWORK)
+    }
+
+    @Test
+    fun offlineButTheTrackIsGenuinelyBad_stillSkips() {
+        // A malformed container will not decode when the signal comes back either.
+        val recovery = resolvePlaybackErrorRecovery(
+            error = error(PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED),
+            alreadyRetried = false,
+            hasNextMediaItem = true,
+            abandonedTracks = 0,
+            isOnline = false
         )
 
         assertThat(recovery).isEqualTo(PlaybackErrorRecovery.SKIP_TO_NEXT)
