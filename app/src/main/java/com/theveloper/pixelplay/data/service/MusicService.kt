@@ -53,6 +53,7 @@ import com.theveloper.pixelplay.data.preferences.ThemePreferencesRepository
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.service.player.DualPlayerEngine
+import com.theveloper.pixelplay.data.service.player.RoutingPlayer
 import com.theveloper.pixelplay.data.service.player.TransitionController
 import com.theveloper.pixelplay.ui.glancewidget.PlayerActions
 import com.theveloper.pixelplay.utils.AlbumArtUtils
@@ -187,6 +188,13 @@ class MusicService : MediaLibraryService() {
 
     private var favoriteSongIds = emptySet<String>()
     private var mediaSession: MediaLibrarySession? = null
+
+    /**
+     * The session's player for the life of the session. Local playback passes straight through
+     * it today; it is the one place a remote route will later be presented from, so that every
+     * surface reading the session follows without being taught about routes individually.
+     */
+    private var routingPlayer: RoutingPlayer? = null
     private val controllerLastBrowsedParent = mutableMapOf<String, String>()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var keepPlayingInBackground = true
@@ -354,10 +362,17 @@ class MusicService : MediaLibraryService() {
 
     private fun publishMediaSessionPlayer(player: Player, logMessage: String) {
         val session = mediaSession ?: return
-        val oldPlayer = session.player
+        // The session's player stays the RoutingPlayer for the life of the session; a crossfade
+        // swaps the local player underneath it. Reassigning session.player here would drop the
+        // routing layer (and later, any active route) on every transition. Created together with
+        // the session, so a null here would mean the session was built without routing.
+        val routing = routingPlayer ?: return
+        val oldPlayer = routing.localPlayer
         if (oldPlayer !== player) {
+            // playerListener observes the *local* player, not the session's, so it still has to
+            // move with the crossfade.
             oldPlayer.removeListener(playerListener)
-            session.player = player
+            routing.setLocalPlayer(player)
             player.addListener(playerListener)
         }
 
@@ -966,7 +981,11 @@ class MusicService : MediaLibraryService() {
             }
         }
 
-        mediaSession = MediaLibrarySession.Builder(this, engine.masterPlayer, callback)
+        // Everything that shows or controls playback reads this one session, so the routing
+        // layer sits here rather than in each surface. With no route active it is a
+        // pass-through to the local player — see RoutingPlayer.
+        val routing = RoutingPlayer(engine.masterPlayer).also { routingPlayer = it }
+        mediaSession = MediaLibrarySession.Builder(this, routing, callback)
             .setSessionActivity(getOpenAppPendingIntent())
             .setBitmapLoader(CoilBitmapLoader(this, serviceScope))
             .build()
@@ -1681,12 +1700,15 @@ class MusicService : MediaLibraryService() {
         engine.removeTransitionFinishedListener(transitionFinishedListener)
         engine.setOnPlayerAboutToBeReleasedListener {}
         mediaSession?.player?.removeListener(playerListener)
-        engine.masterPlayer.removeListener(playerListener)
+        // The listener follows the local player across crossfades, so remove it from whichever
+        // one is currently wrapped rather than from whatever masterPlayer happens to return.
+        (routingPlayer?.localPlayer ?: engine.masterPlayer).removeListener(playerListener)
 
         mediaSession?.run {
             release()
             mediaSession = null
         }
+        routingPlayer = null
         engine.release()
         controller.release()
         serviceScope.cancel()
