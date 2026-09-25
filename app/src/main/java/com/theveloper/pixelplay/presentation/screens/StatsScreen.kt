@@ -135,6 +135,7 @@ import com.theveloper.pixelplay.utils.shapes.RoundedStarShape
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.PlayCircleOutline
 import com.theveloper.pixelplay.ui.theme.ExpTitleTypography
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 
 private const val PULL_TO_REFRESH_MIN_DURATION_MS = 3500L
 
@@ -152,7 +153,12 @@ fun StatsScreen(
 
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val minTopBarHeight = 62.dp + statusBarHeight
-    val maxTopBarHeight = 176.dp
+    // Capped against the window: these headers are sized for a tall portrait window and
+    // would eat most of a landscape one.
+    val maxTopBarHeight = LocalAdaptiveInfo.current.collapsingHeaderHeight(
+        preferred = 176.dp,
+        minHeight = minTopBarHeight
+    )
 
     val minTopBarHeightPx = with(density) { minTopBarHeight.toPx() }
     val maxTopBarHeightPx = with(density) { maxTopBarHeight.toPx() }

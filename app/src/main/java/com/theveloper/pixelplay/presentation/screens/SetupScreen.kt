@@ -50,7 +50,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
@@ -121,6 +123,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -175,8 +178,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import com.theveloper.pixelplay.presentation.navidrome.auth.ExpressiveLoginField
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
+import com.theveloper.pixelplay.presentation.adaptive.WindowWidthClass
 
 @OptIn(ExperimentalPermissionsApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+/** Widest an onboarding form gets before it is centred with gutters. */
+private val SetupPageMaxWidth = 640.dp
+
 @Composable
 fun SetupScreen(
     setupViewModel: SetupViewModel = hiltViewModel(),
@@ -209,6 +217,15 @@ fun SetupScreen(
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
+
+    // Onboarding is capped by raw width, not orientation: a tablet stretches these forms just as
+    // badly held upright as on its side. A phone stays Compact and is left exactly as it was.
+    val setupPageMaxWidth =
+        if (LocalAdaptiveInfo.current.widthClass == WindowWidthClass.Compact) {
+            Dp.Unspecified
+        } else {
+            SetupPageMaxWidth
+        }
 
     val pages = remember {
         buildSetupPages(Build.VERSION.SDK_INT)
@@ -329,6 +346,21 @@ fun SetupScreen(
                     },
                 contentAlignment = Alignment.Center
             ) {
+                // Every setup page is a single-column form built to fill its parent. Across a
+                // tablet that stretches each row the full width and the whole flow reads as a
+                // blown-up phone screen, so the page is capped and centred here rather than in
+                // each of the nine pages.
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .then(
+                            if (setupPageMaxWidth != Dp.Unspecified) {
+                                Modifier.widthIn(max = setupPageMaxWidth)
+                            } else {
+                                Modifier
+                            }
+                        )
+                ) {
                 when (page) {
                     SetupPage.Welcome -> WelcomePage()
                     SetupPage.GatewaySignIn -> GatewaySignInPage(
@@ -383,6 +415,7 @@ fun SetupScreen(
                             navigateToPage(pagerState.currentPage + 1)
                         }
                     )
+                }
                 }
             }
         }

@@ -113,6 +113,7 @@ import kotlinx.coroutines.launch
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import timber.log.Timber
 import kotlin.math.roundToInt
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 
 private data class Contributor(
     val id: String,
@@ -285,7 +286,12 @@ fun AboutScreen(
         .asPaddingValues()
         .calculateTopPadding()
     val minTopBarHeight = 64.dp + statusBarHeight
-    val maxTopBarHeight = 170.dp
+    // Capped against the window: these headers are sized for a tall portrait window and
+    // would eat most of a landscape one.
+    val maxTopBarHeight = LocalAdaptiveInfo.current.collapsingHeaderHeight(
+        preferred = 170.dp,
+        minHeight = minTopBarHeight
+    )
 
     val minTopBarHeightPx = with(density) { minTopBarHeight.toPx() }
     val maxTopBarHeightPx = with(density) { maxTopBarHeight.toPx() }

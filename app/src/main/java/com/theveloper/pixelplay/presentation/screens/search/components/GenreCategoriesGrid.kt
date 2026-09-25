@@ -42,6 +42,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import com.theveloper.pixelplay.data.model.Genre
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 import com.theveloper.pixelplay.presentation.components.MiniPlayerHeight
 import com.theveloper.pixelplay.presentation.components.SmartImage
 import com.theveloper.pixelplay.presentation.components.getNavigationBarHeight
@@ -95,8 +96,17 @@ fun GenreCategoriesGrid(
     val isGridView by playerViewModel.isGenreGridView.collectAsStateWithLifecycle()
     val navBarCompactMode by playerViewModel.navBarCompactMode.collectAsStateWithLifecycle()
 
+    // Card mode wants card-sized cells; row mode wants full-width rows on a phone but stops being
+    // readable as a single 1200dp-wide row on a tablet, so it splits into columns too.
+    val adaptiveInfo = LocalAdaptiveInfo.current
+    val genreColumns = if (isGridView) {
+        adaptiveInfo.gridColumns(minCellWidth = 190.dp, min = 2)
+    } else {
+        adaptiveInfo.gridColumns(minCellWidth = 380.dp, min = 1)
+    }
+
     LazyVerticalGrid(
-        columns = if (isGridView) GridCells.Fixed(2) else GridCells.Fixed(1),
+        columns = GridCells.Fixed(genreColumns),
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 18.dp)

@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -120,6 +121,8 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.Dp
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusModifier
@@ -331,8 +334,22 @@ fun SearchScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
 
+        // A search field and result rows stretched across a whole tablet read as a blown-up phone
+        // layout, so on wide windows the column is capped and centred.
+        val searchColumnMaxWidth = if (LocalAdaptiveInfo.current.isWideLayout) 840.dp else Dp.Unspecified
+
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .then(
+                    if (searchColumnMaxWidth != Dp.Unspecified) {
+                        Modifier
+                            .widthIn(max = searchColumnMaxWidth)
+                            .align(Alignment.TopCenter)
+                    } else {
+                        Modifier
+                    }
+                )
+                .fillMaxSize()
         ) {
             Row(
                 modifier = Modifier
