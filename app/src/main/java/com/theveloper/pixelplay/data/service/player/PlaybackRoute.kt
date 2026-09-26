@@ -54,6 +54,15 @@ interface PlaybackRoute {
  */
 data class RouteState(
     val mediaId: String? = null,
+    /**
+     * Every track in the route's queue, and where in it playback sits.
+     *
+     * Carried because the transport controls depend on it: a player told it has one item cannot
+     * offer next or previous. Only the track at [queueIndex] comes with metadata — the session
+     * publishes ids for the rest — so the others are present but unnamed.
+     */
+    val queue: List<String> = emptyList(),
+    val queueIndex: Int = 0,
     val title: String = "",
     val artist: String = "",
     val album: String = "",

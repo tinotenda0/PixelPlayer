@@ -19,6 +19,7 @@ import com.theveloper.pixelplay.data.navidrome.NavidromeRepository
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.service.MusicService
 import com.theveloper.pixelplay.data.service.PlaybackActivityTracker
+import com.theveloper.pixelplay.data.service.player.PlaybackRouteRegistry
 import com.theveloper.pixelplay.utils.MediaItemBuilder
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -68,6 +69,7 @@ class JamManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val navidromeRepository: NavidromeRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
+    private val routeRegistry: PlaybackRouteRegistry,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -118,6 +120,10 @@ class JamManager @Inject constructor(
     private var cachedQueueIds: List<String>? = null
 
     private var positionSyncJob: Job? = null
+
+    /** Whether the guest role is up, so a re-login does not register and subscribe twice. */
+    @Volatile
+    private var guestRoleStarted = false
     private var hygieneRefreshJob: Job? = null
     private var publishListenerAttached = false
 
@@ -137,38 +143,59 @@ class JamManager @Inject constructor(
 
     /** Start the session role. Called once, app-scoped, from PixelPlayApplication. */
     fun start() {
+        // Guest role: know what this account is playing, from launch onwards.
+        //
+        // This deliberately does NOT wait for local playback. Waiting is what made an idle
+        // device show its own stale track forever: never having played anything this process,
+        // it never subscribed, so it never learned a session existed. Mirroring the active
+        // device is precisely the case where this one has played nothing.
+        //
+        // Gateway-backed either way, so signed out there is nothing to subscribe to and the
+        // whole thing stays parked rather than burning a reconnect loop on no-ops.
         scope.launch {
-            // Wait for this process's first real playback before registering at all - registering
-            // eagerly on a cold, idle launch would bind (and thus start) MusicService just for
-            // handoff visibility, which is a background-service lifetime cost nobody asked for.
-            // Once that has happened, this device stays a valid handoff target - paused included -
-            // until the process dies, which matches how Spotify Connect behaves.
-            PlaybackActivityTracker.isPlaybackActiveFlow.first { it }
-            // Every call below is gateway-backed: signed out there is nothing to register with,
-            // nothing to publish to and no stream to subscribe to, so the whole session role
-            // stays parked instead of burning a 5 s timer and a reconnect loop on no-ops.
             navidromeRepository.isLoggedInFlow.collect { loggedIn ->
-                if (loggedIn) startSessionRole() else stopSessionRole()
+                if (loggedIn) startGuestRole() else stopSessionRole()
+            }
+        }
+
+        // Host role: publishing our own playback, which only means anything once there is some.
+        //
+        // The wait survives from the original design and still earns its place, though for a
+        // narrower reason than before: it is [ensureController] that binds — and so starts —
+        // MusicService, and paying for a background service on a cold, idle launch is a cost
+        // nobody asked for. Registering and subscribing, above, do not bind anything.
+        scope.launch {
+            PlaybackActivityTracker.isPlaybackActiveFlow.first { it }
+            navidromeRepository.isLoggedInFlow.collect { loggedIn ->
+                if (loggedIn) startHostRole()
             }
         }
     }
 
-    private suspend fun startSessionRole() {
-        if (positionSyncJob?.isActive == true) return
+    /** Identity and a live view of the account's session. Binds nothing. */
+    private suspend fun startGuestRole() {
+        if (guestRoleStarted) return
+        guestRoleStarted = true
         navidromeRepository.registerDevice(deviceName, "android", sessionId, householdVisible())
-        val c = ensureController() ?: return
-        attachPublishListener(c)
         connect()
         setMySession(navidromeRepository.getMySession())
         _householdSessions.value = navidromeRepository.getHouseholdSessions()
         _devices.value = navidromeRepository.getDevices(sessionId)
+        startHygieneRefresh()
+    }
+
+    /** Publishing this device's own playback. Needs the controller, and so MusicService. */
+    private suspend fun startHostRole() {
+        if (positionSyncJob?.isActive == true) return
+        val c = ensureController() ?: return
+        attachPublishListener(c)
         publishNow()
         startPositionSync()
-        startHygieneRefresh()
     }
 
     @Synchronized
     private fun stopSessionRole() {
+        guestRoleStarted = false
         reconnectJob?.cancel()
         reconnectJob = null
         positionSyncJob?.cancel()
@@ -492,8 +519,25 @@ class JamManager @Inject constructor(
     private fun MediaItem.wireId(): String =
         mediaMetadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_NAVIDROME_ID) ?: mediaId
 
+    /**
+     * Applies a command pushed to this device.
+     *
+     * Runs with routing suppressed throughout. This device drives playback through a
+     * MediaController bound to the same session `RoutingPlayer` sits behind, so if a route were
+     * still considered active here, every call below would be forwarded straight back out to
+     * that route rather than played on this device — a loop, and a transfer that never lands.
+     *
+     * That state is reachable in normal use: a command means this device is becoming the active
+     * one, but the command and the session update saying so arrive over the wire independently,
+     * so the `play` can land first. Suppressing for the whole block covers that window instead
+     * of relying on the two racing in a particular order.
+     */
     private suspend fun applyCommand(cmd: JamCommand) = withContext(Dispatchers.Main) {
-        val c = ensureController() ?: return@withContext
+        routeRegistry.withRoutingSuppressed { applyCommandLocally(cmd) }
+    }
+
+    private suspend fun applyCommandLocally(cmd: JamCommand) {
+        val c = ensureController() ?: return
         if (cmd.songIds.isNotEmpty()) {
             // The queue arrives whole, with [index] marking where to start, so whatever played
             // before that point stays behind the playhead and back-skip works.

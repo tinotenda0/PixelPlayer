@@ -53,6 +53,7 @@ import com.theveloper.pixelplay.data.preferences.ThemePreferencesRepository
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.service.player.DualPlayerEngine
+import com.theveloper.pixelplay.data.service.player.PlaybackRouteRegistry
 import com.theveloper.pixelplay.data.service.player.RoutingPlayer
 import com.theveloper.pixelplay.data.service.player.TransitionController
 import com.theveloper.pixelplay.ui.glancewidget.PlayerActions
@@ -144,6 +145,8 @@ class MusicService : MediaLibraryService() {
 
     @Inject
     lateinit var engine: DualPlayerEngine
+    @Inject
+    lateinit var routeRegistry: PlaybackRouteRegistry
     @Inject
     lateinit var controller: TransitionController
     @Inject
@@ -984,7 +987,8 @@ class MusicService : MediaLibraryService() {
         // Everything that shows or controls playback reads this one session, so the routing
         // layer sits here rather than in each surface. With no route active it is a
         // pass-through to the local player — see RoutingPlayer.
-        val routing = RoutingPlayer(engine.masterPlayer).also { routingPlayer = it }
+        val routing = RoutingPlayer(engine.masterPlayer, routeRegistry, serviceScope)
+            .also { routingPlayer = it }
         mediaSession = MediaLibrarySession.Builder(this, routing, callback)
             .setSessionActivity(getOpenAppPendingIntent())
             .setBitmapLoader(CoilBitmapLoader(this, serviceScope))

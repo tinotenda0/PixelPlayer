@@ -73,6 +73,9 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
     lateinit var jamManager: dagger.Lazy<com.theveloper.pixelplay.data.jam.JamManager>
 
     @Inject
+    lateinit var handoffRoute: dagger.Lazy<com.theveloper.pixelplay.data.jam.HandoffRoute>
+
+    @Inject
     lateinit var navidromeRepository: dagger.Lazy<NavidromeRepository>
 
     private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -130,6 +133,11 @@ class PixelPlayApplication : Application(), ImageLoaderFactory, Configuration.Pr
 
         // Jam host role: advertises + accepts commands only while actually playing and opted in.
         jamManager.get().start()
+
+        // Guest side of the same session: while another of this account's devices holds it, the
+        // media session presents that device instead of this one's idle player, so the mini
+        // player, notification and lock screen all show and control what is actually playing.
+        handoffRoute.get().start(startupScope)
 
         startupScope.launch {
             AlbumArtUtils.migrateLegacyCacheLocation(this@PixelPlayApplication)
