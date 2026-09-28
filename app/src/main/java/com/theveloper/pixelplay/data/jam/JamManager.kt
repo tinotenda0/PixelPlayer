@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.sse.EventSource
+import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -70,6 +71,8 @@ class JamManager @Inject constructor(
     private val navidromeRepository: NavidromeRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val routeRegistry: PlaybackRouteRegistry,
+    // Lazy: HandoffRoute depends on this manager, so injecting it directly would be a cycle.
+    private val handoffRoute: dagger.Lazy<HandoffRoute>,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -376,29 +379,48 @@ class JamManager @Inject constructor(
     /** Pulls this account's active session — wherever it currently is — into this device and
      *  takes over. No target to pick: there's exactly one canonical session per account. */
     suspend fun pullFrom(): Boolean {
-        val session = _mySession.value ?: return false
-        val ids = session.state.queue
-        if (ids.isEmpty()) return false
+        val session = _mySession.value
+        if (session == null) {
+            Timber.w("$TAG: pullFrom: nothing to pull, no active session known here")
+            return false
+        }
+        // A publisher that sends no queue still tells us what it is playing, and pulling one
+        // track is a far better answer than doing nothing - which is how this looked when the
+        // session came from a client that does not publish its queue.
+        val ids = session.state.queue.ifEmpty {
+            listOfNotNull(session.state.songId.takeIf { it.isNotBlank() })
+        }
+        if (ids.isEmpty()) {
+            Timber.w("$TAG: pullFrom: session has neither a queue nor a current song")
+            return false
+        }
         // Age the sample: with a slow publish cadence the raw positionMs can be tens of
         // seconds behind, and resuming there would replay audio the user already heard.
         val resumePositionMs = remotePositionMs(session)
         // Take the whole queue, not just the rest of it, so pulling playback here keeps the
         // history the other device had.
-        val resolved = resolveQueue(ids, session.state.queueIndex) ?: return false
+        val resolved = resolveQueue(ids, session.state.queueIndex)
+        if (resolved == null) {
+            // Every id the other device published was unresolvable here. Worth saying out loud:
+            // it is the signature of an id-shape mismatch, which has bitten this path before.
+            Timber.w(
+                "$TAG: pullFrom: none of ${'$'}{ids.size} ids resolved, first=${'$'}{ids.firstOrNull()}"
+            )
+            return false
+        }
+        // Claim playback before touching the player. Pulling means "play it *here*", and a
+        // route is active by definition while pulling - the session belonging to another device
+        // is the only reason there is anything to pull - so these calls would otherwise be
+        // forwarded straight back to that device and nothing would happen locally.
+        handoffRoute.get().takeOver()
         withContext(Dispatchers.Main) {
-            // Suppressed because pulling means "play it *here*", and a route is active by
-            // definition — the session belonging to another device is the only reason there is
-            // anything to pull. Without this the queue loads locally but `play` is forwarded
-            // straight back out to that device, so pulling silently does nothing.
-            routeRegistry.withRoutingSuppressed {
-                val c = ensureController() ?: return@withRoutingSuppressed
-                c.setMediaItems(
-                    resolved.songs.map { MediaItemBuilder.build(it) }, resolved.startIndex,
-                    resumePositionMs
-                )
-                c.prepare()
-                if (session.state.isPlaying) c.play()
-            }
+            val c = ensureController() ?: return@withContext
+            c.setMediaItems(
+                resolved.songs.map { MediaItemBuilder.build(it) }, resolved.startIndex,
+                resumePositionMs
+            )
+            c.prepare()
+            if (session.state.isPlaying) c.play()
         }
         // Publishing (the track-change listener above) naturally supersedes whichever device
         // was active - no explicit "stop the old device" call needed here.
@@ -528,7 +550,14 @@ class JamManager @Inject constructor(
      * device could resolve those anyway).
      */
     private fun MediaItem.wireId(): String =
-        mediaMetadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_NAVIDROME_ID) ?: mediaId
+        mediaMetadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_NAVIDROME_ID)
+            // The extra goes missing whenever a Song reaches the player without its gateway id
+            // - a restored queue, a download - and the fallback then published `mediaId`, which
+            // is the *locally* prefixed form. The gateway has never heard of that prefix, so
+            // every id in the queue failed to resolve and handoff quietly did nothing: transfer
+            // played the wrong track, pulling played none at all. The prefix is our own
+            // convention, so strip it back off rather than publishing an id nobody can use.
+            ?: mediaId.removePrefix(LOCAL_ID_PREFIX)
 
     /**
      * Applies a command pushed to this device.
@@ -544,7 +573,15 @@ class JamManager @Inject constructor(
      * of relying on the two racing in a particular order.
      */
     private suspend fun applyCommand(cmd: JamCommand) = withContext(Dispatchers.Main) {
-        routeRegistry.withRoutingSuppressed { applyCommandLocally(cmd) }
+        // A command addressed to this device means it is becoming the active one, so stand the
+        // route down first. Everything below goes through a MediaController bound to the
+        // session RoutingPlayer sits behind; with the route still up they would be forwarded
+        // back out to the device we are taking over from.
+        //
+        // `superseded` is the exception: it means some *other* device took the session, so we
+        // are not claiming anything - just stopping.
+        if (cmd.action != "superseded") handoffRoute.get().takeOver()
+        applyCommandLocally(cmd)
     }
 
     private suspend fun applyCommandLocally(cmd: JamCommand) {
@@ -566,9 +603,12 @@ class JamManager @Inject constructor(
             "play" -> c.play()
             "pause" -> c.pause()
             "superseded" -> {
-                // A different one of this account's own devices just became the active one.
+                // A different one of this account's own devices just became the active one, so
+                // this one stops. Deliberately not through `c`: by now that device owns the
+                // session, so our route is active and a routed pause would travel to *it* -
+                // stopping the music we just handed over while ours carried on playing.
                 suppressNextPublish = true
-                c.pause()
+                routeRegistry.localPlayer?.pause() ?: c.pause()
             }
             "next" -> c.seekToNextMediaItem()
             "previous" -> c.seekToPreviousMediaItem()
@@ -596,6 +636,14 @@ class JamManager @Inject constructor(
         val songs = navidromeRepository.getSongsByIds(songIds)
         if (songs.isEmpty()) return null
         val startIndex = JamQueue.alignStartIndex(songIds, index, songs.map { it.navidromeId })
+        // Landing on the wrong track is the failure this path keeps producing, and from the
+        // outside it is indistinguishable from a stale session. Say which it was: how much of
+        // the queue survived resolution, the index asked for, and the index actually used.
+        Timber.i(
+            "%s: resolveQueue sent=%d resolved=%d askedIndex=%d startIndex=%d wanted=%s got=%s",
+            TAG, songIds.size, songs.size, index, startIndex,
+            songIds.getOrNull(index), songs.getOrNull(startIndex)?.navidromeId,
+        )
         return ResolvedQueue(songs, startIndex)
     }
 
@@ -614,6 +662,11 @@ class JamManager @Inject constructor(
     private fun UUID.hex(): String = toString().replace("-", "")
 
     companion object {
+        private const val TAG = "JamManager"
+
+        /** How NavidromeRepository prefixes a gateway id locally; never sent over the wire. */
+        private const val LOCAL_ID_PREFIX = "navidrome_"
+
         // Position no longer rides on this timer: peers age the last sample themselves
         // ([JamPosition]), and every playhead jump - track change, play/pause, seek -
         // publishes immediately. What is left is drift correction and session liveness,

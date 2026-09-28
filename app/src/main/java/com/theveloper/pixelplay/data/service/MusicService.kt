@@ -389,6 +389,7 @@ class MusicService : MediaLibraryService() {
             // move with the crossfade.
             oldPlayer.removeListener(playerListener)
             routing.setLocalPlayer(player)
+            routeRegistry.localPlayer = player
             player.addListener(playerListener)
         }
 
@@ -1022,6 +1023,8 @@ class MusicService : MediaLibraryService() {
         // pass-through to the local player — see RoutingPlayer.
         val routing = RoutingPlayer(engine.masterPlayer, routeRegistry, serviceScope)
             .also { routingPlayer = it }
+        // Reachable directly for the few actions that must land here whatever a route says.
+        routeRegistry.localPlayer = engine.masterPlayer
         mediaSession = MediaLibrarySession.Builder(this, routing, callback)
             .setSessionActivity(getOpenAppPendingIntent())
             .setBitmapLoader(CoilBitmapLoader(this, serviceScope))
@@ -1856,6 +1859,7 @@ class MusicService : MediaLibraryService() {
             mediaSession = null
         }
         routingPlayer = null
+        routeRegistry.localPlayer = null
         engine.release()
         controller.release()
         serviceScope.cancel()

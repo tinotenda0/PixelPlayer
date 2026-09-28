@@ -44,6 +44,20 @@ class PlaybackRouteRegistry @Inject constructor() {
      */
     val suppressed: StateFlow<Boolean> = _suppressed.asStateFlow()
 
+    /**
+     * This device's own player, published by MusicService.
+     *
+     * For the handful of actions that must land *here* regardless of any route - stopping
+     * because another device took the session, above all - reaching it directly is the only
+     * thing that works. Going through a MediaController cannot: those calls are asynchronous
+     * IPC, so the session handles them long after any flag set around the call has been
+     * restored, and a still-active route forwards them to the very device we are reacting to.
+     * That is how a superseded device ended up pausing its replacement while its own audio
+     * carried on.
+     */
+    @Volatile
+    var localPlayer: androidx.media3.common.Player? = null
+
     /** Makes [route] the one owning playback, replacing whatever held the slot. */
     fun register(route: PlaybackRoute) {
         _activeRoute.value = route
