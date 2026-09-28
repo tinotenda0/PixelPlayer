@@ -494,6 +494,16 @@ class JamManager @Inject constructor(
     private val publishSeq = AtomicInteger(0)
 
     private suspend fun publishNow() {
+        // Never publish while mirroring. RoutingPlayer presents the active device's state
+        // *through* the media session, and the listener that calls this watches that same
+        // session - so a mirroring device sees the remote's state arrive, mistakes it for its
+        // own playback, and publishes it, claiming the session. The other device then mirrors
+        // that and claims it back. Both ran to roughly four thousand publishes doing this,
+        // with empty titles, taking turns stopping each other.
+        //
+        // A device only ever publishes what *it* is playing.
+        if (routeRegistry.activeRoute.value != null) return
+
         val snapshot = readState() ?: return
         navidromeRepository.publishState(
             sessionId, snapshot.state, snapshot.queueIds, snapshot.queueIndex,
