@@ -15,7 +15,6 @@ import com.theveloper.pixelplay.utils.MediaItemBuilder
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -60,12 +59,8 @@ class RoutingPlayer(
         // does. This is the other half of the ForwardingSimpleBasePlayer bargain: it will diff
         // and notify correctly, but only when told the description is stale.
         scope.launch {
-            combine(registry.activeRoute, registry.suppressed) { route, suppressed ->
-                if (suppressed) null else route
-            }
-                .flatMapLatest { route ->
-                    if (route == null) flowOf(null) else route.state
-                }
+            registry.activeRoute
+                .flatMapLatest { route -> route?.state ?: flowOf(null) }
                 .distinctUntilChanged()
                 .collect { invalidateState() }
         }
@@ -86,8 +81,7 @@ class RoutingPlayer(
     }
 
     /** The route to obey right now, or null when playback belongs to this device. */
-    private fun activeRoute(): PlaybackRoute? =
-        if (registry.suppressed.value) null else registry.activeRoute.value
+    private fun activeRoute(): PlaybackRoute? = registry.activeRoute.value
 
     override fun getState(): State {
         val route = activeRoute() ?: return super.getState()

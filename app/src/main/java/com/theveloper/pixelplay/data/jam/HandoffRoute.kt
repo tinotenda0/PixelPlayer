@@ -36,13 +36,6 @@ class HandoffRoute @Inject constructor(
     override val name: String
         get() = jamManager.mySession.value?.deviceName ?: "Another device"
 
-    /**
-     * Set while this device claims playback, until the gateway confirms it. Stops an in-flight
-     * session update - which still names the previous device - from re-presenting it here.
-     */
-    @Volatile
-    private var takingOver = false
-
     private val _isActive = MutableStateFlow(false)
     override val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
 
@@ -66,43 +59,16 @@ class HandoffRoute @Inject constructor(
                     ?.takeIf { it.activeDeviceId != jamManager.sessionId }
 
                 if (remote == null) {
-                    // The session naming us is the confirmation a takeover was waiting for.
-                    takingOver = false
                     _isActive.value = false
                     registry.unregister(this@HandoffRoute)
                     return@collect
                 }
-
-                // Mid-takeover the session still names the old device for a moment, because the
-                // update saying we now own playback has not been published yet. Re-presenting
-                // that device here would send the music we are trying to claim straight back to
-                // it, which is exactly how pulling used to fail.
-                if (takingOver) return@collect
 
                 _state.value = remote.toRouteState()
                 _isActive.value = true
                 registry.register(this@HandoffRoute)
             }
         }
-    }
-
-    /**
-     * Gives playback back to this device, now.
-     *
-     * Pulling, or being handed a queue, means this device is becoming the active one. Both drive
-     * the local player through a MediaController bound to the session [RoutingPlayer] sits
-     * behind, so the route has to be gone *before* those calls land or they are forwarded to the
-     * very device we are taking over from.
-     *
-     * Suppressing around the call site cannot do this: MediaController calls are asynchronous
-     * IPC, so the session handles them well after any flag set around `play()` has been
-     * restored. Standing the route down and keeping it down until the gateway confirms us as
-     * active is the only version of this that holds.
-     */
-    fun takeOver() {
-        takingOver = true
-        _isActive.value = false
-        registry.unregister(this)
     }
 
     /**

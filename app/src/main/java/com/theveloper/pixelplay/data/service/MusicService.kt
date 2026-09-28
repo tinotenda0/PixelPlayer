@@ -54,6 +54,7 @@ import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.repository.MusicRepository
 import com.theveloper.pixelplay.data.service.player.DualPlayerEngine
 import com.theveloper.pixelplay.data.service.player.PlaybackErrorRecovery
+import com.theveloper.pixelplay.data.service.player.LocalPlayback
 import com.theveloper.pixelplay.data.service.player.PlaybackRouteRegistry
 import com.theveloper.pixelplay.data.service.player.RoutingPlayer
 import com.theveloper.pixelplay.data.service.player.TransitionController
@@ -151,6 +152,8 @@ class MusicService : MediaLibraryService() {
     lateinit var engine: DualPlayerEngine
     @Inject
     lateinit var routeRegistry: PlaybackRouteRegistry
+    @Inject
+    lateinit var localPlayback: LocalPlayback
     @Inject
     lateinit var controller: TransitionController
     @Inject
@@ -389,7 +392,9 @@ class MusicService : MediaLibraryService() {
             // move with the crossfade.
             oldPlayer.removeListener(playerListener)
             routing.setLocalPlayer(player)
-            routeRegistry.localPlayer = player
+            localPlayback.attach(player) {
+                LocalPlayback.QueueSnapshot(engine.getFullQueue(), engine.getCurrentAbsoluteIndex())
+            }
             player.addListener(playerListener)
         }
 
@@ -1024,8 +1029,10 @@ class MusicService : MediaLibraryService() {
         val routing = RoutingPlayer(engine.masterPlayer, routeRegistry, serviceScope)
             .also { routingPlayer = it }
         // Reachable directly for the few actions that must land here whatever a route says.
-        routeRegistry.localPlayer = engine.masterPlayer
-        routeRegistry.queueView = { engine.getFullQueue() to engine.getCurrentAbsoluteIndex() }
+        // What this device is playing, for anything that must not go through the session.
+        localPlayback.attach(engine.masterPlayer) {
+            LocalPlayback.QueueSnapshot(engine.getFullQueue(), engine.getCurrentAbsoluteIndex())
+        }
         mediaSession = MediaLibrarySession.Builder(this, routing, callback)
             .setSessionActivity(getOpenAppPendingIntent())
             .setBitmapLoader(CoilBitmapLoader(this, serviceScope))
@@ -1860,8 +1867,7 @@ class MusicService : MediaLibraryService() {
             mediaSession = null
         }
         routingPlayer = null
-        routeRegistry.localPlayer = null
-        routeRegistry.queueView = null
+        localPlayback.detach()
         engine.release()
         controller.release()
         serviceScope.cancel()

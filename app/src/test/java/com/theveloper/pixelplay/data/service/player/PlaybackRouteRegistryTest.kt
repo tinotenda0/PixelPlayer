@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.StateFlow
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
@@ -30,7 +29,6 @@ class PlaybackRouteRegistryTest {
     @Test
     fun `starts with playback local`() {
         assertNull(registry.activeRoute.value)
-        assertFalse(registry.suppressed.value)
     }
 
     @Test
@@ -70,33 +68,5 @@ class PlaybackRouteRegistryTest {
         registry.unregister(old)
 
         assertSame(current, registry.activeRoute.value)
-    }
-
-    @Test
-    fun `suppression is lifted again afterwards`() {
-        registry.register(FakeRoute("Phone"))
-        registry.withRoutingSuppressed {
-            assertTrue(registry.suppressed.value)
-        }
-        assertFalse(registry.suppressed.value)
-    }
-
-    @Test
-    fun `suppression nests without the inner block ending the outer one`() {
-        registry.withRoutingSuppressed {
-            registry.withRoutingSuppressed { }
-            assertTrue(registry.suppressed.value, "inner block ended the outer suppression")
-        }
-        assertFalse(registry.suppressed.value)
-    }
-
-    @Test
-    fun `suppression is lifted even when the block throws`() {
-        // A failed transfer must not leave routing disabled for good, which would silently
-        // strand this device playing locally while the session lives elsewhere.
-        runCatching {
-            registry.withRoutingSuppressed { throw IllegalStateException("boom") }
-        }
-        assertFalse(registry.suppressed.value)
     }
 }

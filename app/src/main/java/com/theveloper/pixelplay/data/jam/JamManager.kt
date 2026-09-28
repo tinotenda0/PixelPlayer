@@ -19,7 +19,7 @@ import com.theveloper.pixelplay.data.navidrome.NavidromeRepository
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.service.MusicService
 import com.theveloper.pixelplay.data.service.PlaybackActivityTracker
-import com.theveloper.pixelplay.data.service.player.PlaybackRouteRegistry
+import com.theveloper.pixelplay.data.service.player.LocalPlayback
 import com.theveloper.pixelplay.utils.MediaItemBuilder
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -70,9 +70,7 @@ class JamManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val navidromeRepository: NavidromeRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val routeRegistry: PlaybackRouteRegistry,
-    // Lazy: HandoffRoute depends on this manager, so injecting it directly would be a cycle.
-    private val handoffRoute: dagger.Lazy<HandoffRoute>,
+    private val localPlayback: LocalPlayback,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -367,12 +365,10 @@ class JamManager @Inject constructor(
             "play", positionMs = snapshot.state.positionMs, songIds = snapshot.queueIds,
             index = snapshot.queueIndex, targetSessionId = targetId
         )
-        // Suppressed so the pause lands on this device. Transferring away makes the target the
-        // active one, and if its session update arrives first a routed pause would be sent
-        // onward to it — stopping the music we just handed over instead of the music here.
-        if (ok) withContext(Dispatchers.Main) {
-            routeRegistry.withRoutingSuppressed { controller?.pause() }
-        }
+        // Pausing here, on the engine's player. Transferring away makes the target the active
+        // one, so a pause sent through the session would follow it there and stop the music we
+        // just handed over instead of the music in this room.
+        if (ok) withContext(Dispatchers.Main) { localPlayback.player()?.pause() }
         return ok
     }
 
@@ -408,13 +404,9 @@ class JamManager @Inject constructor(
             )
             return false
         }
-        // Claim playback before touching the player. Pulling means "play it *here*", and a
-        // route is active by definition while pulling - the session belonging to another device
-        // is the only reason there is anything to pull - so these calls would otherwise be
-        // forwarded straight back to that device and nothing would happen locally.
-        handoffRoute.get().takeOver()
         withContext(Dispatchers.Main) {
-            val c = ensureController() ?: return@withContext
+            val started = ensureController() ?: return@withContext
+            val c = localPlayback.player() ?: started
             c.setMediaItems(
                 resolved.songs.map { MediaItemBuilder.build(it) }, resolved.startIndex,
                 resumePositionMs
@@ -494,16 +486,6 @@ class JamManager @Inject constructor(
     private val publishSeq = AtomicInteger(0)
 
     private suspend fun publishNow() {
-        // Never publish while mirroring. RoutingPlayer presents the active device's state
-        // *through* the media session, and the listener that calls this watches that same
-        // session - so a mirroring device sees the remote's state arrive, mistakes it for its
-        // own playback, and publishes it, claiming the session. The other device then mirrors
-        // that and claims it back. Both ran to roughly four thousand publishes doing this,
-        // with empty titles, taking turns stopping each other.
-        //
-        // A device only ever publishes what *it* is playing.
-        if (routeRegistry.activeRoute.value != null) return
-
         val snapshot = readState() ?: return
         navidromeRepository.publishState(
             sessionId, snapshot.state, snapshot.queueIds, snapshot.queueIndex,
@@ -552,16 +534,13 @@ class JamManager @Inject constructor(
         // at all. Publishing the controller's view hands another device part of the queue and
         // an index that means nothing outside this process, and once a receiver adopts that
         // it republishes it, so a single bad hop follows the session around.
-        val engineView = routeRegistry.queueView?.invoke()
-        if (engineView != null) {
-            val (items, absoluteIndex) = engineView
-            if (items.isNotEmpty()) {
-                return@withContext LocalSnapshot(
-                    state,
-                    items.map { it.wireId() },
-                    absoluteIndex.coerceIn(0, items.lastIndex),
-                )
-            }
+        val engineQueue = localPlayback.queue()
+        if (engineQueue != null) {
+            return@withContext LocalSnapshot(
+                state,
+                engineQueue.items.map { it.wireId() },
+                engineQueue.absoluteIndex.coerceIn(0, engineQueue.items.lastIndex),
+            )
         }
 
         // No engine view (nothing playing locally yet): the controller is all there is.
@@ -603,20 +582,24 @@ class JamManager @Inject constructor(
      * so the `play` can land first. Suppressing for the whole block covers that window instead
      * of relying on the two racing in a particular order.
      */
+    /**
+     * Applies a command pushed to this device.
+     *
+     * Everything below acts on the engine's player, never on a MediaController. A controller
+     * would reach this device's media session, which presents whichever device owns playback -
+     * so while another one still holds the session, a command meant for us would be forwarded
+     * straight back out to it. Stopping because we were superseded is precisely that case.
+     */
     private suspend fun applyCommand(cmd: JamCommand) = withContext(Dispatchers.Main) {
-        // A command addressed to this device means it is becoming the active one, so stand the
-        // route down first. Everything below goes through a MediaController bound to the
-        // session RoutingPlayer sits behind; with the route still up they would be forwarded
-        // back out to the device we are taking over from.
-        //
-        // `superseded` is the exception: it means some *other* device took the session, so we
-        // are not claiming anything - just stopping.
-        if (cmd.action != "superseded") handoffRoute.get().takeOver()
         applyCommandLocally(cmd)
     }
 
     private suspend fun applyCommandLocally(cmd: JamCommand) {
-        val c = ensureController() ?: return
+        // Binding the controller is what starts MusicService, which an idle device being handed
+        // a queue needs. Having started it, act on the engine's player instead: the session in
+        // between presents whoever owns playback, which right now may still be the sender.
+        val started = ensureController() ?: return
+        val c = localPlayback.player() ?: started
         if (cmd.songIds.isNotEmpty()) {
             // The queue arrives whole, with [index] marking where to start, so whatever played
             // before that point stays behind the playhead and back-skip works.
@@ -634,12 +617,9 @@ class JamManager @Inject constructor(
             "play" -> c.play()
             "pause" -> c.pause()
             "superseded" -> {
-                // A different one of this account's own devices just became the active one, so
-                // this one stops. Deliberately not through `c`: by now that device owns the
-                // session, so our route is active and a routed pause would travel to *it* -
-                // stopping the music we just handed over while ours carried on playing.
+                // A different one of this account's own devices just became the active one.
                 suppressNextPublish = true
-                routeRegistry.localPlayer?.pause() ?: c.pause()
+                c.pause()
             }
             "next" -> c.seekToNextMediaItem()
             "previous" -> c.seekToPreviousMediaItem()
