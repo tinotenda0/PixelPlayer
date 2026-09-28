@@ -1025,6 +1025,7 @@ class MusicService : MediaLibraryService() {
             .also { routingPlayer = it }
         // Reachable directly for the few actions that must land here whatever a route says.
         routeRegistry.localPlayer = engine.masterPlayer
+        routeRegistry.queueView = { engine.getFullQueue() to engine.getCurrentAbsoluteIndex() }
         mediaSession = MediaLibrarySession.Builder(this, routing, callback)
             .setSessionActivity(getOpenAppPendingIntent())
             .setBitmapLoader(CoilBitmapLoader(this, serviceScope))
@@ -1860,6 +1861,7 @@ class MusicService : MediaLibraryService() {
         }
         routingPlayer = null
         routeRegistry.localPlayer = null
+        routeRegistry.queueView = null
         engine.release()
         controller.release()
         serviceScope.cancel()

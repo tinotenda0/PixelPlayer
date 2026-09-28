@@ -58,6 +58,18 @@ class PlaybackRouteRegistry @Inject constructor() {
     @Volatile
     var localPlayer: androidx.media3.common.Player? = null
 
+    /**
+     * The engine's authoritative queue and absolute position in it, published by MusicService.
+     *
+     * A MediaController does not see this. DualPlayerEngine loads only a window of a large
+     * queue into ExoPlayer, so the controller's `mediaItemCount` is that window and its
+     * `currentMediaItemIndex` is relative to it - which is why the engine keeps `getFullQueue`
+     * and `getCurrentAbsoluteIndex` at all. Handing another device a window and an index
+     * measured against it describes a queue that device cannot reconstruct.
+     */
+    @Volatile
+    var queueView: (() -> Pair<List<androidx.media3.common.MediaItem>, Int>)? = null
+
     /** Makes [route] the one owning playback, replacing whatever held the slot. */
     fun register(route: PlaybackRoute) {
         _activeRoute.value = route

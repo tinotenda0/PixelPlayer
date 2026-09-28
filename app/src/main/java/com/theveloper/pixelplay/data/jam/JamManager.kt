@@ -544,6 +544,27 @@ class JamManager @Inject constructor(
                 canToggleRepeat = c.isCommandAvailable(Player.COMMAND_SET_REPEAT_MODE),
             )
         )
+        // Take the queue from the engine, not from this controller.
+        //
+        // DualPlayerEngine loads only a window of a large queue into ExoPlayer, so the
+        // controller's mediaItemCount is that window and currentMediaItemIndex is measured
+        // against it - which is why the engine keeps getFullQueue and getCurrentAbsoluteIndex
+        // at all. Publishing the controller's view hands another device part of the queue and
+        // an index that means nothing outside this process, and once a receiver adopts that
+        // it republishes it, so a single bad hop follows the session around.
+        val engineView = routeRegistry.queueView?.invoke()
+        if (engineView != null) {
+            val (items, absoluteIndex) = engineView
+            if (items.isNotEmpty()) {
+                return@withContext LocalSnapshot(
+                    state,
+                    items.map { it.wireId() },
+                    absoluteIndex.coerceIn(0, items.lastIndex),
+                )
+            }
+        }
+
+        // No engine view (nothing playing locally yet): the controller is all there is.
         // Rebuilt only when the timeline actually changed — see [cachedQueueIds].
         val queueIds = cachedQueueIds
             ?: (0 until c.mediaItemCount).map { c.getMediaItemAt(it).wireId() }
