@@ -188,8 +188,9 @@ class JamManager @Inject constructor(
     /** Publishing this device's own playback. Needs the controller, and so MusicService. */
     private suspend fun startHostRole() {
         if (positionSyncJob?.isActive == true) return
-        val c = ensureController() ?: return
-        attachPublishListener(c)
+        // Starts MusicService, which is what makes an engine player exist to listen to.
+        ensureController() ?: return
+        attachPublishListener(localPlayback.player() ?: return)
         publishNow()
         startPositionSync()
     }
@@ -438,10 +439,20 @@ class JamManager @Inject constructor(
      *  isPlaying flip was a forced pause from being superseded (see applyCommand's "superseded"
      *  case) - otherwise that pause would immediately re-publish and steal the active slot right
      *  back from whichever device just took it. */
-    private fun attachPublishListener(c: MediaController) {
+    /**
+     * Watches *local* playback so this device can publish what it is playing.
+     *
+     * Attached to the engine's player, never to a MediaController. A controller observes the
+     * media session, which presents whichever device owns playback - so while mirroring, every
+     * update from the remote device would fire this and make us publish, claiming a session we
+     * do not own. The other device then mirrors that and claims it back: the bouncing.
+     *
+     * Reading local state was not enough on its own; the trigger has to be local too.
+     */
+    private fun attachPublishListener(player: Player) {
         if (publishListenerAttached) return
         publishListenerAttached = true
-        c.addListener(object : Player.Listener {
+        player.addListener(object : Player.Listener {
             override fun onTimelineChanged(timeline: Timeline, reason: Int) {
                 cachedQueueIds = null
             }
