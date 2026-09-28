@@ -6,13 +6,16 @@ import android.content.Context
 import android.content.res.AssetFileDescriptor
 import android.database.Cursor
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Base64
 import androidx.core.graphics.drawable.toBitmap
 import coil.imageLoader
 import coil.request.ImageRequest
+import coil.size.Scale
 import com.theveloper.pixelplay.utils.AlbumArtUtils
+import com.theveloper.pixelplay.utils.ArtworkSquareCrop
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.FileNotFoundException
@@ -81,6 +84,37 @@ class SharedArtworkContentProvider : ContentProvider() {
             appContext = appContext,
             songId = songId
         )?.takeIf { it.exists() && it.isFile && it.canRead() }
+            ?.let { squaredCopyOf(appContext, it) }
+    }
+
+    /**
+     * External controllers lay artwork out in a square slot and pad anything else with blurred
+     * bars, so serve them a centered square. The app's own cache file is left alone — other
+     * callers still want the original — and the squared version lands in a separate cache keyed
+     * by the source's identity, so it re-derives when the artwork changes.
+     */
+    private fun squaredCopyOf(appContext: Context, source: File): File {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        runCatching { BitmapFactory.decodeFile(source.path, bounds) }
+        ArtworkSquareCrop.cropWindow(bounds.outWidth, bounds.outHeight) ?: return source
+
+        val cacheDir = File(appContext.cacheDir, SQUARE_ART_CACHE_DIR).apply { mkdirs() }
+        val cacheFile = File(
+            cacheDir,
+            "${sha1("${source.path}:${source.lastModified()}:${source.length()}")}.jpg"
+        )
+        if (cacheFile.exists() && cacheFile.length() > 0) {
+            return cacheFile
+        }
+
+        val decoded = runCatching { BitmapFactory.decodeFile(source.path) }.getOrNull()
+            ?: return source
+        return runCatching {
+            FileOutputStream(cacheFile).use { out ->
+                ArtworkSquareCrop.square(decoded).compress(Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            cacheFile.takeIf { it.exists() && it.length() > 0 }
+        }.getOrNull() ?: source
     }
 
     /**
@@ -100,13 +134,18 @@ class SharedArtworkContentProvider : ContentProvider() {
             .data(coverUri)
             .allowHardware(false)
             .size(CLOUD_ART_SIZE_PX)
+            // FILL so the short side reaches CLOUD_ART_SIZE_PX before the square crop below
+            // takes it — fitting first would leave a 16:9 thumbnail cropping down to 288px.
+            .scale(Scale.FILL)
             .build()
         val drawable = runBlocking {
             runCatching { appContext.imageLoader.execute(request).drawable }.getOrNull()
         } ?: return null
 
         return runCatching {
-            val bitmap = drawable.toBitmap()
+            // Squared for the same reason as the local path above: gateway covers are often
+            // 16:9 video thumbnails, and Android Auto would frame those in blurred bars.
+            val bitmap = ArtworkSquareCrop.square(drawable.toBitmap())
             FileOutputStream(cacheFile).use { out ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 88, out)
             }
@@ -120,6 +159,7 @@ class SharedArtworkContentProvider : ContentProvider() {
         private const val PATH_CLOUD = "cloud"
         private const val DEFAULT_CONTENT_TYPE = "image/jpeg"
         private const val CLOUD_ART_CACHE_DIR = "shared_cloud_art"
+        private const val SQUARE_ART_CACHE_DIR = "shared_square_art"
         private const val CLOUD_ART_SIZE_PX = 512
 
         /** Provider cover schemes that the app's Coil pipeline knows how to load. */

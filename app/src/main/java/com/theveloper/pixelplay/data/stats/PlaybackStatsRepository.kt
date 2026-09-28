@@ -209,7 +209,8 @@ class PlaybackStatsRepository @Inject constructor(
     suspend fun recordPlayback(
         songId: String,
         durationMs: Long,
-        timestamp: Long = System.currentTimeMillis()
+        timestamp: Long = System.currentTimeMillis(),
+        metadata: TrackMetadata = TrackMetadata.EMPTY
     ) = withContext(Dispatchers.IO) {
         if (songId.isBlank()) return@withContext
         val coercedTimestamp = timestamp.coerceAtLeast(0L)
@@ -239,14 +240,15 @@ class PlaybackStatsRepository @Inject constructor(
 
         val pending = outbox.enqueue(
             navidromeId = navidromeId,
-            // Metadata is best-effort and only for the server's own record: nothing client-side
-            // reads it back — loadSummary always re-resolves title/artist/album/cover from its
-            // own `songs` list, joined by unified id (see buildSummaryFromEvents). A live-browse
-            // song has no local SongEntity to pull this from, so it's sent blank.
-            title = song?.title.orEmpty(),
-            artist = song?.artistName.orEmpty(),
-            album = song?.albumName.orEmpty(),
-            cover = song?.albumArtUriString.orEmpty(),
+            // Metadata is only for the server's own record: nothing client-side reads it back —
+            // loadSummary always re-resolves title/artist/album/cover from its own `songs` list,
+            // joined by unified id (see buildSummaryFromEvents). Prefer whatever the playing
+            // surface captured at session start — a live-browse song has no local SongEntity, so
+            // the lookup above can only fill these in for synced-library tracks.
+            title = metadata.title?.takeIf { it.isNotBlank() } ?: song?.title.orEmpty(),
+            artist = metadata.artist?.takeIf { it.isNotBlank() } ?: song?.artistName.orEmpty(),
+            album = metadata.album?.takeIf { it.isNotBlank() } ?: song?.albumName.orEmpty(),
+            cover = metadata.cover?.takeIf { it.isNotBlank() } ?: song?.albumArtUriString.orEmpty(),
             durationMs = coercedDuration,
             startTimestamp = start,
             endTimestamp = coercedTimestamp

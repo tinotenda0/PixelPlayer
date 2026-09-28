@@ -16,6 +16,8 @@
 
     <!-- Navigation Bar Labels -->
     <string name="nav_bar_home">Home</string>
+    <string name="nav_rail_collapse">Collapse sidebar</string>
+    <string name="nav_rail_expand">Expand sidebar</string>
     <string name="nav_bar_search">Search</string>
     <string name="nav_bar_library">Library</string>
 

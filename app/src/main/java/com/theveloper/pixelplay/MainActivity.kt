@@ -73,6 +73,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -115,6 +116,9 @@ import com.theveloper.pixelplay.data.service.MusicService
 import com.theveloper.pixelplay.data.worker.SyncManager
 import com.theveloper.pixelplay.data.worker.SyncProgress
 import com.theveloper.pixelplay.presentation.components.AllFilesAccessDialog
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
+import com.theveloper.pixelplay.presentation.adaptive.rememberAdaptiveInfo
+import com.theveloper.pixelplay.presentation.components.AppNavigationRail
 import com.theveloper.pixelplay.presentation.components.AppSidebarDrawer
 import com.theveloper.pixelplay.presentation.components.CrashReportDialog
 import com.theveloper.pixelplay.presentation.components.DismissUndoBar
@@ -620,6 +624,23 @@ class MainActivity : ComponentActivity() {
         val currentRoute = navBackStackEntry?.destination?.route
         var isSearchBarActive by remember { mutableStateOf(false) }
 
+        // Wide windows swap the bottom bar for a side rail. Portrait is deliberately untouched:
+        // useSideNavigation is false for every portrait window, whatever the device.
+        //
+        // The collapse is folded into AdaptiveInfo rather than kept local to the rail, so that
+        // everything sizing itself against the navigation - grid columns, detail hero panes, the
+        // centred lists - reclaims the width as soon as the sidebar shrinks.
+        val isSideNavCollapsed by userPreferencesRepository.sideNavCollapsedFlow
+            .collectAsStateWithLifecycle(initialValue = false)
+        val playerSheetState by playerViewModel.sheetState.collectAsStateWithLifecycle()
+        val isPlayerSheetExpanded = playerSheetState == PlayerSheetState.EXPANDED
+        val adaptiveInfo = rememberAdaptiveInfo().let { info ->
+            remember(info, isSideNavCollapsed) {
+                info.copy(sideNavigationCollapsed = isSideNavCollapsed)
+            }
+        }
+        val useSideNavigation = adaptiveInfo.useSideNavigation
+
         val routesWithHiddenNavigationBar = remember {
             setOf(
                 Screen.Settings.route,
@@ -649,9 +670,13 @@ class MainActivity : ComponentActivity() {
                 Screen.Downloads.route
             )
         }
-        val shouldHideNavigationBar by remember(currentRoute, isSearchBarActive) {
+        val shouldHideNavigationBar by remember(currentRoute, isSearchBarActive, useSideNavigation) {
             derivedStateOf {
-                if (currentRoute == Screen.Search.route && isSearchBarActive) {
+                if (useSideNavigation) {
+                    // The rail is the navigation in wide windows; the bottom bar never appears, and
+                    // collapsing it here also zeroes the mini player's bottom margin.
+                    true
+                } else if (currentRoute == Screen.Search.route && isSearchBarActive) {
                     true
                 } else {
                     currentRoute?.let { route ->
@@ -694,10 +719,13 @@ class MainActivity : ComponentActivity() {
             rootView.rootView?.isHapticFeedbackEnabled = hapticsEnabled
         }
 
-        val horizontalPadding = if (navBarStyle == NavBarStyle.DEFAULT) {
-            if (systemNavBarInset > 30.dp) 14.dp else systemNavBarInset
-        } else {
-            0.dp
+        val horizontalPadding = when {
+            // A mini player stretched edge-to-edge across a tablet reads as a phone layout blown
+            // up, so give it a real gutter instead of the system inset.
+            useSideNavigation -> adaptiveInfo.horizontalPagePadding
+            navBarStyle == NavBarStyle.DEFAULT ->
+                if (systemNavBarInset > 30.dp) 14.dp else systemNavBarInset
+            else -> 0.dp
         }
         val animatedBottomBarPadding by animateDpAsState(
             targetValue = if (navBarStyle == NavBarStyle.FULL_WIDTH) 0.dp else systemNavBarInset,
@@ -777,7 +805,8 @@ class MainActivity : ComponentActivity() {
 
         CompositionLocalProvider(
             LocalAppHapticsConfig provides appHapticsConfig,
-            LocalHapticFeedback provides scopedHapticFeedback
+            LocalHapticFeedback provides scopedHapticFeedback,
+            LocalAdaptiveInfo provides adaptiveInfo
         ) {
             AppSidebarDrawer(
                 drawerState = drawerState,
@@ -794,11 +823,38 @@ class MainActivity : ComponentActivity() {
                     }
                 }
         ) {
-
+                // The rail is laid over the start edge and the Scaffold is inset by exactly its
+                // width, so the page area, the mini player and the expanded player all sit beside
+                // it and the rail stays reachable even while the full player is open.
+                //
+                // A Row would be the obvious layout here, but its RowScope stays an implicit
+                // receiver all the way down into the Scaffold content and captures the
+                // RowScope.AnimatedVisibility overload the mini player overlays rely on.
+                // The rail's own width, which changes when the user collapses the sidebar.
+                val railWidth by animateDpAsState(
+                    targetValue = adaptiveInfo.sideNavigationWidth,
+                    animationSpec = tween(durationMillis = 300),
+                    label = "SideNavRailWidth"
+                )
+                // How much width the rail is actually claiming from the page. Goes to zero while
+                // the full player is open so the player owns the whole window, exactly as it owns
+                // the whole screen over the bottom bar on a phone.
+                //
+                // Driven by the discrete sheet state rather than the expansion fraction: that is
+                // one recomposition per open/close with a bounded animation, instead of a relayout
+                // of the entire page on every frame of the drag.
+                val sideNavWidth by animateDpAsState(
+                    targetValue = if (isPlayerSheetExpanded) 0.dp else adaptiveInfo.sideNavigationWidth,
+                    animationSpec = tween(durationMillis = 300),
+                    label = "SideNavClaimedWidth"
+                )
+                Box(modifier = Modifier.fillMaxSize()) {
                 Scaffold(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = sideNavWidth),
                 bottomBar = {
-                    if (shouldRenderNavigationBar) {
+                    if (shouldRenderNavigationBar && !useSideNavigation) {
                         val currentSongId by remember {
                             playerViewModel.stablePlayerState
                                 .map { it.currentSong?.id }
@@ -1011,6 +1067,7 @@ class MainActivity : ComponentActivity() {
                         UnifiedPlayerSheetV2(
                             playerViewModel = playerViewModel,
                             sheetCollapsedTargetY = sheetCollapsedTargetY,
+                            containerWidth = this@BoxWithConstraints.maxWidth,
                             collapsedStateHorizontalPadding = horizontalPadding,
                             hideMiniPlayer = shouldHideMiniPlayer,
                             containerHeight = containerHeight,
@@ -1065,6 +1122,30 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+                    }
+                }
+
+                    if (useSideNavigation) {
+                        AppNavigationRail(
+                            navController = navController,
+                            navItems = commonNavItems,
+                            currentRoute = currentRoute,
+                            expanded = adaptiveInfo.usePermanentSidebar,
+                            width = railWidth,
+                            collapsible = adaptiveInfo.canCollapseSideNavigation,
+                            onToggleCollapsed = {
+                                scope.launch {
+                                    userPreferencesRepository.setSideNavCollapsed(!isSideNavCollapsed)
+                                }
+                            },
+                            onSearchIconDoubleTap = { playerViewModel.onSearchNavIconDoubleTapped() },
+                            hiddenFractionProvider = {
+                                val natural = railWidth.value
+                                if (natural <= 0f) 0f
+                                else (1f - sideNavWidth.value / natural).coerceIn(0f, 1f)
+                            },
+                            modifier = Modifier.align(Alignment.CenterStart)
+                        )
                     }
                 }
             }

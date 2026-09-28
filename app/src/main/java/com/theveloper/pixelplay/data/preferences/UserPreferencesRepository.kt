@@ -123,6 +123,7 @@ class UserPreferencesRepository @Inject constructor(
         val NAV_BAR_CORNER_RADIUS = intPreferencesKey("nav_bar_corner_radius")
         val NAV_BAR_STYLE = stringPreferencesKey("nav_bar_style")
         val NAV_BAR_COMPACT_MODE = booleanPreferencesKey("nav_bar_compact_mode")
+        val SIDE_NAV_COLLAPSED = booleanPreferencesKey("side_nav_collapsed")
         val CAROUSEL_STYLE = stringPreferencesKey("carousel_style")
         val LIBRARY_NAVIGATION_MODE = stringPreferencesKey("library_navigation_mode")
         val LAUNCH_TAB = stringPreferencesKey("launch_tab")
@@ -960,6 +961,17 @@ suspend fun markDirectoryRulesVersionApplied(version: Int) {
 
     suspend fun setNavBarCompactMode(enabled: Boolean) {
         dataStore.edit { it[PreferencesKeys.NAV_BAR_COMPACT_MODE] = enabled }
+    }
+
+    /**
+     * Whether the wide-window sidebar is collapsed to an icon rail. Persisted rather than held in
+     * UI state so the choice survives leaving the app, like the other navigation preferences.
+     */
+    val sideNavCollapsedFlow: Flow<Boolean> =
+        pref { it[PreferencesKeys.SIDE_NAV_COLLAPSED] ?: false }
+
+    suspend fun setSideNavCollapsed(collapsed: Boolean) {
+        dataStore.edit { it[PreferencesKeys.SIDE_NAV_COLLAPSED] = collapsed }
     }
 
     val libraryNavigationModeFlow: Flow<String> =

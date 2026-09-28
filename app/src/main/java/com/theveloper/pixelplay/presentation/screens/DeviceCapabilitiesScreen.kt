@@ -110,6 +110,7 @@ import java.util.Locale
 import kotlinx.coroutines.launch
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import kotlin.math.roundToInt
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -126,7 +127,12 @@ fun DeviceCapabilitiesScreen(
 
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val minTopBarHeight = 64.dp + statusBarHeight
-    val maxTopBarHeight = 188.dp
+    // Capped against the window: these headers are sized for a tall portrait window and
+    // would eat most of a landscape one.
+    val maxTopBarHeight = LocalAdaptiveInfo.current.collapsingHeaderHeight(
+        preferred = 188.dp,
+        minHeight = minTopBarHeight
+    )
     val minTopBarHeightPx = with(density) { minTopBarHeight.toPx() }
     val maxTopBarHeightPx = with(density) { maxTopBarHeight.toPx() }
 

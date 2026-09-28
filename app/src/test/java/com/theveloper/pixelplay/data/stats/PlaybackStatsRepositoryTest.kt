@@ -3,6 +3,7 @@ package com.theveloper.pixelplay.data.stats
 import androidx.work.WorkManager
 import com.google.common.truth.Truth.assertThat
 import com.theveloper.pixelplay.data.database.MusicDao
+import com.theveloper.pixelplay.data.database.SongEntity
 import com.theveloper.pixelplay.data.model.ArtistRef
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.navidrome.NavidromeRepository
@@ -10,10 +11,12 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlin.io.path.createTempDirectory
 import kotlinx.coroutines.test.runTest
+import org.json.JSONObject
 import org.junit.jupiter.api.Test
 
 class PlaybackStatsRepositoryTest {
@@ -226,7 +229,124 @@ class PlaybackStatsRepositoryTest {
         assertThat(summary.topGenres.single().uniqueArtists).isEqualTo(2)
     }
 
-    private fun createRepository(): PlaybackStatsRepository {
+    @Test
+    fun `recordPlayback reports live browsed track with the metadata it was given`() = runTest {
+        // A live-browse id ("navidrome_<rawId>") has no MusicDao row at all, so without the
+        // metadata the caller hands down, this event goes out with blank title/artist/album.
+        val musicDao = mockk<MusicDao>(relaxed = true)
+        val outbox = mockk<ListeningEventOutbox>(relaxed = true)
+        val navidromeRepository = mockk<NavidromeRepository>(relaxed = true)
+        val repository = createRepository(
+            musicDao = musicDao,
+            navidromeRepository = navidromeRepository,
+            outbox = outbox
+        )
+        stubGatewayUpload(navidromeRepository)
+        val enqueued = stubOutboxEnqueue(outbox)
+
+        repository.recordPlayback(
+            songId = "navidrome_yt-live-browse",
+            durationMs = TimeUnit.SECONDS.toMillis(42),
+            timestamp = 1_700_000_000_000L,
+            metadata = TrackMetadata(
+                title = "Live Browsed Track",
+                artist = "Browsed Artist",
+                album = "Browsed Album",
+                cover = "https://gateway.example/cover/yt-live-browse"
+            )
+        )
+
+        val event = checkNotNull(enqueued.value)
+        assertThat(event.navidromeId).isEqualTo("yt-live-browse")
+        assertThat(event.title).isEqualTo("Live Browsed Track")
+        assertThat(event.artist).isEqualTo("Browsed Artist")
+        assertThat(event.album).isEqualTo("Browsed Album")
+        assertThat(event.cover).isEqualTo("https://gateway.example/cover/yt-live-browse")
+    }
+
+    @Test
+    fun `recordPlayback falls back to the synced library when no metadata is supplied`() = runTest {
+        val musicDao = mockk<MusicDao>(relaxed = true)
+        val outbox = mockk<ListeningEventOutbox>(relaxed = true)
+        val navidromeRepository = mockk<NavidromeRepository>(relaxed = true)
+        val repository = createRepository(
+            musicDao = musicDao,
+            navidromeRepository = navidromeRepository,
+            outbox = outbox
+        )
+        stubGatewayUpload(navidromeRepository)
+        val enqueued = stubOutboxEnqueue(outbox)
+        coEvery { musicDao.getSongByIdOnce(77L) } returns songEntity()
+
+        repository.recordPlayback(
+            songId = "77",
+            durationMs = TimeUnit.SECONDS.toMillis(42),
+            timestamp = 1_700_000_000_000L
+        )
+
+        val event = checkNotNull(enqueued.value)
+        assertThat(event.navidromeId).isEqualTo("yt-synced")
+        assertThat(event.title).isEqualTo("Synced Track")
+        assertThat(event.artist).isEqualTo("Synced Artist")
+        assertThat(event.album).isEqualTo("Synced Album")
+        assertThat(event.cover).isEqualTo("https://gateway.example/cover/yt-synced")
+    }
+
+    /** Captures the event [PlaybackStatsRepository.recordPlayback] queues for upload. */
+    private fun stubOutboxEnqueue(
+        outbox: ListeningEventOutbox
+    ): CapturedEvent {
+        val captured = CapturedEvent()
+        coEvery {
+            outbox.enqueue(any(), any(), any(), any(), any(), any(), any(), any())
+        } answers {
+            ListeningEventOutbox.PendingListeningEvent(
+                eventId = "event-1",
+                navidromeId = arg<String>(0),
+                title = arg<String>(1),
+                artist = arg<String>(2),
+                album = arg<String>(3),
+                cover = arg<String>(4),
+                durationMs = arg<Long>(5),
+                startTimestamp = arg<Long>(6),
+                endTimestamp = arg<Long>(7)
+            ).also { captured.value = it }
+        }
+        return captured
+    }
+
+    private fun stubGatewayUpload(navidromeRepository: NavidromeRepository) {
+        coEvery {
+            navidromeRepository.reportListeningEvent(
+                any(), any(), any(), any(), any(), any(), any(), any(), any()
+            )
+        } returns Result.success(mockk<JSONObject>(relaxed = true))
+    }
+
+    private class CapturedEvent {
+        var value: ListeningEventOutbox.PendingListeningEvent? = null
+    }
+
+    private fun songEntity(): SongEntity = SongEntity(
+        id = 77L,
+        title = "Synced Track",
+        artistName = "Synced Artist",
+        artistId = 1L,
+        albumName = "Synced Album",
+        albumId = 1L,
+        contentUriString = "navidrome://yt-synced",
+        albumArtUriString = "https://gateway.example/cover/yt-synced",
+        duration = TimeUnit.MINUTES.toMillis(4),
+        genre = null,
+        filePath = "",
+        parentDirectoryPath = ""
+    )
+
+    private fun createRepository(
+        musicDao: MusicDao = mockk(relaxed = true),
+        navidromeRepository: NavidromeRepository = mockk(relaxed = true),
+        outbox: ListeningEventOutbox = mockk(relaxed = true)
+    ): PlaybackStatsRepository {
         val uniqueDir = createTempDirectory(
             "playback-stats-test-${Instant.now().toEpochMilli()}-"
         ).toFile()
@@ -237,9 +357,9 @@ class PlaybackStatsRepositoryTest {
         // just need to satisfy the constructor.
         return PlaybackStatsRepository(
             context = testContext,
-            musicDao = mockk<MusicDao>(relaxed = true),
-            navidromeRepository = mockk<NavidromeRepository>(relaxed = true),
-            outbox = mockk<ListeningEventOutbox>(relaxed = true),
+            musicDao = musicDao,
+            navidromeRepository = navidromeRepository,
+            outbox = outbox,
             workManager = mockk<WorkManager>(relaxed = true)
         )
     }

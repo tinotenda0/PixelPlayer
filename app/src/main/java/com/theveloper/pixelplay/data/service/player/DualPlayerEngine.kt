@@ -797,6 +797,13 @@ class DualPlayerEngine @Inject constructor(
         }
         startDownloadCacheInvalidation()
 
+        // Give the local streaming proxy a head start binding its port now, rather than
+        // leaving it to start lazily on the first navidrome:// resolution. On a cold or
+        // system-restarted service, the restored queue can try to resolve a stream within
+        // milliseconds of initialize() — racing the proxy's startup against the resolver's
+        // ensureReady() timeout and surfacing as a spurious "Source error".
+        navidromeStreamProxy.startIfNeeded()
+
         if (::playerA.isInitialized) {
             removeMasterPlayerListeners(playerA)
             onPlayerAboutToBeReleasedListener?.invoke(playerA)
@@ -1297,7 +1304,12 @@ class DualPlayerEngine @Inject constructor(
             return@withContext null
         }
 
-        if (!navidromeStreamProxy.ensureReady(5_000L)) return@withContext null
+        if (!navidromeStreamProxy.ensureReady(10_000L)) {
+            Timber.tag("DualPlayerEngine").w(
+                "resolveNavidromeUriAsync: proxy not ready in time for %s — surfacing as source error", uriString
+            )
+            return@withContext null
+        }
         navidromeStreamProxy.warmUpStreamUrl(uriString)
         navidromeStreamProxy.resolveNavidromeUri(uriString)?.toUri()
     }

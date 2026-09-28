@@ -12,6 +12,7 @@ import com.google.android.gms.cast.framework.SessionManager
 import com.google.android.gms.cast.framework.SessionManagerListener
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
 import com.theveloper.pixelplay.data.service.cast.CastRemotePlaybackState
+import com.theveloper.pixelplay.data.stats.TrackMetadata
 import com.theveloper.pixelplay.presentation.viewmodel.ListeningStatsTracker
 import timber.log.Timber
 
@@ -189,13 +190,22 @@ internal class CastSyncCoordinator(
             return
         }
 
+        // Carry the remote item's own metadata: a Cast play of a live-browsed song has no
+        // local library row for the stats repository to resolve title/artist from.
+        val metadata = TrackMetadata(
+            title = snapshot.title,
+            artist = snapshot.artist,
+            cover = snapshot.artworkUri?.toString()
+        )
+
         if (activeStatsOccurrenceId != snapshot.occurrenceId) {
             activeStatsOccurrenceId = snapshot.occurrenceId
             listeningStatsTracker.onTrackChanged(
                 songId = songId,
                 positionMs = snapshot.currentPositionMs,
                 durationMs = snapshot.totalDurationMs,
-                isPlaying = snapshot.isActuallyPlaying
+                isPlaying = snapshot.isActuallyPlaying,
+                metadata = metadata
             )
             return
         }
@@ -204,7 +214,8 @@ internal class CastSyncCoordinator(
             songId = songId,
             positionMs = snapshot.currentPositionMs,
             durationMs = snapshot.totalDurationMs,
-            isPlaying = snapshot.isActuallyPlaying
+            isPlaying = snapshot.isActuallyPlaying,
+            metadata = metadata
         )
     }
 

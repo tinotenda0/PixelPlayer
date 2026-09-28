@@ -95,6 +95,9 @@ import com.theveloper.pixelplay.presentation.components.PlaylistBottomSheet
 import com.theveloper.pixelplay.presentation.components.SmartImage
 import com.theveloper.pixelplay.presentation.components.SongInfoBottomSheet
 import com.theveloper.pixelplay.presentation.components.resolveNavBarOccupiedHeight
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
+import com.theveloper.pixelplay.presentation.components.DetailHeroContent
+import com.theveloper.pixelplay.presentation.components.DetailTwoPaneLayout
 import com.theveloper.pixelplay.presentation.components.subcomps.EnhancedSongListItem
 import com.theveloper.pixelplay.presentation.navigation.ArtistNavigation
 import com.theveloper.pixelplay.presentation.navigation.Screen
@@ -186,6 +189,37 @@ fun AlbumDetailScreen(
                 }
             }
 
+            // Wide windows get a permanent hero pane instead of a collapsing header; the portrait
+            // branch below is left exactly as it shipped.
+            uiState.album != null && LocalAdaptiveInfo.current.useTwoPaneDetail -> {
+                val album = uiState.album!!
+                val songs = uiState.songs
+                AlbumDetailWidePane(
+                    album = album,
+                    songs = songs,
+                    stablePlayerState = stablePlayerState,
+                    bottomContentPadding = fabBottomPadding + 24.dp,
+                    onBackPressed = { navController.popBackStack() },
+                    onSongClick = { song -> playerViewModel.showAndPlaySong(song, songs) },
+                    onPlayAll = {
+                        songs.firstOrNull()?.let { playerViewModel.showAndPlaySong(it, songs) }
+                    },
+                    onShuffleAll = {
+                        if (songs.isNotEmpty()) {
+                            playerViewModel.playSongsShuffled(
+                                songsToPlay = songs,
+                                queueName = album.title,
+                                startAtZero = true
+                            )
+                        }
+                    },
+                    onMoreOptionsClick = { song ->
+                        playerViewModel.selectSongForInfo(song)
+                        showSongInfoBottomSheet = true
+                    }
+                )
+            }
+
             uiState.album != null -> {
                 val album = uiState.album!!
                 val songs = uiState.songs
@@ -196,7 +230,12 @@ fun AlbumDetailScreen(
 
                 val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
                 val minTopBarHeight = 64.dp + statusBarHeight
-                val maxTopBarHeight = 300.dp
+                // Narrow landscape windows (split screen) still take the collapsing path, where a
+                // 300dp header would leave almost no list.
+                val maxTopBarHeight = LocalAdaptiveInfo.current.collapsingHeaderHeight(
+                    preferred = 300.dp,
+                    minHeight = minTopBarHeight
+                )
 
                 val minTopBarHeightPx = with(density) { minTopBarHeight.toPx() }
                 val maxTopBarHeightPx = with(density) { maxTopBarHeight.toPx() }
@@ -492,6 +531,96 @@ fun AlbumDetailScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * Album detail for wide windows. The artwork, title and actions live permanently in the start pane
+ * and the tracklist scrolls beside them, so neither competes for the little vertical space a
+ * landscape window has.
+ */
+@Composable
+private fun AlbumDetailWidePane(
+    album: Album,
+    songs: List<com.theveloper.pixelplay.data.model.Song>,
+    stablePlayerState: com.theveloper.pixelplay.presentation.viewmodel.StablePlayerState,
+    bottomContentPadding: Dp,
+    onBackPressed: () -> Unit,
+    onSongClick: (com.theveloper.pixelplay.data.model.Song) -> Unit,
+    onPlayAll: () -> Unit,
+    onShuffleAll: () -> Unit,
+    onMoreOptionsClick: (com.theveloper.pixelplay.data.model.Song) -> Unit
+) {
+    val songsByDisc = remember(songs) { songs.groupBy { it.discNumber ?: 1 } }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        DetailTwoPaneLayout(
+            onBackPressed = onBackPressed,
+            heroPane = {
+                DetailHeroContent(
+                    artworkModel = album.albumArtUriString,
+                    artworkContentDescription = stringResource(R.string.album_cover_for, album.title),
+                    title = album.title,
+                    subtitle = album.artist,
+                    meta = formatSongCount(songs.size),
+                    onPlay = if (songs.isEmpty()) null else onPlayAll,
+                    onShuffle = if (songs.isEmpty()) null else onShuffleAll
+                )
+            },
+            listPane = {
+                val lazyListState = rememberLazyListState()
+                LazyColumn(
+                    state = lazyListState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
+                        start = 8.dp,
+                        end = 20.dp,
+                        bottom = bottomContentPadding
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    songsByDisc.forEach { (discNumber, discSongs) ->
+                        if (songsByDisc.size > 1) {
+                            item(key = "wide_disc_header_$discNumber") {
+                                Text(
+                                    text = stringResource(
+                                        R.string.album_disc_number_header,
+                                        discNumber
+                                    ),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(
+                                        top = 16.dp,
+                                        bottom = 8.dp,
+                                        start = 8.dp
+                                    )
+                                )
+                            }
+                        }
+                        itemsIndexed(
+                            items = discSongs,
+                            key = { index, song -> "wide_album_song_${song.id}_$index" },
+                            contentType = { _, _ -> "album_song" }
+                        ) { _, song ->
+                            EnhancedSongListItem(
+                                song = song,
+                                isCurrentSong = song.isSamePlaybackEntity(stablePlayerState.currentSong),
+                                isPlaying = stablePlayerState.isPlaying,
+                                showAlbumArt = false,
+                                onMoreOptionsClick = { onMoreOptionsClick(song) },
+                                onClick = { onSongClick(song) }
+                            )
+                        }
+                    }
+                }
+            }
+        )
     }
 }
 

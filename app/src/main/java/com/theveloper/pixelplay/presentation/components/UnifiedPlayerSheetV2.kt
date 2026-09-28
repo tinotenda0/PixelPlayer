@@ -112,6 +112,12 @@ fun UnifiedPlayerSheetV2(
     playerViewModel: PlayerViewModel,
     sheetCollapsedTargetY: Float,
     containerHeight: Dp,
+    /**
+     * Width of the area this sheet actually occupies. On a phone that equals the screen, but with a
+     * side navigation rail the sheet lives beside the rail and is narrower; measuring the expanded
+     * player at screen width instead would push its controls off the end of the window.
+     */
+    containerWidth: Dp,
     collapsedStateHorizontalPadding: Dp = 12.dp,
     navController: NavHostController,
     hideMiniPlayer: Boolean = false,
@@ -209,8 +215,8 @@ fun UnifiedPlayerSheetV2(
     val scope = rememberCoroutineScope()
 
     val offsetAnimatable = remember { Animatable(0f) }
-    val screenWidthPx = remember(configuration, density) {
-        with(density) { configuration.screenWidthDp.dp.toPx() }
+    val screenWidthPx = remember(containerWidth, density) {
+        with(density) { containerWidth.toPx() }
     }
     val dismissThresholdPx = remember(screenWidthPx) { screenWidthPx * 0.4f }
     val swipeDismissProgress by remember(dismissThresholdPx) {

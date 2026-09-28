@@ -14,15 +14,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -135,6 +138,8 @@ import com.theveloper.pixelplay.presentation.utils.LocalAppHapticsConfig
 import com.theveloper.pixelplay.presentation.utils.performAppCompatHapticFeedback
 import com.theveloper.pixelplay.ui.theme.GoogleSansRounded
 import com.theveloper.pixelplay.presentation.viewmodel.PlaylistSongsOrderMode
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
+import com.theveloper.pixelplay.presentation.components.PlaylistCover
 import com.theveloper.pixelplay.utils.formatSongCount
 import com.theveloper.pixelplay.utils.formatTotalDuration
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
@@ -191,6 +196,9 @@ fun PlaylistDetailScreen(
     // Folder-as-playlist pseudo-IDs no longer exist (local media browsing was removed), so this
     // screen only ever renders real playlists now.
     val isFolderPlaylist = false
+    // Wide windows move the cover and title into a start pane so the list keeps the full height.
+    val adaptiveInfo = LocalAdaptiveInfo.current
+    val isWideLayout = adaptiveInfo.useTwoPaneDetail
     val songsInPlaylist = uiState.currentPlaylistSongs
     val songInfoViewModel: com.theveloper.pixelplay.presentation.viewmodel.SongInfoBottomSheetViewModel =
         androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel()
@@ -383,11 +391,10 @@ fun PlaylistDetailScreen(
                     .padding(top = innerPadding.calculateTopPadding()), Alignment.Center
             ) { CircularProgressIndicator() }
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = innerPadding.calculateTopPadding())
-            ) {
+            // Declared once and hosted by either a plain column (portrait) or the end pane of a
+            // two-pane row (wide), so the reorder, multi-select and drag state inside is shared
+            // rather than forked per layout.
+            val playlistBody: @Composable ColumnScope.() -> Unit = {
                 val actionButtonsHeight = 42.dp
                 val playbackControlBottomPadding = if (isFolderPlaylist) 8.dp else 6.dp
                 Row(
@@ -835,6 +842,46 @@ fun PlaylistDetailScreen(
                                 )
                         )
                     }
+                }
+            }
+
+            if (isWideLayout) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = innerPadding.calculateTopPadding())
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .width(adaptiveInfo.detailHeroPaneWidth)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState())
+                            .padding(start = 20.dp, end = 12.dp, bottom = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Cover only: the top bar already carries the playlist name and track
+                        // count, and repeating them under the art just says it twice.
+                        PlaylistCover(
+                            playlist = currentPlaylist,
+                            playlistSongs = songsInPlaylist,
+                            size = (adaptiveInfo.detailHeroPaneWidth - 32.dp)
+                        )
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    ) {
+                        playlistBody()
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = innerPadding.calculateTopPadding())
+                ) {
+                    playlistBody()
                 }
             }
         }

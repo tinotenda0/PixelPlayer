@@ -18,6 +18,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -75,6 +77,9 @@ import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavController
 import com.theveloper.pixelplay.data.model.Album
 import com.theveloper.pixelplay.data.model.Artist
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
+import com.theveloper.pixelplay.presentation.components.DetailHeroContent
+import com.theveloper.pixelplay.presentation.components.DetailTwoPaneLayout
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.presentation.components.CollapsibleCommonTopBar
 import com.theveloper.pixelplay.presentation.components.ExpressiveScrollBar
@@ -175,7 +180,12 @@ fun ArtistDetailScreen(
     // --- Lógica del Header Colapsable ---
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val minTopBarHeight = 64.dp + statusBarHeight
-    val maxTopBarHeight = 300.dp
+    // Narrow landscape windows (split screen) still take the collapsing path, where a
+    // 300dp header would leave almost no list.
+    val maxTopBarHeight = LocalAdaptiveInfo.current.collapsingHeaderHeight(
+        preferred = 300.dp,
+        minHeight = minTopBarHeight
+    )
 
     val minTopBarHeightPx = with(density) { minTopBarHeight.toPx() }
     val maxTopBarHeightPx = with(density) { maxTopBarHeight.toPx() }
@@ -260,7 +270,19 @@ fun ArtistDetailScreen(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.surface
     ) {
-        Box(modifier = Modifier.nestedScroll(nestedScrollConnection)) {
+        // Wide windows keep the artist portrait and actions pinned in a start pane instead of
+        // spending scarce vertical space on a collapsing header.
+        val isWideLayout = LocalAdaptiveInfo.current.useTwoPaneDetail
+        Box(
+            // The collapsing-header connection consumes vertical scroll to shrink a header that the
+            // wide layout never draws, which would swallow the list's first couple of hundred dp of
+            // scrolling. It is only attached where the header actually exists.
+            modifier = if (isWideLayout) {
+                Modifier
+            } else {
+                Modifier.nestedScroll(nestedScrollConnection)
+            }
+        ) {
             when {
                 uiState.isLoading && uiState.artist == null -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -307,22 +329,9 @@ fun ArtistDetailScreen(
                         }
                     }
 
-                    LazyColumn(
-                        state = lazyListState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .offset {
-                                val extraHeight =
-                                    (topBarHeight.value - minTopBarHeightPx).roundToInt()
-                                IntOffset(0, extraHeight)
-                            },
-                        contentPadding = PaddingValues(
-                            top = minTopBarHeight + 8.dp,
-                            start = 16.dp,
-                            end = if (showScrollBar) 24.dp else 16.dp,
-                            bottom = MiniPlayerHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 8.dp
-                        )
-                    ) {
+                    // The feed itself is identical in both layouts; only its container differs, so
+                    // it is declared once here and handed to whichever container is in use.
+                    val artistFeedContent: LazyListScope.() -> Unit = {
                         // --- Spotify-style gateway artist page: Popular, Discography, About. ---
                         if (uiState.topSongs.isNotEmpty() && !uiState.isUpgradingToGatewayProfile) {
                             item(key = "artist_radio", contentType = "artist_page_action") {
@@ -531,7 +540,75 @@ fun ArtistDetailScreen(
 
                     }
 
-                    if (showScrollBar) {
+                    val onShuffleDiscography: () -> Unit = {
+                        if (!isLoadingFullDiscography && songs.isNotEmpty()) {
+                            isLoadingFullDiscography = true
+                            coroutineScope.launch {
+                                val fullDiscography = viewModel.getFullDiscography()
+                                isLoadingFullDiscography = false
+                                playerViewModel.playSongsShuffled(
+                                    fullDiscography.ifEmpty { songs },
+                                    artist.name,
+                                    startAtZero = true
+                                )
+                            }
+                        }
+                    }
+
+                    if (isWideLayout) {
+                        DetailTwoPaneLayout(
+                            onBackPressed = { navController.popBackStack() },
+                            heroPane = {
+                                DetailHeroContent(
+                                    artworkModel = uiState.effectiveImageUrl
+                                        ?: artist.customImageUri,
+                                    artworkContentDescription = artist.name,
+                                    title = artist.name,
+                                    subtitle = uiState.subscribers,
+                                    meta = formatSongCount(songs.size),
+                                    artworkShape = CircleShape,
+                                    onPlay = if (songs.isEmpty()) null else {
+                                        { songs.firstOrNull()?.let { playerViewModel.showAndPlaySong(it, songs) } }
+                                    },
+                                    onShuffle = if (songs.isEmpty()) null else onShuffleDiscography
+                                )
+                            },
+                            listPane = {
+                                LazyColumn(
+                                    state = lazyListState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(
+                                        top = WindowInsets.statusBars.asPaddingValues()
+                                            .calculateTopPadding() + 16.dp,
+                                        start = 8.dp,
+                                        end = 20.dp,
+                                        bottom = MiniPlayerHeight + systemNavBarInset + 16.dp
+                                    ),
+                                    content = artistFeedContent
+                                )
+                            }
+                        )
+                    } else {
+                        LazyColumn(
+                            state = lazyListState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .offset {
+                                    val extraHeight =
+                                        (topBarHeight.value - minTopBarHeightPx).roundToInt()
+                                    IntOffset(0, extraHeight)
+                                },
+                            contentPadding = PaddingValues(
+                                top = minTopBarHeight + 8.dp,
+                                start = 16.dp,
+                                end = if (showScrollBar) 24.dp else 16.dp,
+                                bottom = MiniPlayerHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 8.dp
+                            ),
+                            content = artistFeedContent
+                        )
+                    }
+
+                    if (!isWideLayout && showScrollBar) {
                         ExpressiveScrollBar(
                             listState = lazyListState,
                             modifier = Modifier
@@ -543,7 +620,9 @@ fun ArtistDetailScreen(
                         )
                     }
 
-                    if (UseSharedCollapsibleTopBarProbe) {
+                    if (isWideLayout) {
+                        // The hero pane already carries the portrait, title and actions.
+                    } else if (UseSharedCollapsibleTopBarProbe) {
                         SharedArtistTopBarProbe(
                             artist = artist,
                             effectiveImageUrl = uiState.effectiveImageUrl,
@@ -554,20 +633,7 @@ fun ArtistDetailScreen(
                             hasCustomImage = !artist.customImageUri.isNullOrBlank(),
                             isLiked = isCurrentArtistLiked,
                             onBackPressed = { navController.popBackStack() },
-                            onPlayClick = {
-                                if (!isLoadingFullDiscography && songs.isNotEmpty()) {
-                                    isLoadingFullDiscography = true
-                                    coroutineScope.launch {
-                                        val fullDiscography = viewModel.getFullDiscography()
-                                        isLoadingFullDiscography = false
-                                        playerViewModel.playSongsShuffled(
-                                            fullDiscography.ifEmpty { songs },
-                                            artist.name,
-                                            startAtZero = true
-                                        )
-                                    }
-                                }
-                            },
+                            onPlayClick = onShuffleDiscography,
                             onChangeImage = { imagePickerLauncher.launch("image/*") },
                             onClearCustomImage = { viewModel.clearCustomImage() },
                             onToggleLike = { viewModel.toggleArtistLike() }
@@ -582,20 +648,7 @@ fun ArtistDetailScreen(
                             headerHeight = currentTopBarHeightDp,
                             headerImageRequestSize = headerImageRequestSize,
                             onBackPressed = { navController.popBackStack() },
-                            onPlayClick = {
-                                if (!isLoadingFullDiscography && songs.isNotEmpty()) {
-                                    isLoadingFullDiscography = true
-                                    coroutineScope.launch {
-                                        val fullDiscography = viewModel.getFullDiscography()
-                                        isLoadingFullDiscography = false
-                                        playerViewModel.playSongsShuffled(
-                                            fullDiscography.ifEmpty { songs },
-                                            artist.name,
-                                            startAtZero = true
-                                        )
-                                    }
-                                }
-                            },
+                            onPlayClick = onShuffleDiscography,
                             onChangeImage = { imagePickerLauncher.launch("image/*") },
                             onClearCustomImage = { viewModel.clearCustomImage() }
                         )

@@ -80,6 +80,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.style.TextOverflow
+import com.theveloper.pixelplay.presentation.adaptive.LocalAdaptiveInfo
 
 /** Horizontal row of the user's liked artists, shown above the favorite songs list. */
 @Composable
@@ -216,6 +217,9 @@ fun LibraryFavoritesTab(
     isBuildingLikedArtistsRadio: Boolean = false,
     onPlayLikedArtistsRadio: () -> Unit = {}
 ) {
+    // Keep the row title and its overflow button within reach of each other on a tablet;
+    // zero on a phone, so the shipped layout is unchanged there.
+    val songListInset = LocalAdaptiveInfo.current.listCenteringInset()
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val visibilityCallback by rememberUpdatedState(onLocateCurrentSongVisibilityChanged)
@@ -364,7 +368,11 @@ fun LibraryFavoritesTab(
                             ),
                         state = listState,
                         verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + 30.dp)
+                        contentPadding = PaddingValues(
+                                start = songListInset,
+                                end = songListInset,
+                                bottom = bottomBarHeight + MiniPlayerHeight + 30.dp
+                            )
                     ) {
                         if (likedArtists.isNotEmpty()) {
                             item(key = "liked_artists_row", contentType = "liked_artists_row") {
@@ -441,6 +449,9 @@ fun LibrarySongsTabPaginated(
     isRefreshing: Boolean,
     onRefresh: () -> Unit
 ) {
+    // Keep the row title and its overflow button within reach of each other on a tablet;
+    // zero on a phone, so the shipped layout is unchanged there.
+    val songListInset = LocalAdaptiveInfo.current.listCenteringInset()
     val listState = rememberLazyListState()
     val dummyListState = rememberLazyListState()
     val pullToRefreshState = rememberPullToRefreshState()
@@ -460,7 +471,11 @@ fun LibrarySongsTabPaginated(
                     )
                     .fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap)
+                contentPadding = PaddingValues(
+                    start = songListInset,
+                    end = songListInset,
+                    bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap
+                )
             ) {
                 items(12, key = { "skeleton_song_$it" }) {
                     EnhancedSongListItem(
@@ -557,7 +572,11 @@ fun LibrarySongsTabPaginated(
                                 ),
                             state = activeListState,
                             verticalArrangement = Arrangement.spacedBy(8.dp),
-                            contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + 30.dp)
+                            contentPadding = PaddingValues(
+                                start = songListInset,
+                                end = songListInset,
+                                bottom = bottomBarHeight + MiniPlayerHeight + 30.dp
+                            )
                         ) {
                             item(
                                 key = "songs_top_spacer",

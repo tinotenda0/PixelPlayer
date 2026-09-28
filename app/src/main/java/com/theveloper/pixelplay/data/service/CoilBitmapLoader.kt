@@ -11,10 +11,12 @@ import coil.imageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Precision
+import coil.size.Scale
 import coil.size.Size
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import com.theveloper.pixelplay.data.diagnostics.PerformanceMetrics
+import com.theveloper.pixelplay.utils.ArtworkSquareCrop
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -46,6 +48,10 @@ class CoilBitmapLoader(private val context: Context, private val scope: Coroutin
                     // Preserve enough resolution for media surfaces while preventing huge
                     // album art from destabilizing notification/SystemUI rendering.
                     .size(MAX_NOTIFICATION_ARTWORK_SIZE_PX, MAX_NOTIFICATION_ARTWORK_SIZE_PX)
+                    // FILL, not the default FIT: the square crop below takes the short side, so
+                    // fitting a 16:9 thumbnail inside the box first would throw away half the
+                    // resolution before we ever crop it.
+                    .scale(Scale.FILL)
                     .precision(Precision.INEXACT)
                     .allowHardware(false) // Bitmap must not be hardware for MediaSession
                     // Disable memory cache so Coil does not hold a second reference to this
@@ -61,7 +67,11 @@ class CoilBitmapLoader(private val context: Context, private val scope: Coroutin
                 if (drawable != null) {
                     // toBitmap() now returns a bitmap owned exclusively by us (not in any
                     // Coil cache), so Media3 can use and recycle it freely.
-                    val bitmap = drawable.toBitmap()
+                    // Square it here rather than letting the lock screen / One UI player /
+                    // Android Auto pad a wide thumbnail out with blurred bars. The source is
+                    // left un-recycled on purpose: Media3 owns whatever we hand back, and the
+                    // discarded original is ordinary garbage.
+                    val bitmap = ArtworkSquareCrop.square(drawable.toBitmap())
                     PerformanceMetrics.recordTiming(
                         PerformanceMetrics.Timings.ARTWORK_DECODE,
                         (System.nanoTime() - startNanos) / 1_000_000
