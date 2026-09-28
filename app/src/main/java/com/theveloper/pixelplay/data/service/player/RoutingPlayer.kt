@@ -1,5 +1,6 @@
 package com.theveloper.pixelplay.data.service.player
 
+import android.os.Bundle
 import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.core.net.toUri
@@ -10,6 +11,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.util.UnstableApi
+import com.theveloper.pixelplay.utils.MediaItemBuilder
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineScope
@@ -137,6 +139,31 @@ class RoutingPlayer(
                                 .takeIf { it.isNotBlank() }
                                 ?.let { setArtworkUri(it.toUri()) }
                         }
+                        // Enough for the app to build a Song from this item alone.
+                        //
+                        // The player surface resolves what the session reports back to a local
+                        // Song before it will draw anything, and its last-resort mapper gives
+                        // up unless the item carries a content uri. A device mirroring another
+                        // one usually cannot satisfy that from its library - it may never have
+                        // synced the track that is playing elsewhere - so without these the
+                        // session reads correctly and the app still shows nothing.
+                        //
+                        // The uri is a marker, never fetched: while a route owns playback
+                        // nothing here decodes, and taking playback back replaces these items
+                        // wholesale with real ones (see JamManager.pullFrom).
+                        .setExtras(
+                            Bundle().apply {
+                                putString(
+                                    MediaItemBuilder.EXTERNAL_EXTRA_CONTENT_URI,
+                                    REMOTE_ITEM_URI_PREFIX + mediaId,
+                                )
+                                putString(MediaItemBuilder.EXTERNAL_EXTRA_ALBUM, routeState.album)
+                                putLong(
+                                    MediaItemBuilder.EXTERNAL_EXTRA_DURATION,
+                                    routeState.durationMs,
+                                )
+                            }
+                        )
                         .build()
                 )
                 .setDurationUs(
@@ -271,6 +298,9 @@ class RoutingPlayer(
     }
 
     private companion object {
+        /** Marks an item as playing on another device. Never fetched - see mediaItemData. */
+        const val REMOTE_ITEM_URI_PREFIX = "pixelplay://remote/"
+
         // Mirrors com.theveloper.pixelplay.data.jam.JamDisallows, which is the wire vocabulary.
         // Duplicated rather than depended on so the routing layer stays independent of handoff.
         const val DISALLOW_SKIPPING_PREV = "skippingPrev"

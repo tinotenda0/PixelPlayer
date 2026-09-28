@@ -364,7 +364,12 @@ class JamManager @Inject constructor(
             "play", positionMs = snapshot.state.positionMs, songIds = snapshot.queueIds,
             index = snapshot.queueIndex, targetSessionId = targetId
         )
-        if (ok) withContext(Dispatchers.Main) { controller?.pause() }
+        // Suppressed so the pause lands on this device. Transferring away makes the target the
+        // active one, and if its session update arrives first a routed pause would be sent
+        // onward to it — stopping the music we just handed over instead of the music here.
+        if (ok) withContext(Dispatchers.Main) {
+            routeRegistry.withRoutingSuppressed { controller?.pause() }
+        }
         return ok
     }
 
@@ -381,13 +386,19 @@ class JamManager @Inject constructor(
         // history the other device had.
         val resolved = resolveQueue(ids, session.state.queueIndex) ?: return false
         withContext(Dispatchers.Main) {
-            val c = ensureController() ?: return@withContext
-            c.setMediaItems(
-                resolved.songs.map { MediaItemBuilder.build(it) }, resolved.startIndex,
-                resumePositionMs
-            )
-            c.prepare()
-            if (session.state.isPlaying) c.play()
+            // Suppressed because pulling means "play it *here*", and a route is active by
+            // definition — the session belonging to another device is the only reason there is
+            // anything to pull. Without this the queue loads locally but `play` is forwarded
+            // straight back out to that device, so pulling silently does nothing.
+            routeRegistry.withRoutingSuppressed {
+                val c = ensureController() ?: return@withRoutingSuppressed
+                c.setMediaItems(
+                    resolved.songs.map { MediaItemBuilder.build(it) }, resolved.startIndex,
+                    resumePositionMs
+                )
+                c.prepare()
+                if (session.state.isPlaying) c.play()
+            }
         }
         // Publishing (the track-change listener above) naturally supersedes whichever device
         // was active - no explicit "stop the old device" call needed here.

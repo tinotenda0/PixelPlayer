@@ -71,11 +71,25 @@ class HandoffRoute @Inject constructor(
         }
     }
 
+    /**
+     * Turns a wire song id into the id this app knows the track by.
+     *
+     * The gateway speaks raw ids (`yt-xxxx`); locally a gateway-sourced song is
+     * `navidrome_yt-xxxx` (see `toSong()` in NavidromeRepository). The player surface resolves
+     * whatever the media session reports back to a local Song to decide what to draw, so a raw
+     * id resolves to nothing and the mini player never appears - the session reads correctly
+     * while the app looks empty, which is exactly how this failed.
+     *
+     * Tolerates an already-prefixed id, since a device on an older build publishes that shape.
+     */
+    private fun String.asLocalSongId(): String =
+        if (startsWith(LOCAL_ID_PREFIX)) this else LOCAL_ID_PREFIX + this
+
     private fun com.theveloper.pixelplay.data.navidrome.ActiveSession.toRouteState(): RouteState {
         val s = state
         return RouteState(
-            mediaId = s.songId.takeIf { it.isNotBlank() },
-            queue = s.queue,
+            mediaId = s.songId.takeIf { it.isNotBlank() }?.asLocalSongId(),
+            queue = s.queue.map { it.asLocalSongId() },
             queueIndex = s.queueIndex,
             title = s.title,
             artist = s.artist,
@@ -117,6 +131,11 @@ class HandoffRoute @Inject constructor(
                 repeat = repeat,
             )
         }
+    }
+
+    private companion object {
+        /** How NavidromeRepository.toSong() prefixes a gateway id locally. */
+        const val LOCAL_ID_PREFIX = "navidrome_"
     }
 
     override fun play() = send("play")
