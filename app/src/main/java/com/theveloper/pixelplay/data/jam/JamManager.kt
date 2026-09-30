@@ -4,6 +4,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.os.Build
 import android.os.SystemClock
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
@@ -30,6 +33,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -128,6 +133,13 @@ class JamManager @Inject constructor(
     private var hygieneRefreshJob: Job? = null
     private var publishListenerAttached = false
 
+    /** Process-level visibility, from [ProcessLifecycleOwner]. Feeds [JamLiveMode]. */
+    private val appInForeground = MutableStateFlow(false)
+    /** True while [suspendLive] has the connection deliberately down. */
+    @Volatile
+    private var liveSuspended = false
+    /** Pending [suspendLive] for an idle, backgrounded device; cancelled if it wakes first. */
+    private var idleDisconnectJob: Job? = null
     /** `elapsedRealtime` when [_mySession]'s current value arrived, so its position can be aged
      *  rather than re-fetched — see [JamPosition]. 0 while no sample is held. */
     @Volatile
@@ -153,10 +165,21 @@ class JamManager @Inject constructor(
         //
         // Gateway-backed either way, so signed out there is nothing to subscribe to and the
         // whole thing stays parked rather than burning a reconnect loop on no-ops.
+        //
+        // What *does* gate it is whether anyone benefits: see [JamLiveMode]. Called from
+        // Application.onCreate, so this is on the main thread, as addObserver requires.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) { appInForeground.value = true }
+            override fun onStop(owner: LifecycleOwner) { appInForeground.value = false }
+        })
         scope.launch {
-            navidromeRepository.isLoggedInFlow.collect { loggedIn ->
-                if (loggedIn) startGuestRole() else stopSessionRole()
-            }
+            combine(
+                navidromeRepository.isLoggedInFlow,
+                appInForeground,
+                PlaybackActivityTracker.isPlaybackActiveFlow,
+            ) { loggedIn, foreground, playing -> JamLiveMode.of(loggedIn, foreground, playing) }
+                .distinctUntilChanged()
+                .collect { mode -> applyLiveMode(mode) }
         }
 
         // Host role: publishing our own playback, which only means anything once there is some.
@@ -173,6 +196,34 @@ class JamManager @Inject constructor(
         }
     }
 
+    private suspend fun applyLiveMode(mode: JamLiveMode?) {
+        idleDisconnectJob?.cancel()
+        idleDisconnectJob = null
+        when (mode) {
+            null -> stopSessionRole()
+            JamLiveMode.FOREGROUND -> {
+                startGuestRole()
+                resumeLive()
+                startHygieneRefresh()
+            }
+            JamLiveMode.BACKGROUND_PLAYING -> {
+                startGuestRole()
+                resumeLive()
+                stopHygieneRefresh()
+            }
+            JamLiveMode.IDLE -> {
+                stopHygieneRefresh()
+                // Never started (launched straight into the background, e.g. by a widget or a
+                // worker): nothing to tear down, and nothing worth registering for.
+                if (!guestRoleStarted) return
+                idleDisconnectJob = scope.launch {
+                    delay(JamLiveMode.IDLE_DISCONNECT_GRACE_MS)
+                    suspendLive()
+                }
+            }
+        }
+    }
+
     /** Identity and a live view of the account's session. Binds nothing. */
     private suspend fun startGuestRole() {
         if (guestRoleStarted) return
@@ -182,7 +233,39 @@ class JamManager @Inject constructor(
         setMySession(navidromeRepository.getMySession())
         _householdSessions.value = navidromeRepository.getHouseholdSessions()
         _devices.value = navidromeRepository.getDevices(sessionId)
-        startHygieneRefresh()
+    }
+
+    /** Drops the live connection without forgetting the session role, for [JamLiveMode.IDLE].
+     *  The server stops listing this device once it has been disconnected past its registry
+     *  TTL, which is the honest state for a device nobody can currently reach. */
+    @Synchronized
+    private fun suspendLive() {
+        if (liveSuspended) return
+        liveSuspended = true
+        reconnectJob?.cancel()
+        reconnectJob = null
+        // New generation first, so the cancellation's onFailure is recognised as stale and
+        // does not schedule a reconnect (see [connectionGeneration]).
+        connectionGeneration.incrementAndGet()
+        eventSource?.cancel()
+        eventSource = null
+        connectedAtMs = 0L
+        reconnectAttempt = 0
+        Timber.tag("JamManager").d("Idle in background: live connection suspended")
+    }
+
+    /** Reopens a connection [suspendLive] closed, and catches up on whatever changed meanwhile
+     *  — nothing was pushed to this device while it was away. */
+    private suspend fun resumeLive() {
+        synchronized(this) {
+            if (!liveSuspended) return
+            liveSuspended = false
+        }
+        // Re-register too: past the server's registry TTL this device was forgotten entirely.
+        navidromeRepository.registerDevice(deviceName, "android", sessionId, householdVisible())
+        connect()
+        setMySession(navidromeRepository.getMySession())
+        refreshDevices()
     }
 
     /** Publishing this device's own playback. Needs the controller, and so MusicService. */
@@ -198,6 +281,9 @@ class JamManager @Inject constructor(
     @Synchronized
     private fun stopSessionRole() {
         guestRoleStarted = false
+        liveSuspended = false
+        idleDisconnectJob?.cancel()
+        idleDisconnectJob = null
         reconnectJob?.cancel()
         reconnectJob = null
         positionSyncJob?.cancel()
@@ -240,6 +326,8 @@ class JamManager @Inject constructor(
     @Synchronized
     private fun connect() {
         if (!navidromeRepository.isLoggedIn) return
+        // A reconnect that was already scheduled when the device went idle must not undo it.
+        if (liveSuspended) return
         // Take the new generation *before* cancelling: the cancellation is delivered as a
         // failure on the old source, which must then be recognised as stale and dropped.
         val generation = connectionGeneration.incrementAndGet()
@@ -292,8 +380,15 @@ class JamManager @Inject constructor(
 
     private suspend fun reconnectWithBackoff() {
         reconnectAttempt++
-        val delayMs = (1000L shl (reconnectAttempt - 1).coerceIn(0, 5)).coerceAtMost(30_000L)
-        delay(delayMs)
+        delay(JamBackoff.delayMs(reconnectAttempt))
+        // Re-register before resubscribing. The usual reason a healthy stream drops is a backend
+        // restart (every deploy), which empties the server's in-memory device registry; an
+        // unregistered device's publishes are pruned straight back out of the active session,
+        // so without this, handoff silently stopped working until the app itself restarted.
+        // Idempotent and cheap when the registration did survive.
+        if (!liveSuspended) {
+            navidromeRepository.registerDevice(deviceName, "android", sessionId, householdVisible())
+        }
         connect()
     }
 
@@ -311,13 +406,20 @@ class JamManager @Inject constructor(
      *  catches a device that vanished without a clean disconnect (crash, force-quit, dead
      *  network) rather than lingering forever in someone else's list. */
     private fun startHygieneRefresh() {
-        hygieneRefreshJob?.cancel()
+        if (hygieneRefreshJob?.isActive == true) return
         hygieneRefreshJob = scope.launch {
             while (true) {
                 delay(HYGIENE_REFRESH_MS)
                 refreshDevices()
             }
         }
+    }
+
+    /** The lists it refreshes are only ever shown in the UI, so the timer only runs while the
+     *  app is visible; coming back to the foreground restarts it. */
+    private fun stopHygieneRefresh() {
+        hygieneRefreshJob?.cancel()
+        hygieneRefreshJob = null
     }
 
     private fun startPositionSync() {

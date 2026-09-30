@@ -3,6 +3,7 @@ package com.theveloper.pixelplay.data.network.navidrome
 import com.theveloper.pixelplay.data.navidrome.model.NavidromeCredentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -147,24 +148,37 @@ class NavidromeApiService @Inject constructor(
     // ─── Core Request Method ─────────────────────────────────────────────
 
     /**
-     * Make a GET request to a Subsonic API endpoint.
+     * Make a request to a Subsonic API endpoint.
      *
      * @param endpoint The API endpoint name (without .view suffix)
      * @param params Additional query parameters
+     * @param formBody When non-null, sent as a POSTed form body instead of in the URL. For
+     *  payloads that outgrow a URL — a handoff queue of ~1,000 ids passes the ~16KB request-line
+     *  limit Cloudflare and uvicorn enforce. Auth always stays in the query string.
      * @return The raw JSON response as a string
      */
-    private suspend fun request(endpoint: String, params: Map<String, String> = emptyMap()): Result<String> {
+    private suspend fun request(
+        endpoint: String,
+        params: Map<String, String> = emptyMap(),
+        formBody: Map<String, String>? = null
+    ): Result<String> {
         return withContext(Dispatchers.IO) {
             try {
                 val url = buildApiUrl(endpoint, params)
-                Timber.d("$TAG: >>> GET $endpoint")
+                val method = if (formBody != null) "POST" else "GET"
+                Timber.d("$TAG: >>> $method $endpoint")
 
-                val request = Request.Builder()
+                val builder = Request.Builder()
                     .url(url)
                     .header("Accept", "application/json")
                     .header("User-Agent", "PixelPlayer/${API_VERSION}")
-                    .get()
-                    .build()
+                val request = if (formBody != null) {
+                    val form = FormBody.Builder()
+                    formBody.forEach { (key, value) -> form.add(key, value) }
+                    builder.post(form.build()).build()
+                } else {
+                    builder.get().build()
+                }
 
                 okHttpClient.newCall(request).execute().use { response ->
                     val code = response.code
@@ -179,7 +193,7 @@ class NavidromeApiService @Inject constructor(
                     Result.success(body)
                 }
             } catch (e: Exception) {
-                Timber.e(e, "$TAG: !!! FAILED GET $endpoint")
+                Timber.e(e, "$TAG: !!! FAILED ${if (formBody != null) "POST" else "GET"} $endpoint")
                 Result.failure(e)
             }
         }
@@ -215,8 +229,12 @@ class NavidromeApiService @Inject constructor(
     /**
      * Make a request and parse the response.
      */
-    private suspend fun requestAndParse(endpoint: String, params: Map<String, String> = emptyMap()): Result<JSONObject> {
-        return request(endpoint, params).fold(
+    private suspend fun requestAndParse(
+        endpoint: String,
+        params: Map<String, String> = emptyMap(),
+        formBody: Map<String, String>? = null
+    ): Result<JSONObject> {
+        return request(endpoint, params, formBody).fold(
             onSuccess = { parseResponse(it) },
             onFailure = { Result.failure(it) }
         )
@@ -519,9 +537,10 @@ class NavidromeApiService @Inject constructor(
     private suspend fun xpsCall(
         endpoint: String,
         key: String,
-        params: Map<String, String> = emptyMap()
+        params: Map<String, String> = emptyMap(),
+        formBody: Map<String, String>? = null
     ): Result<JSONObject> =
-        requestAndParse(endpoint, params).map { it.optJSONObject(key) ?: JSONObject() }
+        requestAndParse(endpoint, params, formBody).map { it.optJSONObject(key) ?: JSONObject() }
 
     /** Registers (or re-registers) this device's identity. Playback state is published
      *  separately (see publishState), not folded into this call. */
@@ -535,9 +554,9 @@ class NavidromeApiService @Inject constructor(
 
     /** Publishes this device's playback state, making it the account's one active device. Any
      *  device that was previously active gets pushed a `superseded` command over its own
-     *  subscribeSession stream. */
+     *  subscribeSession stream. Posted as a form body: it carries the whole queue. */
     suspend fun publishState(params: Map<String, String>) =
-        xpsCall("publishState", "playerSession", params)
+        xpsCall("publishState", "playerSession", formBody = params)
 
     /** This account's other registered devices — the pick-list for transfer, playing or not. */
     suspend fun getDevices(sessionId: String) =
@@ -551,9 +570,10 @@ class NavidromeApiService @Inject constructor(
 
     /** Sends a command, targeting either targetSessionId (a specific — possibly idle — one of
      *  this account's own devices; transfer/cast) or targetUser (whichever device is currently
-     *  active for that user; ordinary remote control). */
+     *  active for that user; ordinary remote control). Posted as a form body: a transfer
+     *  carries the whole queue in songIds. */
     suspend fun sendCommand(params: Map<String, String>) =
-        xpsCall("sendCommand", "playerCommand", params)
+        xpsCall("sendCommand", "playerCommand", formBody = params)
 
     /** Opens this device's live push channel: session changes (this account's own, and
      *  household members' if visible) and commands sent to it. Call [EventSource.cancel] when
