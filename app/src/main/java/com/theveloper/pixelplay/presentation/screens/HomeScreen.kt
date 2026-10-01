@@ -236,12 +236,18 @@ fun HomeScreen(
             if (event == Lifecycle.Event.ON_STOP) {
                 recentlyPlayedSongs = latestRecentlyPlayedSongsState.value
             }
+            // Including the return from the YouTube Music screen after re-linking.
+            if (event == Lifecycle.Event.ON_RESUME) {
+                navidromeViewModel.refreshYtmStatus()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
+
+    val ytmNeedsRelink by navidromeViewModel.ytmNeedsRelink.collectAsStateWithLifecycle()
 
     val recentlyPlayedQueue = remember(recentlyPlayedSongs) {
         recentlyPlayedSongs.map { it.song }.toImmutableList()
@@ -414,6 +420,13 @@ fun HomeScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
+                if (ytmNeedsRelink) {
+                    item(key = "ytm_relink", contentType = "ytm_relink") {
+                        YtmRelinkCard(
+                            onReconnect = { navController.navigateSafely(Screen.YtMusicLink.route) }
+                        )
+                    }
+                }
                 if (yourMixSongs.isEmpty()) {
                     item(
                         key = "your_mix_placeholder",
@@ -953,6 +966,36 @@ fun YourMixHeader(
                 contentDescription = stringResource(R.string.common_shuffle_play),
                 modifier = Modifier.size(36.dp)
             )
+        }
+    }
+}
+
+/**
+ * The linked YouTube Music login has stopped working (YouTube signed it out), so likes, library
+ * playlists and personal recommendations have quietly fallen back to generic ones. Says so, and
+ * goes straight to the screen that fixes it.
+ */
+@Composable
+private fun YtmRelinkCard(onReconnect: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer
+        )
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = "YouTube Music signed you out",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = "Your likes, playlists and recommendations won't update until you " +
+                    "sign in again.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+            )
+            FilledTonalButton(onClick = onReconnect) { Text("Sign in again") }
         }
     }
 }

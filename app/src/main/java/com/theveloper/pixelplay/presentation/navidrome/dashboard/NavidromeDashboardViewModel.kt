@@ -39,6 +39,24 @@ class NavidromeDashboardViewModel @Inject constructor(
     private val _selectedPlaylistSongs = MutableStateFlow<List<Song>>(emptyList())
     val selectedPlaylistSongs: StateFlow<List<Song>> = _selectedPlaylistSongs.asStateFlow()
 
+    private val _ytmNeedsRelink = MutableStateFlow(false)
+    /** The linked YouTube Music login stopped working (YouTube signed it out). Shown on Home,
+     *  because the link screen that already says so sits deep in Settings where nobody looks -
+     *  one account ran signed-out for weeks with only a server log noticing. */
+    val ytmNeedsRelink: StateFlow<Boolean> = _ytmNeedsRelink.asStateFlow()
+
+    /** Re-read on every return to Home, so the prompt clears as soon as the account is re-linked. */
+    fun refreshYtmStatus() {
+        if (!repository.isLoggedIn) {
+            _ytmNeedsRelink.value = false
+            return
+        }
+        viewModelScope.launch {
+            _ytmNeedsRelink.value = runCatching { repository.ytmStatus().needsRelink }
+                .getOrDefault(false)
+        }
+    }
+
     val username: String? get() = repository.username
     val serverUrl: String? get() = repository.serverUrl
     val isLoggedIn: StateFlow<Boolean> = repository.isLoggedInFlow

@@ -57,13 +57,19 @@ class YtMusicLinkViewModel @Inject constructor(
             _ui.update {
                 it.copy(
                     phase = when {
+                        // A stored login that stopped working offers sign-in, not "Unlink":
+                        // signing in again replaces it, and unlinking first would only drop
+                        // the account's cached data in the meantime.
+                        status.linked && status.needsRelink -> Phase.NOT_LINKED
                         status.linked -> Phase.LINKED
                         !status.configured -> Phase.UNCONFIGURED
                         else -> Phase.NOT_LINKED
                     },
                     accountName = status.accountName,
                     message = if (status.needsRelink) {
-                        "This account needs re-linking — sign in again."
+                        val who = status.accountName.ifBlank { "Your YouTube Music account" }
+                        "$who was signed out by YouTube. Sign in again to get your likes, " +
+                            "playlists and recommendations back."
                     } else ""
                 )
             }
