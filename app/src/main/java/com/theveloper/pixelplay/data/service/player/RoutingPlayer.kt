@@ -95,7 +95,11 @@ class RoutingPlayer(
             .setAvailableCommands(availableCommands(routeState))
             .setPlaybackState(Player.STATE_READY)
             .setPlayWhenReady(routeState.isPlaying, Player.PLAY_WHEN_READY_CHANGE_REASON_REMOTE)
-            .setPlaylist(queue.mapIndexed { i, id -> mediaItemData(id, i == index, routeState) })
+            .setPlaylist(
+                queue.zip(playlistUids(queue)).mapIndexed { i, (id, uid) ->
+                    mediaItemData(uid, id, i == index, routeState)
+                }
+            )
             .setCurrentMediaItemIndex(index)
             .setContentPositionMs(positionSupplier(routeState))
             .setRepeatMode(repeatModeOf(routeState.repeat))
@@ -112,11 +116,12 @@ class RoutingPlayer(
      * resolves them.
      */
     private fun mediaItemData(
+        uid: String,
         mediaId: String,
         isCurrent: Boolean,
         routeState: RouteState,
     ): MediaItemData {
-        val builder = MediaItemData.Builder(mediaId)
+        val builder = MediaItemData.Builder(uid)
             .setMediaItem(MediaItem.Builder().setMediaId(mediaId).build())
             .setIsSeekable(!routeState.disallows.contains(DISALLOW_SEEKING))
             .setIsDynamic(false)
@@ -302,5 +307,25 @@ class RoutingPlayer(
         const val DISALLOW_SEEKING = "seeking"
         const val DISALLOW_TOGGLING_SHUFFLE = "togglingShuffle"
         const val DISALLOW_TOGGLING_REPEAT = "togglingRepeat"
+    }
+}
+
+/**
+ * A unique uid for every entry of a mirrored queue, which [SimpleBasePlayer] requires of a
+ * playlist — it rejects duplicates outright, and that exception crashed the app from inside a
+ * session update.
+ *
+ * A queue legitimately repeats a song (a radio that comes back round to the seed, the same track
+ * added twice), so the song id alone is not enough. The first occurrence keeps the plain id and
+ * later ones get `#2`, `#3`…, which keeps the uids of everything that is not repeated stable
+ * from one update to the next; that is what lets the player diff an update rather than treat it
+ * as a whole new playlist.
+ */
+internal fun playlistUids(queue: List<String>): List<String> {
+    val seen = HashMap<String, Int>()
+    return queue.map { id ->
+        val n = (seen[id] ?: 0) + 1
+        seen[id] = n
+        if (n == 1) id else "$id#$n"
     }
 }
