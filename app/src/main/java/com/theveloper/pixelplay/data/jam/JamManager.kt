@@ -41,7 +41,6 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.sse.EventSource
 import timber.log.Timber
-import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -79,8 +78,9 @@ class JamManager @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** Stable per-process id: identifies this device, and lets a guest exclude itself. */
-    val sessionId: String = UUID.randomUUID().hex()
+    /** This device's identity, stable across restarts (see [HandoffDeviceId]): identifies it to
+     *  the gateway, and lets it recognise its own session rather than mirror it. */
+    val sessionId: String by lazy { HandoffDeviceId.load(context.noBackupFilesDir) }
 
     private val deviceName: String = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
 
@@ -787,8 +787,6 @@ class JamManager @Inject constructor(
             }, { it.run() })
             cont.invokeOnCancellation { cancel(false) }
         }
-
-    private fun UUID.hex(): String = toString().replace("-", "")
 
     companion object {
         private const val TAG = "JamManager"
