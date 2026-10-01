@@ -392,6 +392,14 @@ object AppModule {
             .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
             .writeTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+            // Every request to the gateway shares one HTTP/2 connection to Cloudflare. When it
+            // dies silently (a network blip, a wifi/cell switch), nothing noticed until each
+            // request ran out its own read timeout, and retries were sent down the same dead
+            // connection: seen on a device as a 17s stall with audio and covers all hanging
+            // together. A ping that goes unanswered closes the connection, failing what was on
+            // it at once so callers retry on a fresh one. It is also the only way the live
+            // session stream (no read timeout, by design) notices a dead connection at all.
+            .pingInterval(5, java.util.concurrent.TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             // Add User-Agent header (required by some APIs)
             .addInterceptor { chain ->
