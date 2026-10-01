@@ -621,7 +621,12 @@ class JamManager @Inject constructor(
             coverArt = md.artworkUri?.toString().orEmpty(),
             positionMs = c.currentPosition.coerceAtLeast(0),
             durationMs = c.duration.coerceAtLeast(0),
-            isPlaying = c.isPlaying,
+            // From the engine, not the controller: publishes are triggered by the engine
+            // player's own onIsPlayingChanged, and the controller only hears about that change
+            // over IPC a moment later. Reading it here reported "paused" for a track that had
+            // just started, which left peers showing it paused until the next position sync
+            // and stopped the gateway prefetching the tracks after it.
+            isPlaying = localPlayback.player()?.isPlaying ?: c.isPlaying,
             shuffle = shuffleNow,
             repeat = repeatNow,
             volume = c.volume,
